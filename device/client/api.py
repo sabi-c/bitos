@@ -193,6 +193,66 @@ class BackendClient:
             logging.warning("messages_send_failed chat=%s error=%s", chat_id[:24], exc)
             return False
 
+
+    def get_mail_inbox(self) -> list[dict]:
+        """GET /mail and return mail thread summaries."""
+        try:
+            resp = httpx.get(f"{self.base_url}/mail", timeout=5, headers=self._request_headers())
+            resp.raise_for_status()
+            return resp.json().get("threads", [])
+        except Exception as exc:
+            logging.warning("mail_inbox_failed error=%s", exc)
+            return []
+
+    def get_mail_thread(self, thread_id: str) -> list[dict]:
+        """GET /mail/{thread_id} and return full thread messages."""
+        try:
+            resp = httpx.get(f"{self.base_url}/mail/{thread_id}", timeout=5, headers=self._request_headers())
+            resp.raise_for_status()
+            return resp.json().get("messages", [])
+        except Exception as exc:
+            logging.warning("mail_thread_failed thread=%s error=%s", thread_id[:24], exc)
+            return []
+
+    def draft_mail_reply(self, thread_id: str, transcript: str) -> str:
+        """POST /mail/draft and return generated draft text."""
+        try:
+            resp = httpx.post(
+                f"{self.base_url}/mail/draft",
+                json={"thread_id": thread_id, "voice_transcript": transcript},
+                timeout=30,
+                headers=self._request_headers(),
+            )
+            resp.raise_for_status()
+            return str(resp.json().get("draft", "")).strip()
+        except Exception as exc:
+            logging.warning("mail_draft_failed thread=%s error=%s", thread_id[:24], exc)
+            return ""
+
+    def create_mail_draft(self, thread_id: str, body: str, confirmed=False) -> str:
+        """POST /mail/create-draft and return created draft id."""
+        try:
+            resp = httpx.post(
+                f"{self.base_url}/mail/create-draft",
+                json={"thread_id": thread_id, "body": body, "confirmed": bool(confirmed)},
+                timeout=10,
+                headers=self._request_headers(),
+            )
+            resp.raise_for_status()
+            return str(resp.json().get("draft_id", "")).strip()
+        except Exception as exc:
+            logging.warning("mail_create_draft_failed thread=%s error=%s", thread_id[:24], exc)
+            return ""
+
+    def get_integrations_status(self) -> dict:
+        """GET /status/integrations."""
+        try:
+            resp = httpx.get(f"{self.base_url}/status/integrations", timeout=5, headers=self._request_headers())
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as exc:
+            logging.warning("integrations_status_failed error=%s", exc)
+            return {}
     async def get_tasks(self) -> list[dict]:
         """GET /tasks/today from server."""
         try:

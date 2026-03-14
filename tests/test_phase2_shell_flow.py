@@ -61,7 +61,7 @@ class Phase2ShellFlowTests(unittest.TestCase):
         self.assertTrue(opened["called"])
 
     def test_home_navigation_focus_and_activation(self):
-        opened = {"chat": 0, "focus": 0, "notifs": 0, "settings": 0}
+        opened = {"chat": 0, "focus": 0, "notifs": 0, "settings": 0, "mail": 0}
 
         def on_open_chat():
             opened["chat"] += 1
@@ -75,11 +75,15 @@ class Phase2ShellFlowTests(unittest.TestCase):
         def on_open_settings():
             opened["settings"] += 1
 
+        def on_open_mail():
+            opened["mail"] += 1
+
         home = HomePanel(
             on_open_chat=on_open_chat,
             on_open_focus=on_open_focus,
             on_open_notifications=on_open_notifications,
             on_open_settings=on_open_settings,
+            on_open_mail=on_open_mail,
         )
 
         # Default focus is CHAT and should activate.
@@ -101,10 +105,18 @@ class Phase2ShellFlowTests(unittest.TestCase):
         home.handle_action("SHORT_PRESS")
         self.assertEqual(opened["settings"], 1)
 
-        # Triple press should wrap backwards to NOTIFS and activate.
+        # Move focus to MAIL and activate (use keyboard DOWN to bypass MSGS long-press shortcut).
+        down = pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_DOWN})
+        home.handle_input(down)
+        home.handle_input(down)
+        home.handle_input(down)
+        home.handle_action("SHORT_PRESS")
+        self.assertEqual(opened["mail"], 1)
+
+        # Triple press moves focus one item backward from MAIL to MSGS.
         home.handle_action("TRIPLE_PRESS")
         home.handle_action("SHORT_PRESS")
-        self.assertEqual(opened["notifs"], 2)
+        self.assertEqual(opened["notifs"], 1)
 
     def test_home_keyboard_nav_changes_focus(self):
         opened = {"called": 0}

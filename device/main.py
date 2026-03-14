@@ -32,6 +32,7 @@ from screens.panels.focus import FocusPanel
 from screens.panels.notifications import NotificationsPanel
 from screens.panels.tasks import TasksPanel
 from screens.panels.messages import MessagesPanel
+from screens.panels.mail import MailPanel
 from screens.panels.captures import CapturesPanel
 from screens.panels.settings import (
     AboutPanel,
@@ -290,6 +291,7 @@ def main():
             on_open_focus=open_focus,
             on_open_notifications=open_notifications,
             on_open_messages=open_messages,
+            on_open_mail=open_mail,
             on_open_tasks=open_tasks,
             on_open_captures=open_captures,
             on_open_settings=open_settings,
@@ -324,6 +326,11 @@ def main():
     def open_messages():
         messages = MessagesPanel(client=client, battery_pct=battery_monitor.get_status().get("pct", 84), audio_pipeline=audio_pipeline, on_back=on_home, ui_settings=ui_settings)
         screen_mgr.replace(messages)
+
+
+    def open_mail():
+        mail = MailPanel(client=client, battery_pct=battery_monitor.get_status().get("pct", 84), audio_pipeline=audio_pipeline, on_back=on_home, ui_settings=ui_settings)
+        screen_mgr.replace(mail)
 
     def open_notifications():
         notifications = NotificationsPanel(on_back=on_home, ui_settings=ui_settings)
