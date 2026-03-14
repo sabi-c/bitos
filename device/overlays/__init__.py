@@ -2,5 +2,6 @@
 
 from .notification import NotificationQueue, NotificationRecord, NotificationShade, NotificationToast
 from .passkey import PasskeyOverlay
+from .qr_code import QROverlay
 
-__all__ = ["NotificationToast", "NotificationQueue", "NotificationRecord", "NotificationShade", "PasskeyOverlay"]
+__all__ = ["NotificationToast", "NotificationQueue", "NotificationRecord", "NotificationShade", "PasskeyOverlay", "QROverlay"]
