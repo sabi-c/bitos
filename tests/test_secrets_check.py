@@ -1,5 +1,6 @@
 import os
 import subprocess
+import pytest
 import tempfile
 import unittest
 from pathlib import Path
@@ -56,6 +57,10 @@ class SecretsScriptsTests(unittest.TestCase):
             self.assertEqual(res.returncode, 1)
             self.assertIn("BITOS_BLE_SECRET MISSING", res.stdout)
 
+    @pytest.mark.skipif(
+        os.environ.get("CI") == "true",
+        reason="Secrets bootstrap test requires real Pi filesystem",
+    )
     def test_secrets_bootstrap_is_idempotent(self):
         with tempfile.TemporaryDirectory() as tmp:
             secrets = Path(tmp) / "secrets"
