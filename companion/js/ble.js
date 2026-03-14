@@ -67,6 +67,38 @@ class BitosCompanion {
     sessionStorage.setItem('bitos_session', this.sessionToken);
   }
 
+  async readDeviceInfo() {
+    if (!this.chars.DEVICE_INFO) throw new Error('Not connected');
+    const raw = await this.chars.DEVICE_INFO.readValue();
+    return JSON.parse(new TextDecoder().decode(raw));
+  }
+
+  async readStatus() {
+    if (!this.chars.DEVICE_STATUS) throw new Error('Not connected');
+    const raw = await this.chars.DEVICE_STATUS.readValue();
+    return JSON.parse(new TextDecoder().decode(raw));
+  }
+
+  async sendKeyboardInput(text) {
+    if (!this.sessionToken) throw new Error('Not authenticated');
+    if (!this.chars.KEYBOARD_INPUT) throw new Error('Not connected');
+    const payload = JSON.stringify({
+      session_token: this.sessionToken,
+      text: text,
+      target: 'any',
+    });
+    await this.chars.KEYBOARD_INPUT.writeValue(
+      new TextEncoder().encode(payload));
+  }
+
+  disconnect() {
+    if (this.device && this.device.gatt.connected) {
+      this.device.gatt.disconnect();
+    }
+    this.sessionToken = null;
+    this.chars = {};
+  }
+
   async sendWifiConfig(ssid, password, security = 'WPA2', priority = 100) {
     if (!this.sessionToken) throw new Error('Not authenticated');
     const bleSecret = this._bleSecret ||
