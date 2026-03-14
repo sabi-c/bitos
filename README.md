@@ -35,7 +35,9 @@ Device (Pygame/ST7789) ──HTTP──▶ Server (FastAPI) ──▶ Claude API
 ## Docs
 
 - [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) — Phase 1 build plan
-- [../ROADMAP.md](../ROADMAP.md) — Full project roadmap
+- [ROADMAP.md](ROADMAP.md) — Full project roadmap
+- [docs/planning/IMPLEMENTATION_PLAN_NEXT.md](docs/planning/IMPLEMENTATION_PLAN_NEXT.md) — Detailed implementation sequencing for Phases 2–4
+- [docs/planning/TASK_TRACKER.md](docs/planning/TASK_TRACKER.md) — Canonical backlog + per-iteration log for all contributors/agents
 
 ## License
 
