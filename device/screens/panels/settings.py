@@ -80,12 +80,12 @@ class SettingsPanel(BaseScreen):
                 NavItem(key="integrations_header", label="INTEGRATIONS", status="", enabled=False),
                 NavItem(key="imessage", label="iMESSAGE", status="", action=lambda: None),
                 NavItem(key="vikunja", label="VIKUNJA", status="", action=lambda: None),
+                NavItem(key="companion", label="COMPANION APP", status="", action=self._open_companion_app),
                 NavItem(key="ai", label="AI", status="", action=self._open_model_picker),
                 NavItem(key="bluebubbles", label="BLUEBUBBLES", status="", action=lambda: None),
                 NavItem(key="agent_mode", label="AGENT MODE", status="", action=self._open_agent_mode),
                 NavItem(key="sleep", label="SLEEP TIMER", status="", action=self._open_sleep_timer),
                 NavItem(key="about", label="ABOUT", status="", action=self._open_about),
-                NavItem(key="companion", label="COMPANION APP", status="", action=self._open_companion_app),
                 NavItem(key="back", label="BACK", status="HOME", action=self._go_back),
             ]
         )
