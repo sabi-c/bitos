@@ -59,6 +59,9 @@ class SettingsPanel(BaseScreen):
 
         self._web_search = bool(self._repo.get_setting("web_search", default=True))
         self._memory = bool(self._repo.get_setting("memory", default=True))
+        self._ai_model = "claude-sonnet-4-6"
+        self._agent_mode = "producer"
+        self._sleep_sec = 60
 
         self._nav = VerticalNavController(
             [
@@ -72,6 +75,13 @@ class SettingsPanel(BaseScreen):
                 NavItem(key="back", label="BACK", status="HOME", action=self._go_back),
             ]
         )
+
+    def on_enter(self):
+        self._web_search = bool(self._repo.get_setting("web_search", default=True))
+        self._memory = bool(self._repo.get_setting("memory", default=True))
+        self._ai_model = str(self._repo.get_setting("ai_model", default="claude-sonnet-4-6"))
+        self._agent_mode = str(self._repo.get_setting("agent_mode", default="producer"))
+        self._sleep_sec = int(self._repo.get_setting("sleep_timeout_seconds", default=60))
 
     def handle_action(self, action: str):
         if action == "LONG_PRESS":
@@ -100,16 +110,12 @@ class SettingsPanel(BaseScreen):
         surface.blit(title, (8, 8))
         pygame.draw.line(surface, HAIRLINE, (0, 24), (PHYSICAL_W, 24))
 
-        ai_model = str(self._repo.get_setting("ai_model", default="claude-sonnet-4-6"))
-        agent_mode = str(self._repo.get_setting("agent_mode", default="producer"))
-        sleep_sec = int(self._repo.get_setting("sleep_timeout_seconds", default=60))
-
         statuses = {
             "web_search": "ON" if self._web_search else "OFF",
             "memory": "ON" if self._memory else "OFF",
-            "ai_model": _compact_model_label(ai_model),
-            "agent_mode": agent_mode[:10].upper(),
-            "sleep": f"{sleep_sec}s",
+            "ai_model": _compact_model_label(self._ai_model),
+            "agent_mode": self._agent_mode[:10].upper(),
+            "sleep": f"{self._sleep_sec}s",
             "about": "INFO",
             "companion": "PAIR",
             "back": "HOME",
@@ -133,10 +139,12 @@ class SettingsPanel(BaseScreen):
     def _toggle_web_search(self):
         self._web_search = not self._web_search
         self._repo.set_setting("web_search", self._web_search)
+        self.on_enter()
 
     def _toggle_memory(self):
         self._memory = not self._memory
         self._repo.set_setting("memory", self._memory)
+        self.on_enter()
 
     def _open_model_picker(self):
         if self._on_open_model_picker:
@@ -197,12 +205,21 @@ class ModelPickerPanel(BaseScreen):
                 start = i
                 break
         self._index = start
+        self._current_model = current
+
+    def on_enter(self):
+        self._current_model = str(self._repo.get_setting("ai_model", default="claude-sonnet-4-6"))
+        for i, (_, value) in enumerate(self.OPTIONS):
+            if value == self._current_model:
+                self._index = i
+                break
 
     def handle_action(self, action: str):
         if action == "SHORT_PRESS":
             self._index = (self._index + 1) % len(self.OPTIONS)
         elif action == "LONG_PRESS":
             self._repo.set_setting("ai_model", self.OPTIONS[self._index][1])
+            self.on_enter()
             if self._on_back:
                 self._on_back()
 
@@ -216,10 +233,9 @@ class ModelPickerPanel(BaseScreen):
         surface.blit(title, (8, 8))
         pygame.draw.line(surface, HAIRLINE, (0, 24), (PHYSICAL_W, 24))
 
-        current = str(self._repo.get_setting("ai_model", default="claude-sonnet-4-6"))
         y = 44
         for i, (label, value) in enumerate(self.OPTIONS):
-            active = "ACTIVE" if value == current else ""
+            active = "ACTIVE" if value == self._current_model else ""
             prefix = ">" if i == self._index else " "
             row = self._font_body.render(f"{prefix}{label}", False, WHITE)
             st = self._font_small.render(active, False, DIM2)
@@ -244,12 +260,18 @@ class AgentModePanel(BaseScreen):
 
         current = str(self._repo.get_setting("agent_mode", default="producer"))
         self._index = self.OPTIONS.index(current) if current in self.OPTIONS else 0
+        self._current_mode = current
+
+    def on_enter(self):
+        self._current_mode = str(self._repo.get_setting("agent_mode", default="producer"))
+        self._index = self.OPTIONS.index(self._current_mode) if self._current_mode in self.OPTIONS else 0
 
     def handle_action(self, action: str):
         if action == "SHORT_PRESS":
             self._index = (self._index + 1) % len(self.OPTIONS)
         elif action == "LONG_PRESS":
             self._repo.set_setting("agent_mode", self.OPTIONS[self._index])
+            self.on_enter()
             if self._on_back:
                 self._on_back()
 
@@ -263,10 +285,9 @@ class AgentModePanel(BaseScreen):
         surface.blit(title, (8, 8))
         pygame.draw.line(surface, HAIRLINE, (0, 24), (PHYSICAL_W, 24))
 
-        current = str(self._repo.get_setting("agent_mode", default="producer"))
         y = 44
         for i, value in enumerate(self.OPTIONS):
-            active = "ACTIVE" if value == current else ""
+            active = "ACTIVE" if value == self._current_mode else ""
             prefix = ">" if i == self._index else " "
             row = self._font_body.render(f"{prefix}{value[:10].upper()}", False, WHITE)
             st = self._font_small.render(active, False, DIM2)
@@ -288,6 +309,10 @@ class SleepTimerPanel(BaseScreen):
         self._font_title = load_ui_font("title", self._ui_settings)
         self._font_body = load_ui_font("body", self._ui_settings)
         self._font_small = load_ui_font("small", self._ui_settings)
+        self._timeout = int(self._repo.get_setting("sleep_timeout_seconds", default=60))
+
+    def on_enter(self):
+        self._timeout = int(self._repo.get_setting("sleep_timeout_seconds", default=60))
 
     def handle_action(self, action: str):
         if action in {"SHORT_PRESS", "LONG_PRESS"} and self._on_back:
@@ -304,8 +329,7 @@ class SleepTimerPanel(BaseScreen):
         surface.blit(title, (8, 8))
         pygame.draw.line(surface, HAIRLINE, (0, 24), (PHYSICAL_W, 24))
 
-        timeout = int(self._repo.get_setting("sleep_timeout_seconds", default=60))
-        value = self._font_body.render(f"{timeout}s", False, WHITE)
+        value = self._font_body.render(f"{self._timeout}s", False, WHITE)
         surface.blit(value, (8, 48))
         hint = self._font_small.render("LONG OR SHORT: BACK", False, DIM3)
         surface.blit(hint, (8, PHYSICAL_H - 14))

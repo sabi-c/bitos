@@ -1,7 +1,7 @@
 """Notification overlay primitives rendered above active screens."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, Literal
 
 import pygame
@@ -44,15 +44,12 @@ class NotificationToast:
     duration_ms: int = 5000
     on_open: Callable[[], None] | None = None
     elapsed_ms: int = 0
+    _fonts: dict[str, pygame.font.Font] = field(default_factory=dict, init=False, repr=False)
 
     def render(self, surface, tokens) -> None:
         strip_h = 28
         pygame.draw.rect(surface, tokens.WHITE, pygame.Rect(0, 0, tokens.PHYSICAL_W, strip_h))
-
-        try:
-            font = pygame.font.Font(tokens.FONT_PATH, tokens.FONT_SIZES["small"])
-        except FileNotFoundError:
-            font = pygame.font.SysFont("monospace", tokens.FONT_SIZES["small"])
+        font = self._font(tokens, "small")
         left = f"{self.icon} {self.app}"[:14]
         msg = self.message[:24]
         right = self.time_str[:6]
@@ -78,6 +75,16 @@ class NotificationToast:
             return False
         return True
 
+    def _font(self, tokens, key: str):
+        if key in self._fonts:
+            return self._fonts[key]
+        try:
+            font = pygame.font.Font(tokens.FONT_PATH, tokens.FONT_SIZES[key])
+        except FileNotFoundError:
+            font = pygame.font.SysFont("monospace", tokens.FONT_SIZES[key])
+        self._fonts[key] = font
+        return font
+
 
 class NotificationShade:
     """Full-screen notification list overlay rendered above the screen stack."""
@@ -92,9 +99,17 @@ class NotificationShade:
         self._on_close = on_close
         self._on_open_source = on_open_source
         self._cursor_index = 0
+        self._cached_records: list[NotificationRecord] = []
+        self.on_enter()
+
+    def on_enter(self) -> None:
+        self._refresh_cache()
+
+    def _refresh_cache(self) -> None:
+        self._cached_records = self._queue.get_all()
 
     def render(self, surface, tokens) -> None:
-        records = self._queue.get_all()
+        records = self._cached_records
         surface.fill(tokens.BLACK)
 
         pygame.draw.rect(surface, tokens.WHITE, pygame.Rect(0, 0, tokens.PHYSICAL_W, 20))
@@ -137,7 +152,8 @@ class NotificationShade:
             surface.blit(body_font.render(msg_text, False, msg_color), (14, y + 8))
 
     def handle_input(self, action: str) -> bool:
-        records = self._queue.get_all()
+        self._refresh_cache()
+        records = self._cached_records
         if action == "DOUBLE_PRESS":
             if self._on_close:
                 self._on_close()
@@ -153,6 +169,7 @@ class NotificationShade:
         if action == "LONG_PRESS":
             record = records[self._cursor_index]
             self._queue.mark_read(record.id)
+            self._refresh_cache()
             source = record.source_id or record.id
             if self._on_open_source:
                 self._on_open_source(source)
