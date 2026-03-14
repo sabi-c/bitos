@@ -8,7 +8,7 @@ from contextlib import closing
 
 
 DEFAULT_DB_PATH = "device/data/bitos.db"
-LATEST_SCHEMA_VERSION = 1
+LATEST_SCHEMA_VERSION = 2
 
 
 MIGRATIONS: dict[int, str] = {
@@ -48,6 +48,24 @@ MIGRATIONS: dict[int, str] = {
 
     CREATE INDEX IF NOT EXISTS idx_messages_session_created
       ON messages(session_id, created_at);
+    """,
+    2: """
+    CREATE TABLE IF NOT EXISTS outbound_commands (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        domain TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        status TEXT NOT NULL,
+        attempt_count INTEGER NOT NULL DEFAULT 0,
+        max_attempts INTEGER NOT NULL DEFAULT 3,
+        last_error TEXT,
+        next_attempt_at REAL NOT NULL,
+        created_at REAL NOT NULL,
+        updated_at REAL NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_outbound_commands_ready
+      ON outbound_commands(status, next_attempt_at, created_at);
     """,
 }
 
@@ -135,3 +153,128 @@ class DeviceRepository:
         if latest is None:
             return None, []
         return latest, self.list_messages(latest)
+
+    def queue_enqueue_command(self, domain: str, operation: str, payload: str, max_attempts: int = 3) -> int:
+        now = time.time()
+        with closing(self._connect()) as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO outbound_commands(
+                    domain, operation, payload, status, attempt_count, max_attempts,
+                    last_error, next_attempt_at, created_at, updated_at
+                ) VALUES (?, ?, ?, 'pending', 0, ?, NULL, ?, ?, ?)
+                """,
+                (domain, operation, payload, max_attempts, now, now, now),
+            )
+            conn.commit()
+            return int(cur.lastrowid)
+
+    def queue_reserve_next_ready(self, now: float) -> dict | None:
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                """
+                SELECT *
+                FROM outbound_commands
+                WHERE status IN ('pending', 'retrying')
+                  AND next_attempt_at <= ?
+                ORDER BY next_attempt_at ASC, created_at ASC, id ASC
+                LIMIT 1
+                """,
+                (now,),
+            ).fetchone()
+            if not row:
+                return None
+            command_id = int(row["id"])
+            conn.execute(
+                "UPDATE outbound_commands SET status = 'processing', updated_at = ? WHERE id = ?",
+                (time.time(), command_id),
+            )
+            updated = conn.execute(
+                "SELECT * FROM outbound_commands WHERE id = ?",
+                (command_id,),
+            ).fetchone()
+            conn.commit()
+            return dict(updated) if updated else None
+
+    def queue_mark_succeeded(self, command_id: int) -> None:
+        with closing(self._connect()) as conn:
+            conn.execute(
+                """
+                UPDATE outbound_commands
+                SET status = 'succeeded', last_error = NULL, updated_at = ?
+                WHERE id = ?
+                """,
+                (time.time(), command_id),
+            )
+            conn.commit()
+
+    def queue_mark_failed(
+        self,
+        command_id: int,
+        reason: str,
+        retryable: bool,
+        backoff_seconds: float,
+    ) -> str:
+        now = time.time()
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                "SELECT attempt_count, max_attempts FROM outbound_commands WHERE id = ?",
+                (command_id,),
+            ).fetchone()
+            if not row:
+                raise ValueError(f"Unknown command id {command_id}")
+            attempts = int(row["attempt_count"]) + 1
+            max_attempts = int(row["max_attempts"])
+            if retryable and attempts < max_attempts:
+                status = "retrying"
+                next_attempt_at = now + max(0.0, backoff_seconds)
+            else:
+                status = "dead_letter"
+                next_attempt_at = now
+            conn.execute(
+                """
+                UPDATE outbound_commands
+                SET status = ?, attempt_count = ?, last_error = ?, next_attempt_at = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (status, attempts, reason, next_attempt_at, now, command_id),
+            )
+            conn.commit()
+            return status
+
+    def queue_list_dead_letters(self, limit: int = 25) -> list[dict]:
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                """
+                SELECT *
+                FROM outbound_commands
+                WHERE status = 'dead_letter'
+                ORDER BY updated_at DESC, id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def queue_metrics(self) -> dict:
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                """
+                SELECT status, COUNT(*) AS c
+                FROM outbound_commands
+                GROUP BY status
+                """
+            ).fetchall()
+            counts = {row["status"]: int(row["c"]) for row in rows}
+            retry_sum = conn.execute(
+                "SELECT COALESCE(SUM(attempt_count), 0) AS total_retries FROM outbound_commands"
+            ).fetchone()
+            return {
+                "pending": counts.get("pending", 0),
+                "retrying": counts.get("retrying", 0),
+                "processing": counts.get("processing", 0),
+                "succeeded": counts.get("succeeded", 0),
+                "dead_letter": counts.get("dead_letter", 0),
+                "total_retries": int(retry_sum["total_retries"] if retry_sum else 0),
+                "queue_depth": counts.get("pending", 0) + counts.get("retrying", 0) + counts.get("processing", 0),
+            }
