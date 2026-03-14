@@ -276,7 +276,7 @@ def main():
     focus_panel: FocusPanel | None = None
 
     def open_chat():
-        chat = ChatPanel(client, ui_settings=ui_settings, repository=repository, audio_pipeline=audio_pipeline)
+        chat = ChatPanel(client, ui_settings=ui_settings, repository=repository, audio_pipeline=audio_pipeline, on_back=on_home)
         screen_mgr.replace(chat)
 
     def on_home():

@@ -41,7 +41,7 @@ class SettingsWiringTests(unittest.TestCase):
         panel.handle_action("LONG_PRESS")  # web_search toggle
         self.assertFalse(self.repo.get_setting("web_search", default=True))
 
-        panel.handle_action("DOUBLE_PRESS")
+        panel.handle_action("SHORT_PRESS")  # move to memory
         panel.handle_action("LONG_PRESS")  # memory toggle
         self.assertFalse(self.repo.get_setting("memory", default=True))
 

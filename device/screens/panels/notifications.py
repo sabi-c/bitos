@@ -41,8 +41,10 @@ class NotificationsPanel(BaseScreen):
     def handle_action(self, action: str):
         if action == "SHORT_PRESS":
             self._nav.activate_focused()
-        elif action in {"DOUBLE_PRESS", "LONG_PRESS"}:
+        elif action == "LONG_PRESS":
             self._nav.move(1)
+        elif action == "DOUBLE_PRESS":
+            self._go_back()
         elif action == "TRIPLE_PRESS":
             self._nav.move(-1)
 

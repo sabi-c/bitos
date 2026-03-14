@@ -87,10 +87,10 @@ class SettingsPanel(BaseScreen):
     def handle_action(self, action: str):
         if action == "LONG_PRESS":
             self._nav.activate_focused()
-        elif action == "SHORT_PRESS" and self._nav.focused_item and self._nav.focused_item.key == "back":
-            self._nav.activate_focused()
-        elif action == "DOUBLE_PRESS":
+        elif action == "SHORT_PRESS":
             self._nav.move(1)
+        elif action == "DOUBLE_PRESS":
+            self._go_back()
         elif action == "TRIPLE_PRESS":
             self._nav.move(-1)
 
@@ -238,10 +238,16 @@ class ModelPickerPanel(BaseScreen):
             self.on_enter()
             if self._on_back:
                 self._on_back()
+        elif action == "DOUBLE_PRESS":
+            if self._on_back:
+                self._on_back()
 
     def handle_input(self, event: pygame.event.Event):
         if event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_SPACE):
             self.handle_action("LONG_PRESS")
+        elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            if self._on_back:
+                self._on_back()
 
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
@@ -317,10 +323,16 @@ class AgentModePanel(BaseScreen):
             self.on_enter()
             if self._on_back:
                 self._on_back()
+        elif action == "DOUBLE_PRESS":
+            if self._on_back:
+                self._on_back()
 
     def handle_input(self, event: pygame.event.Event):
         if event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_SPACE):
             self.handle_action("LONG_PRESS")
+        elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            if self._on_back:
+                self._on_back()
 
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
@@ -377,7 +389,7 @@ class SleepTimerPanel(BaseScreen):
         self._timeout = int(self._repo.get_setting("sleep_timeout_seconds", default=60))
 
     def handle_action(self, action: str):
-        if action in {"SHORT_PRESS", "LONG_PRESS"} and self._on_back:
+        if action == "DOUBLE_PRESS" and self._on_back:
             self._on_back()
 
     def handle_input(self, event: pygame.event.Event):
@@ -411,7 +423,7 @@ class AboutPanel(BaseScreen):
         self._font_hint = load_ui_font("hint", self._ui_settings)
 
     def handle_action(self, action: str):
-        if action in {"SHORT_PRESS", "LONG_PRESS"} and self._on_back:
+        if action == "DOUBLE_PRESS" and self._on_back:
             self._on_back()
 
     def handle_input(self, event: pygame.event.Event):

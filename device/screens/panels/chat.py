@@ -65,10 +65,11 @@ class ChatPanel(BaseScreen):
         "unknown": "unknown error",
     }
 
-    def __init__(self, client: BackendClient, ui_settings: dict | None = None, repository: DeviceRepository | None = None, audio_pipeline: AudioPipeline | None = None):
+    def __init__(self, client: BackendClient, ui_settings: dict | None = None, repository: DeviceRepository | None = None, audio_pipeline: AudioPipeline | None = None, on_back=None):
         self._client = client
         self._cursor_anim = blink_cursor()
         self._repository = repository
+        self._on_back = on_back
         self._messages_lock = threading.Lock()
         self._audio_pipeline = audio_pipeline
 
@@ -134,6 +135,11 @@ class ChatPanel(BaseScreen):
         if self._showing_templates() and action == "SHORT_PRESS":
             if self._templates:
                 self._template_index = (self._template_index + 1) % len(self._templates)
+            return
+
+        if action == "DOUBLE_PRESS":
+            if self._on_back:
+                self._on_back()
             return
 
         if action == "LONG_PRESS":
