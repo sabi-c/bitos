@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BITOS · CHAT + TASKS + SETTINGS FLOWS</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;image-rendering:pixelated;transition:none!important;animation-timing-function:steps(1)!important}
+body{background:#080808;color:#fff;font-family:'Press Start 2P',monospace;padding:40px 36px;line-height:1}
+.pg-title{font-size:16px;letter-spacing:.04em;margin-bottom:6px}
+.pg-sub{font-size:6px;color:#222;letter-spacing:.1em;margin-bottom:48px}
+.sec-title{font-size:9px;letter-spacing:.08em;color:#333;margin-bottom:20px;padding-bottom:8px;border-bottom:1px solid #111}
+.divider{border:none;border-top:2px solid #111;margin:52px 0}
+
+/* ── FLOW DIAGRAM ── */
+.flow-wrap{display:flex;flex-wrap:wrap;gap:48px;align-items:flex-start}
+.flow-col{display:flex;flex-direction:column;gap:0}
+.flow-hdr{background:#fff;color:#000;padding:6px 12px;font-size:7px;letter-spacing:.06em;border:2px solid #fff;border-bottom:3px solid #fff}
+.flow-node{border:2px solid #333;padding:8px 12px;font-size:7px;letter-spacing:.04em;color:#555;border-top:none;display:flex;align-items:flex-start;gap:8px;flex-direction:column}
+.flow-node.active{border-color:#fff;color:#fff}
+.flow-node.sub{border-color:#1a1a1a;color:#222;font-size:6px}
+.flow-node-lbl{font-size:6px;color:#1a1a1a;letter-spacing:.06em;margin-top:2px}
+.flow-arrow{display:flex;align-items:center;gap:6px;padding:4px 0 4px 12px;font-size:5px;color:#1a1a1a;letter-spacing:.06em}
+.flow-arrow-line{flex:1;border-top:1px solid #1a1a1a;min-width:20px}
+.flow-connector{width:2px;background:#333;margin:0 auto;height:12px}
+.flow-connector.dim{background:#111}
+.flow-badge{font-size:5px;border:1px solid #333;padding:1px 5px;color:#333;letter-spacing:.06em;display:inline-block}
+.flow-badge.short{border-color:#555;color:#555}
+.flow-badge.long{border-color:#fff;color:#fff}
+.flow-badge.dbl{border-color:#f44;color:#f44;font-size:4px}
+
+/* ── DEVICE SHELL ── */
+.devices-row{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start}
+.device-wrap{display:flex;flex-direction:column;align-items:center;gap:10px}
+.device-lbl{font-size:5px;color:#222;letter-spacing:.1em;text-align:center}
+.device{background:#0d0d0d;border:3px solid #2a2a2a;padding:8px 8px 14px;display:flex;flex-direction:column;align-items:center;gap:8px}
+.screen{width:240px;height:280px;background:#000;border:2px solid #555;position:relative;overflow:hidden;font-family:‘Press Start 2P’,monospace}
+.home-btn{width:32px;height:5px;background:#1a1a1a;border:1px solid #222}
+
+/* SHARED SCREEN PRIMITIVES */
+.view{position:absolute;inset:0;display:none;flex-direction:column;background:#000}
+.view.active{display:flex}
+.sbar{height:18px;background:#fff;color:#000;display:flex;align-items:center;justify-content:space-between;padding:0 6px;font-size:6px;letter-spacing:.06em;flex-shrink:0;border-bottom:2px solid #fff}
+.sbar.dark{background:#000;color:#fff;border-bottom-color:#333}
+.kh{font-size:4px;color:#111;text-align:center;padding:2px 6px;letter-spacing:.06em;flex-shrink:0;border-top:1px solid #0a0a0a}
+.inv-hdr{background:#fff;color:#000;padding:7px 8px;font-size:7px;letter-spacing:.06em;flex-shrink:0;border-bottom:2px solid #fff;display:flex;justify-content:space-between;align-items:center}
+.scroll-body{flex:1;overflow:auto}
+.scroll-body::-webkit-scrollbar{display:none}
+.row{display:flex;align-items:center;gap:7px;padding:8px 8px;font-size:7px;letter-spacing:.04em;border-bottom:1px solid #0a0a0a;cursor:pointer;color:#555}
+.row:last-child{border-bottom:none}
+.row.focused{background:#fff;color:#000}
+.row .arr{font-size:6px;flex-shrink:0;color:#333}
+.row.focused .arr{color:#666}
+.row .meta{margin-left:auto;font-size:5px;color:#333}
+.row.focused .meta{color:#666}
+.row .sub{font-size:5px;color:#2a2a2a;margin-top:2px;letter-spacing:.04em;display:block}
+.row.focused .sub{color:#666}
+.row-lbl{flex:1}
+.bcur{display:inline-block;width:5px;height:9px;background:#fff;animation:bcu .8s steps(1) infinite;vertical-align:bottom}
+@keyframes bcu{0%,100%{opacity:1}50%{opacity:0}}
+.tdots{display:flex;gap:3px;padding:4px}
+.td{width:4px;height:4px;background:#222}
+.td:nth-child(1){animation:tda 1.2s steps(2) infinite 0.0s}
+.td:nth-child(2){animation:tda 1.2s steps(2) infinite 0.3s}
+.td:nth-child(3){animation:tda 1.2s steps(2) infinite 0.6s}
+@keyframes tda{0%,100%{background:#222}50%{background:#fff}}
+.pbar{height:5px;border:1px solid #fff;background:#000}
+.pfill{height:100%;background:#fff}
+.tog{width:22px;height:11px;border:2px solid #fff;position:relative;flex-shrink:0}
+.tog-t{position:absolute;top:1px;width:7px;height:7px;background:#fff}
+.tog.off{border-color:#333}
+.tog.off .tog-t{background:#333;left:1px}
+.tog.on .tog-t{right:1px}
+.row.focused .tog{border-color:#000}
+.row.focused .tog.on .tog-t{background:#000}
+.row.focused .tog.off .tog-t{background:#666;background:#666}
+.ldbar{height:5px;border:1px solid #fff;background:#000;overflow:hidden}
+.ldfill{height:100%;width:20%;background:#fff;animation:lda 1.6s steps(8) infinite}
+@keyframes lda{0%{transform:translateX(-100%)}100%{transform:translateX(600%)}}
+
+/* ── CHAT SCREENS ── */
+.msg-wrap{flex:1;padding:5px;display:flex;flex-direction:column;gap:4px;overflow:auto}
+.msg-wrap::-webkit-scrollbar{display:none}
+.msg{display:flex;gap:3px;align-items:flex-end}
+.msg.me{flex-direction:row-reverse}
+.av{width:14px;height:14px;border:2px solid #fff;font-size:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.bbl{border:2px solid #fff;padding:4px 5px;font-size:6px;line-height:1.6;max-width:160px}
+.bbl.me{background:#fff;color:#000}
+.stream-line{font-size:6px;color:#fff;letter-spacing:.03em;line-height:1.7;display:block}
+.stream-line.dim{color:#333}
+.stream-line.thinking{color:#444;font-size:5px}
+.quick-row{display:flex;flex-wrap:wrap;gap:2px;padding:3px;border-top:2px solid #fff;flex-shrink:0}
+.quick-btn{border:2px solid #2a2a2a;padding:3px 5px;font-size:5px;color:#333;cursor:pointer;letter-spacing:.04em}
+.quick-btn.focused{border-color:#fff;color:#fff}
+.chat-inp-bar{height:28px;border-top:2px solid #fff;display:flex;flex-shrink:0}
+.chat-inp{flex:1;background:transparent;border:none;color:#fff;font-family:‘Press Start 2P’,monospace;font-size:5px;padding:4px 6px;outline:none}
+.chat-inp::placeholder{color:#1a1a1a}
+.chat-send{width:28px;border-left:2px solid #fff;background:#000;color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.chat-send:hover,.chat-send.on{background:#fff;color:#000}
+.vring{width:70px;height:70px;border:3px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:26px}
+.vring.rec{animation:vrp .6s steps(2) infinite}
+@keyframes vrp{0%,100%{border-color:#fff}50%{border-color:#f44}}
+.vbar{width:3px;background:#fff}
+.vbar:nth-child(1){animation:vba .6s steps(4) infinite 0s}
+.vbar:nth-child(2){animation:vba .6s steps(4) infinite .08s}
+.vbar:nth-child(3){animation:vba .6s steps(4) infinite .16s}
+.vbar:nth-child(4){animation:vba .6s steps(4) infinite .04s}
+.vbar:nth-child(5){animation:vba .6s steps(4) infinite .12s}
+.vbar:nth-child(6){animation:vba .6s steps(4) infinite .2s}
+.vbar:nth-child(7){animation:vba .6s steps(4) infinite .06s}
+@keyframes vba{0%{height:2px}25%{height:10px}50%{height:18px}75%{height:6px}}
+.ctx-menu{border-top:3px solid #fff;flex-shrink:0}
+.ctx-row{padding:8px 8px;font-size:7px;letter-spacing:.04em;color:#444;border-bottom:1px solid #0a0a0a;cursor:pointer;display:flex;align-items:center;gap:6px}
+.ctx-row:last-child{border-bottom:none}
+.ctx-row.focused{background:#fff;color:#000}
+.ctx-row.danger{color:#f44}
+.ctx-row.focused.danger{background:#f44;color:#000}
+.think-hdr{padding:7px 8px;font-size:7px;display:flex;align-items:center;gap:6px;cursor:pointer;letter-spacing:.04em;border-bottom:1px solid #0a0a0a}
+.think-hdr:hover,.think-hdr.open{background:#fff;color:#000}
+.think-body{padding:8px;font-size:6px;color:#555;line-height:2;letter-spacing:.03em;border-bottom:1px solid #111}
+.think-step{padding:2px 0;display:flex;gap:6px}
+.think-num{color:#333;flex-shrink:0}
+.think-step.done .think-num{color:#fff}
+
+/* ── TASKS SCREENS ── */
+.task-row{display:flex;align-items:center;gap:7px;padding:8px 8px;font-size:7px;letter-spacing:.04em;border-bottom:1px solid #0a0a0a;cursor:pointer;color:#aaa}
+.task-row.focused{background:#fff;color:#000}
+.task-cb{width:12px;height:12px;border:2px solid #444;display:flex;align-items:center;justify-content:center;font-size:7px;flex-shrink:0}
+.task-cb.done{border-color:#fff;background:#fff;color:#000}
+.task-row.focused .task-cb{border-color:#000}
+.task-row.focused .task-cb.done{background:#000;color:#fff;border-color:#000}
+.task-txt{flex:1}
+.task-row.done-row .task-txt{text-decoration:line-through;color:#333}
+.task-row.focused.done-row .task-txt{color:#888}
+.pri{font-size:4px;border:1px solid #333;padding:1px 3px;color:#333;flex-shrink:0}
+.pri.hi{border-color:#f44;color:#f44}
+.task-row.focused .pri.hi{border-color:#000;color:#000}
+.voice-add{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:16px 8px}
+.vn-btn{width:72px;height:72px;border:4px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:26px;cursor:pointer}
+.vn-btn.recording{animation:vrp .6s steps(2) infinite}
+.vn-btn.recording::after{content:’’;position:absolute;inset:-8px;border:2px solid #f44;border-radius:50%;animation:vrecring .6s steps(1) infinite}
+@keyframes vrecring{0%,100%{opacity:1}50%{opacity:0}}
+.vwave{height:28px;display:flex;align-items:center;gap:2px;justify-content:center}
+.confirm-box{margin:8px;border:2px solid #fff;padding:12px 10px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}
+.conf-btns{display:flex;gap:4px;width:100%;margin-top:4px}
+.conf-btn{flex:1;border:2px solid #fff;padding:6px;font-size:6px;background:#000;color:#fff;font-family:‘Press Start 2P’,monospace;text-align:center;cursor:pointer}
+.conf-btn.fill{background:#fff;color:#000}
+.conf-btn.focused{background:#fff;color:#000}
+.conf-btn.fill.focused{background:#000;color:#fff;border-style:dashed}
+
+/* ── SETTINGS SCREENS ── */
+.sett-section{padding:4px 8px;font-size:5px;color:#1a1a1a;letter-spacing:.12em;background:#050505;border-bottom:1px solid #080808;border-top:1px solid #080808}
+.model-row{display:flex;align-items:center;gap:6px;padding:8px;border-bottom:1px solid #0a0a0a;cursor:pointer;font-size:7px;letter-spacing:.04em}
+.model-row.focused{background:#fff;color:#000}
+.model-row .model-badge{font-size:5px;border:1px solid #555;padding:1px 4px;color:#555;flex-shrink:0}
+.model-row.focused .model-badge{border-color:#000;color:#000}
+.model-row.active-model{color:#fff}
+.model-row.focused.active-model{color:#000}
+.about-row{padding:7px 8px;border-bottom:1px solid #0a0a0a;display:flex;justify-content:space-between;font-size:6px;letter-spacing:.04em}
+.about-lbl{color:#444}
+.about-val{color:#aaa}
+
+/* ── CONTROLS ── */
+.btn-row{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+.ctrl-btn{border:2px solid #333;padding:5px 10px;font-size:5px;color:#555;cursor:pointer;letter-spacing:.06em;font-family:‘Press Start 2P’,monospace;background:#000}
+.ctrl-btn:hover{border-color:#fff;color:#fff}
+.ctrl-btn.danger:hover{border-color:#f44;color:#f44}
+.state-display{font-size:5px;color:#1a1a1a;text-align:center;letter-spacing:.06em;margin-top:4px}
+</style>
+
+</head>
+<body>
+
+<div class="pg-title">BITOS · CHAT + TASKS + SETTINGS</div>
+<div class="pg-sub">FULL SUB-SCREEN NAVIGATION · 240×280PX · SINGLE BUTTON</div>
+
+<!-- ════════════════════════════════════
+     FLOW DIAGRAMS
+════════════════════════════════════ -->
+
+<div class="sec-title">01 · FLOW MAPS — CLICK SIMULATORS BELOW TO NAVIGATE</div>
+
+<div class="flow-wrap">
+
+  <!-- CHAT FLOW -->
+
+  <div>
+    <div style="font-size:7px;color:#7F77DD;letter-spacing:.08em;margin-bottom:10px">CHAT FLOW</div>
+    <div class="flow-col">
+      <div class="flow-hdr">SIDEBAR → CHAT</div>
+      <div class="flow-node active">AI Status dashboard<div class="flow-node-lbl"><span class="flow-badge long">LONG</span> → ENTER PANEL</div></div>
+      <div class="flow-connector"></div>
+      <div class="flow-node">New Chat <span class="flow-badge short">SHORT</span> to advance<div class="flow-node-lbl"><span class="flow-badge long">LONG</span> → Chat screen</div></div>
+      <div class="flow-connector"></div>
+      <div class="flow-node">Previous Session<div class="flow-node-lbl"><span class="flow-badge long">LONG</span> → History list</div></div>
+      <div class="flow-connector"></div>
+      <div class="flow-node">All History<div class="flow-node-lbl"><span class="flow-badge long">LONG</span> → History screen</div></div>
+      <div class="flow-connector" style="height:6px"></div>
+      <div style="border-top:1px solid #333;margin:0"></div>
+
+```
+  <div style="font-size:5px;color:#333;letter-spacing:.08em;padding:8px 0 4px">CHAT SCREEN</div>
+  <div class="flow-node active">Message thread<div class="flow-node-lbl"><span class="flow-badge short">SHORT</span> Scroll history</div></div>
+  <div class="flow-connector dim"></div>
+  <div class="flow-node sub">Long press on message<div class="flow-node-lbl"><span class="flow-badge long">LONG</span> → Context menu</div></div>
+  <div class="flow-connector dim"></div>
+  <div class="flow-node sub">Hold button<div class="flow-node-lbl"><span class="flow-badge long">HOLD</span> → Voice overlay</div></div>
+  <div class="flow-connector dim"></div>
+  <div class="flow-node sub">Release → transcribe → send<div class="flow-node-lbl"><span class="flow-badge dbl">DBL</span> Cancel voice</div></div>
+  <div class="flow-connector dim"></div>
+  <div class="flow-node sub">Thinking screen (auto)<div class="flow-node-lbl"><span class="flow-badge dbl">DBL</span> Cancel request</div></div>
+  <div class="flow-connector dim"></div>
+  <div class="flow-node sub">Response streams in<div class="flow-node-lbl"><span class="flow-badge dbl">DBL</span> Back to nav</div></div>
+</div>
+```
+
+  </div>
+
+  <!-- TASKS FLOW -->
+
+  <div>
+    <div style="font-size:7px;color:#1D9E75;letter-spacing:.08em;margin-bottom:10px">TASKS FLOW</div>
+    <div class="flow-col">
+      <div class="flow-hdr">SIDEBAR → TASKS</div>
+      <div class="flow-node active">Top 3 tasks today<div class="flow-node-lbl"><span class="flow-badge long">LONG</span> → ENTER PANEL</div></div>
+      <div class="flow-connector"></div>
+      <div class="flow-node">Today's Tasks<div class="flow-node-lbl"><span class="flow-badge long">LONG</span> → Full task list</div></div>
+      <div class="flow-connector"></div>
+      <div class="flow-node">Projects<div class="flow-node-lbl"><span class="flow-badge long">LONG</span> → Project picker</div></div>
+      <div class="flow-connector"></div>
+      <div class="flow-node">Quick Add (Voice)<div class="flow-node-lbl"><span class="flow-badge long">LONG</span> → Voice record</div></div>
+      <div class="flow-connector" style="height:6px"></div>
+      <div style="border-top:1px solid #333;margin:0"></div>
+
+```
+  <div style="font-size:5px;color:#333;letter-spacing:.08em;padding:8px 0 4px">TASK LIST</div>
+  <div class="flow-node active">Task list (all today)<div class="flow-node-lbl"><span class="flow-badge short">SHORT</span> Advance cursor</div></div>
+  <div class="flow-connector dim"></div>
+  <div class="flow-node sub">Long press task → check/uncheck<div class="flow-node-lbl"><span class="flow-badge long">LONG</span> Toggle complete</div></div>
+  <div class="flow-connector dim"></div>
+  <div class="flow-node sub">Voice Add overlay<div class="flow-node-lbl"><span class="flow-badge long">LONG</span> on mic → record</div></div>
+  <div class="flow-connector dim"></div>
+  <div class="flow-node sub">Release → transcribe<div class="flow-node-lbl">Confirm name → create task</div></div>
+  <div class="flow-connector dim"></div>
+  <div class="flow-node sub"><span class="flow-badge dbl">DBL</span> always goes back one level</div>
+</div>
+```
+
+  </div>
+
+  <!-- SETTINGS FLOW -->
+
+  <div>
+    <div style="font-size:7px;color:#aaa;letter-spacing:.08em;margin-bottom:10px">SETTINGS FLOW</div>
+    <div class="flow-col">
+      <div class="flow-hdr">SIDEBAR → SETTINGS</div>
+      <div class="flow-node active">Settings menu<div class="flow-node-lbl"><span class="flow-badge long">LONG</span> → ENTER PANEL</div></div>
+      <div class="flow-connector"></div>
+      <div class="flow-node">AI Model <span class="flow-badge long">LONG</span> → picker</div>
+      <div class="flow-connector"></div>
+      <div class="flow-node">Agent Mode <span class="flow-badge long">LONG</span> → picker</div>
+      <div class="flow-connector"></div>
+      <div class="flow-node">Web Search <span class="flow-badge long">LONG</span> → toggle</div>
+      <div class="flow-connector"></div>
+      <div class="flow-node">Memory <span class="flow-badge long">LONG</span> → toggle</div>
+      <div class="flow-connector"></div>
+      <div class="flow-node">WiFi <span class="flow-badge long">LONG</span> → network list</div>
+      <div class="flow-connector"></div>
+      <div class="flow-node">Bluetooth <span class="flow-badge long">LONG</span> → device list</div>
+      <div class="flow-connector"></div>
+      <div class="flow-node">Storage <span class="flow-badge long">LONG</span> → meter</div>
+      <div class="flow-connector"></div>
+      <div class="flow-node">About <span class="flow-badge long">LONG</span> → info</div>
+      <div class="flow-connector dim"></div>
+      <div class="flow-node sub"><span class="flow-badge dbl">DBL</span> from any sub → back to settings</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="divider"></div>
+
+<!-- ════════════════════════════════════
+     LIVE SIMULATORS
+════════════════════════════════════ -->
+
+<div class="sec-title">02 · LIVE SIMULATORS · KEYBOARD: SPACE=SHORT · ENTER=LONG · BACKSPACE=BACK</div>
+
+<div class="devices-row">
+
+<!-- ══════════ DEVICE A · CHAT ══════════ -->
+
+<div class="device-wrap" id="deviceA">
+  <div class="device-lbl">CHAT FLOW · COMPLETE</div>
+  <div class="device">
+    <div class="screen" id="scrA">
+
+```
+  <!-- CHAT PANEL (right panel view) -->
+  <div class="view active" id="A_chatpanel">
+    <div class="sbar dark"><span>← DBL</span><span>CHAT</span><span id="Atime">--:--</span></div>
+    <div class="inv-hdr">AI STATUS <span style="font-size:5px;color:#0f0">● ONLINE</span></div>
+    <div class="scroll-body">
+      <div style="padding:6px 8px;border-bottom:1px solid #0a0a0a">
+        <div style="font-size:5px;color:#333;letter-spacing:.08em;margin-bottom:4px">CONTEXT</div>
+        <div class="pbar"><div class="pfill" style="width:84%"></div></div>
+        <div style="display:flex;justify-content:space-between;font-size:4px;color:#1a1a1a;margin-top:2px"><span>0</span><span>8.4K / 10K</span></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:6px 8px;font-size:6px;letter-spacing:.04em;border-bottom:1px solid #0a0a0a"><span style="color:#444">MODEL</span><span>SONNET 4.6</span></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 8px;font-size:6px;letter-spacing:.04em;border-bottom:1px solid #0a0a0a"><span style="color:#444">SESSION</span><span style="color:#ff0">$0.84</span></div>
+      <div class="row focused" id="Acp0" data-i="0"><span class="arr">▶</span><span class="row-lbl">NEW CHAT</span></div>
+      <div class="row" id="Acp1" data-i="1"><span class="arr">▶</span><span class="row-lbl">PREVIOUS SESSION</span></div>
+      <div class="row" id="Acp2" data-i="2"><span class="arr">▶</span><span class="row-lbl">ALL HISTORY</span></div>
+    </div>
+    <div class="kh">SHORT:NEXT · LONG:OPEN · DBL:BACK</div>
+  </div>
+
+  <!-- CHAT THREAD -->
+  <div class="view" id="A_chat">
+    <div class="sbar dark"><span>← DBL</span><span>CLAUDE</span><span style="font-size:5px;color:#444">$0.02</span></div>
+    <div class="msg-wrap" id="A_msgwrap">
+      <div class="msg"><div class="av">AI</div><div class="bbl">HOW CAN I HELP YOU TODAY?</div></div>
+      <div class="msg me"><div class="av">S</div><div class="bbl me">WHAT'S MY SSS TASK STATUS?</div></div>
+      <div class="msg"><div class="av">AI</div>
+        <div class="bbl">
+          <span class="stream-line dim">CHECKING THINGS MCP...</span>
+          <span class="stream-line">YOU HAVE 3 URGENT ITEMS:</span>
+          <span class="stream-line">1. INVOICE JOAQUIN</span>
+          <span class="stream-line">2. TICKET FORMATTER</span>
+          <span class="stream-line">3. BEN NOTES REVIEW<span class="bcur"></span></span>
+        </div>
+      </div>
+    </div>
+    <div class="quick-row" id="A_quick">
+      <div class="quick-btn focused" data-i="0">ASK MORE</div>
+      <div class="quick-btn" data-i="1">SAVE NOTE</div>
+      <div class="quick-btn" data-i="2">COPY</div>
+      <div class="quick-btn" data-i="3">VOICE ◈</div>
+    </div>
+    <div class="chat-inp-bar">
+      <input class="chat-inp" placeholder="TYPE OR HOLD FOR VOICE..." />
+      <div class="chat-send" id="A_send">▶</div>
+    </div>
+    <div class="kh">SHORT:SCROLL · HOLD:VOICE · DBL:BACK</div>
+  </div>
+
+  <!-- VOICE OVERLAY -->
+  <div class="view" id="A_voice">
+    <div class="sbar dark"><span></span><span>VOICE INPUT</span><span></span></div>
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:12px">
+      <div class="vring rec" id="A_vring">◈</div>
+      <div style="display:flex;align-items:center;gap:3px;height:22px">
+        <div class="vbar" style="height:4px"></div><div class="vbar" style="height:4px"></div><div class="vbar" style="height:4px"></div>
+        <div class="vbar" style="height:4px"></div><div class="vbar" style="height:4px"></div><div class="vbar" style="height:4px"></div>
+        <div class="vbar" style="height:4px"></div>
+      </div>
+      <div style="font-size:6px;color:#555;letter-spacing:.08em">RECORDING...</div>
+      <div style="font-size:16px;letter-spacing:.06em" id="A_vtimer">00:00</div>
+    </div>
+    <div style="display:flex;gap:3px;padding:4px;border-top:2px solid #111;flex-shrink:0">
+      <div class="quick-btn focused" style="flex:1;text-align:center;padding:6px;font-size:6px">■ SEND</div>
+      <div class="quick-btn" style="flex:1;text-align:center;padding:6px;font-size:6px">✕ CANCEL</div>
+    </div>
+    <div class="kh">RELEASE:SEND · DBL:CANCEL</div>
+  </div>
+
+  <!-- THINKING SCREEN -->
+  <div class="view" id="A_thinking">
+    <div class="sbar dark"><span></span><span>THINKING</span><span></span></div>
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:12px">
+      <canvas id="A_ring" width="72" height="72"></canvas>
+      <div style="font-size:6px;color:#333;letter-spacing:.06em">THINKING<span id="A_dots">.</span></div>
+      <div style="width:100%"><div class="ldbar"><div class="ldfill"></div></div></div>
+      <div style="font-size:5px;color:#1a1a1a">TOKENS: <span id="A_tok">0</span></div>
+    </div>
+    <div class="kh">DBL:CANCEL</div>
+  </div>
+
+  <!-- CONTEXT MENU -->
+  <div class="view" id="A_ctx">
+    <div class="sbar dark"><span></span><span>CHAT</span><span></span></div>
+    <div style="flex:1;padding:6px">
+      <div class="msg"><div class="av">AI</div><div class="bbl">YOU HAVE 3 URGENT ITEMS IN SSS...</div></div>
+    </div>
+    <div class="ctx-menu" id="A_ctxmenu">
+      <div class="ctx-row focused" data-i="0"><span>▶</span>COPY TEXT</div>
+      <div class="ctx-row" data-i="1"><span>▶</span>REGENERATE</div>
+      <div class="ctx-row" data-i="2"><span>▶</span>SAVE AS NOTE</div>
+      <div class="ctx-row danger" data-i="3"><span>▶</span>DELETE</div>
+    </div>
+    <div class="kh">SHORT:NEXT · LONG:SELECT · DBL:CLOSE</div>
+  </div>
+
+  <!-- HISTORY LIST -->
+  <div class="view" id="A_history">
+    <div class="sbar"><span>← DBL</span><span>HISTORY</span><span>12</span></div>
+    <div class="scroll-body" id="A_histlist">
+      <div class="row focused" data-i="0"><span class="arr">▶</span><span class="row-lbl">SSS TASK STATUS<span class="sub">TODAY 09:44</span></span><span class="meta">NOW</span></div>
+      <div class="row" data-i="1"><span class="arr">▶</span><span class="row-lbl">EL CAMINO REPAIR<span class="sub">TODAY 07:20</span></span><span class="meta">2H</span></div>
+      <div class="row" data-i="2"><span class="arr">▶</span><span class="row-lbl">TENDER FEST IDEAS<span class="sub">YESTERDAY</span></span><span class="meta">1D</span></div>
+      <div class="row" data-i="3"><span class="arr">▶</span><span class="row-lbl">OBSIDIAN MCP SETUP<span class="sub">2 DAYS AGO</span></span><span class="meta">2D</span></div>
+      <div class="row" data-i="4"><span class="arr">▶</span><span class="row-lbl">CLOWN WAITER BIT<span class="sub">3 DAYS AGO</span></span><span class="meta">3D</span></div>
+      <div class="row" data-i="5"><span class="arr">▶</span><span class="row-lbl">LUNA LUNA DECK<span class="sub">5 DAYS AGO</span></span><span class="meta">5D</span></div>
+    </div>
+    <div class="kh">SHORT:SCROLL · LONG:OPEN · DBL:BACK</div>
+  </div>
+
+</div><!-- /screen -->
+<div class="home-btn"></div>
+```
+
+  </div>
+  <div class="btn-row">
+    <div class="ctrl-btn" onclick="A_short()">SHORT</div>
+    <div class="ctrl-btn" onclick="A_long()">LONG</div>
+    <div class="ctrl-btn" onclick="A_back()">BACK (DBL)</div>
+  </div>
+  <div class="state-display" id="A_state">chat panel</div>
+</div>
+
+<!-- ══════════ DEVICE B · TASKS ══════════ -->
+
+<div class="device-wrap" id="deviceB">
+  <div class="device-lbl">TASKS FLOW · COMPLETE</div>
+  <div class="device">
+    <div class="screen" id="scrB">
+
+```
+  <!-- TASKS PANEL -->
+  <div class="view active" id="B_taskpanel">
+    <div class="sbar dark"><span>← DBL</span><span>TASKS</span><span>5 OPEN</span></div>
+    <div class="inv-hdr">TODAY'S PREVIEW</div>
+    <div style="padding:7px 8px;border-bottom:1px solid #0a0a0a;font-size:6px;display:flex;align-items:center;gap:5px"><div style="width:5px;height:5px;background:#f44;flex-shrink:0"></div>INVOICE JOAQUIN</div>
+    <div style="padding:7px 8px;border-bottom:1px solid #0a0a0a;font-size:6px;display:flex;align-items:center;gap:5px"><div style="width:5px;height:5px;background:#f44;flex-shrink:0"></div>TICKET FORMATTER</div>
+    <div style="padding:7px 8px;border-bottom:2px solid #fff;font-size:6px;display:flex;align-items:center;gap:5px"><div style="width:5px;height:5px;background:#555;flex-shrink:0"></div>EL CAMINO BRAKES</div>
+    <div class="scroll-body" id="B_panel_list">
+      <div class="row focused" data-i="0"><span class="arr">▶</span><span class="row-lbl">TODAY'S TASKS</span></div>
+      <div class="row" data-i="1"><span class="arr">▶</span><span class="row-lbl">PROJECTS</span></div>
+      <div class="row" data-i="2"><span class="arr">▶</span><span class="row-lbl">QUICK ADD (VOICE)</span></div>
+    </div>
+    <div class="kh">SHORT:NEXT · LONG:OPEN · DBL:BACK</div>
+  </div>
+
+  <!-- TASK LIST -->
+  <div class="view" id="B_tasklist">
+    <div class="sbar"><span>← DBL</span><span>TODAY</span><span>5 LEFT</span></div>
+    <div class="scroll-body" id="B_tlist">
+      <div class="task-row focused" data-i="0"><div class="task-cb">□</div><span class="task-txt">INVOICE JOAQUIN</span><span class="pri hi">!</span></div>
+      <div class="task-row" data-i="1"><div class="task-cb">□</div><span class="task-txt">TICKET FORMATTER</span><span class="pri hi">!</span></div>
+      <div class="task-row" data-i="2"><div class="task-cb">□</div><span class="task-txt">EL CAMINO BRAKES</span><span class="pri">MED</span></div>
+      <div class="task-row" data-i="3"><div class="task-cb">□</div><span class="task-txt">REVIEW BEN NOTES</span><span class="pri">MED</span></div>
+      <div class="task-row" data-i="4"><div class="task-cb">□</div><span class="task-txt">MORNING MEDITATION</span><span class="pri">LOW</span></div>
+      <div class="task-row done-row" data-i="5"><div class="task-cb done">✓</div><span class="task-txt">W-9 FILED</span><span class="pri">LOW</span></div>
+      <div class="task-row done-row" data-i="6"><div class="task-cb done">✓</div><span class="task-txt">THERMOSTAT REPLACED</span><span class="pri">LOW</span></div>
+    </div>
+    <div style="display:flex;border-top:2px solid #fff;flex-shrink:0">
+      <div class="row" style="flex:1;border-bottom:none;justify-content:center;color:#555;border-right:2px solid #333">+ ADD TASK</div>
+      <div class="row" id="B_micbtn" style="flex:0 0 40px;border-bottom:none;justify-content:center;color:#555">◈</div>
+    </div>
+    <div class="kh">SHORT:NEXT · LONG:CHECK · DBL:BACK</div>
+  </div>
+
+  <!-- VOICE ADD -->
+  <div class="view" id="B_voiceadd">
+    <div class="sbar dark"><span></span><span>VOICE ADD</span><span></span></div>
+    <div class="voice-add">
+      <div style="font-size:6px;color:#333;letter-spacing:.08em">HOLD TO RECORD TASK</div>
+      <div class="vn-btn" id="B_vnbtn">◈</div>
+      <div class="vwave" id="B_vwave">
+        <div class="vbar" style="height:4px"></div><div class="vbar" style="height:4px"></div><div class="vbar" style="height:4px"></div>
+        <div class="vbar" style="height:4px"></div><div class="vbar" style="height:4px"></div><div class="vbar" style="height:4px"></div>
+        <div class="vbar" style="height:4px"></div>
+      </div>
+      <div style="font-size:14px;letter-spacing:.06em" id="B_vtimer">00:00</div>
+      <div style="font-size:5px;color:#2a2a2a;letter-spacing:.08em" id="B_vstatus">LONG PRESS TO START</div>
+    </div>
+    <div class="kh">LONG:START/STOP · DBL:CANCEL</div>
+  </div>
+
+  <!-- TASK CONFIRM -->
+  <div class="view" id="B_confirm">
+    <div class="sbar dark"><span></span><span>NEW TASK</span><span></span></div>
+    <div style="flex:1;display:flex;align-items:center">
+      <div class="confirm-box">
+        <div style="font-size:6px;color:#444;letter-spacing:.08em;margin-bottom:4px">TRANSCRIBED:</div>
+        <div style="font-size:8px;letter-spacing:.04em;text-align:center;line-height:1.6">"CALL JOAQUIN ABOUT OVERTIME RATE"</div>
+        <div style="font-size:5px;color:#333;margin-top:6px;line-height:1.8">PROJECT: SSS · PRIORITY: NORMAL</div>
+        <div class="conf-btns" id="B_confbtns">
+          <div class="conf-btn focused" data-i="0">CANCEL</div>
+          <div class="conf-btn fill" data-i="1">SAVE TASK</div>
+        </div>
+      </div>
+    </div>
+    <div class="kh">SHORT:TOGGLE · LONG:CONFIRM · DBL:CANCEL</div>
+  </div>
+
+  <!-- PROJECTS -->
+  <div class="view" id="B_projects">
+    <div class="sbar"><span>← DBL</span><span>PROJECTS</span><span></span></div>
+    <div class="scroll-body" id="B_projlist">
+      <div class="row focused" data-i="0"><span class="arr">▶</span><span class="row-lbl">SSS / NIKE HOUSE<span class="sub">12 TASKS</span></span></div>
+      <div class="row" data-i="1"><span class="arr">▶</span><span class="row-lbl">TENDER FEST<span class="sub">5 TASKS</span></span></div>
+      <div class="row" data-i="2"><span class="arr">▶</span><span class="row-lbl">HYPNOTIST DOC<span class="sub">8 TASKS</span></span></div>
+      <div class="row" data-i="3"><span class="arr">▶</span><span class="row-lbl">EL CAMINO<span class="sub">4 TASKS</span></span></div>
+      <div class="row" data-i="4"><span class="arr">▶</span><span class="row-lbl">PERSONAL<span class="sub">7 TASKS</span></span></div>
+    </div>
+    <div class="kh">SHORT:NEXT · LONG:OPEN · DBL:BACK</div>
+  </div>
+
+</div><!-- /screen -->
+<div class="home-btn"></div>
+```
+
+  </div>
+  <div class="btn-row">
+    <div class="ctrl-btn" onclick="B_short()">SHORT</div>
+    <div class="ctrl-btn" onclick="B_long()">LONG</div>
+    <div class="ctrl-btn" onclick="B_back()">BACK (DBL)</div>
+  </div>
+  <div class="state-display" id="B_state">tasks panel</div>
+</div>
+
+<!-- ══════════ DEVICE C · SETTINGS ══════════ -->
+
+<div class="device-wrap" id="deviceC">
+  <div class="device-lbl">SETTINGS FLOW · COMPLETE</div>
+  <div class="device">
+    <div class="screen" id="scrC">
+
+```
+  <!-- SETTINGS PANEL -->
+  <div class="view active" id="C_settmain">
+    <div class="sbar dark"><span>← DBL</span><span>SETTINGS</span><span></span></div>
+    <div class="scroll-body" id="C_settlist">
+      <div class="sett-section">AI</div>
+      <div class="row focused" data-i="0" data-action="model"><span class="arr">▶</span><span class="row-lbl">AI MODEL</span><span class="meta">SONNET ›</span></div>
+      <div class="row" data-i="1" data-action="agent"><span class="arr">▶</span><span class="row-lbl">AGENT MODE</span><span class="meta">PRODUCER ›</span></div>
+      <div class="row" data-i="2" data-action="toggle" data-key="websearch"><span class="arr">▶</span><span class="row-lbl">WEB SEARCH</span><div class="tog on"><div class="tog-t"></div></div></div>
+      <div class="row" data-i="3" data-action="toggle" data-key="memory"><span class="arr">▶</span><span class="row-lbl">MEMORY</span><div class="tog on"><div class="tog-t"></div></div></div>
+      <div class="sett-section">CONNECTIVITY</div>
+      <div class="row" data-i="4" data-action="wifi"><span class="arr">▶</span><span class="row-lbl">WI-FI</span><span class="meta">STUDIO ›</span></div>
+      <div class="row" data-i="5" data-action="bt"><span class="arr">▶</span><span class="row-lbl">BLUETOOTH</span><span class="meta">3 DEV ›</span></div>
+      <div class="sett-section">SYSTEM</div>
+      <div class="row" data-i="6" data-action="storage"><span class="arr">▶</span><span class="row-lbl">STORAGE</span><span class="meta">89G ›</span></div>
+      <div class="row" data-i="7" data-action="about"><span class="arr">▶</span><span class="row-lbl">ABOUT</span><span class="meta">v1.0 ›</span></div>
+    </div>
+    <div class="kh">SHORT:NEXT · LONG:OPEN/TOGGLE · DBL:BACK</div>
+  </div>
+
+  <!-- AI MODEL PICKER -->
+  <div class="view" id="C_model">
+    <div class="sbar"><span>← DBL</span><span>AI MODEL</span><span></span></div>
+    <div class="scroll-body" id="C_modellist">
+      <div class="model-row focused active-model" data-i="0"><span class="arr">▶</span><div style="flex:1">SONNET 4.6<div class="sub" style="font-size:5px;color:#555">FAST · BALANCED · DEFAULT</div></div><span class="model-badge">ACTIVE ✓</span></div>
+      <div class="model-row" data-i="1"><span class="arr">▶</span><div style="flex:1">OPUS 4.6<div class="sub" style="font-size:5px;color:#444">POWERFUL · SLOWER</div></div><span class="model-badge">PRO</span></div>
+      <div class="model-row" data-i="2"><span class="arr">▶</span><div style="flex:1">HAIKU 4.5<div class="sub" style="font-size:5px;color:#444">FASTEST · LIGHTWEIGHT</div></div><span class="model-badge">FAST</span></div>
+      <div class="model-row" data-i="3" style="color:#1a1a1a"><span class="arr" style="color:#111">▶</span><div style="flex:1">CLAUDE 5<div class="sub" style="font-size:5px;color:#1a1a1a">COMING SOON</div></div></div>
+    </div>
+    <div class="kh">SHORT:NEXT · LONG:SELECT · DBL:BACK</div>
+  </div>
+
+  <!-- AGENT MODE PICKER -->
+  <div class="view" id="C_agent">
+    <div class="sbar"><span>← DBL</span><span>AGENT MODE</span><span></span></div>
+    <div class="scroll-body" id="C_agentlist">
+      <div class="model-row focused active-model" data-i="0"><span class="arr">▶</span><div style="flex:1">PRODUCER<div class="sub" style="font-size:5px;color:#555">Operations · coordination</div></div><span class="model-badge">ACTIVE</span></div>
+      <div class="model-row" data-i="1"><span class="arr">▶</span><div style="flex:1">CLOWN<div class="sub" style="font-size:5px;color:#444">Performance · improv</div></div></div>
+      <div class="model-row" data-i="2"><span class="arr">▶</span><div style="flex:1">MONK<div class="sub" style="font-size:5px;color:#444">Focus · reflection</div></div></div>
+      <div class="model-row" data-i="3"><span class="arr">▶</span><div style="flex:1">HACKER<div class="sub" style="font-size:5px;color:#444">Code · systems</div></div></div>
+      <div class="model-row" data-i="4"><span class="arr">▶</span><div style="flex:1">STORYTELLER<div class="sub" style="font-size:5px;color:#444">Narrative · creative</div></div></div>
+      <div class="model-row" data-i="5"><span class="arr">▶</span><div style="flex:1">DIRECTOR<div class="sub" style="font-size:5px;color:#444">Strategy · vision</div></div></div>
+    </div>
+    <div class="kh">SHORT:NEXT · LONG:SELECT · DBL:BACK</div>
+  </div>
+
+  <!-- WIFI -->
+  <div class="view" id="C_wifi">
+    <div class="sbar"><span>← DBL</span><span>WI-FI</span><span style="font-size:5px;color:#0f0">ON</span></div>
+    <div style="padding:10px 8px;border-bottom:2px solid #fff;display:flex;align-items:center;gap:8px;flex-shrink:0">
+      <div style="font-size:11px">▣</div>
+      <div style="flex:1"><div style="font-size:8px;letter-spacing:.04em;margin-bottom:3px">STUDIONET-5G</div><div style="font-size:5px;color:#555;letter-spacing:.04em">5GHz · CONNECTED · EXCELLENT</div></div>
+      <div class="tog on"><div class="tog-t"></div></div>
+    </div>
+    <div style="padding:3px 8px;font-size:5px;color:#1a1a1a;letter-spacing:.1em;border-bottom:1px solid #0a0a0a;background:#050505">NEARBY</div>
+    <div class="scroll-body" id="C_wifilist">
+      <div class="row focused" data-i="0" style="color:#fff"><span class="arr">▶</span><span class="row-lbl">STUDIONET-5G ✓</span><span class="meta">5G ■■■■</span></div>
+      <div class="row" data-i="1"><span class="arr">▶</span><span class="row-lbl">STUDIONET-2.4G</span><span class="meta">2G ■■■◻</span></div>
+      <div class="row" data-i="2"><span class="arr">▶</span><span class="row-lbl">NEIGHBOR-5G 🔒</span><span class="meta">5G ■■◻◻</span></div>
+      <div class="row" data-i="3"><span class="arr">▶</span><span class="row-lbl">GUEST-WIFI</span><span class="meta">OPEN</span></div>
+    </div>
+    <div class="kh">SHORT:NEXT · LONG:CONNECT · DBL:BACK</div>
+  </div>
+
+  <!-- BLUETOOTH -->
+  <div class="view" id="C_bt">
+    <div class="sbar"><span>← DBL</span><span>BLUETOOTH</span><span style="font-size:5px;color:#0f0">ON</span></div>
+    <div style="padding:3px 8px;font-size:5px;color:#1a1a1a;letter-spacing:.1em;border-bottom:1px solid #0a0a0a;background:#050505">CONNECTED (3)</div>
+    <div class="scroll-body" id="C_btlist">
+      <div class="row focused" style="color:#fff" data-i="0"><span class="arr">▶</span><div style="flex:1">SONY WH-1000XM5<div class="sub">AUDIO · 82% BATT</div></div><span class="meta" style="font-size:4px;border:1px solid #0f0;color:#0f0;padding:1px 3px">CON</span></div>
+      <div class="row" data-i="1"><span class="arr">▶</span><div style="flex:1">MAGIC KEYBOARD<div class="sub">INPUT</div></div><span class="meta" style="font-size:4px;border:1px solid #0f0;color:#0f0;padding:1px 3px">CON</span></div>
+      <div class="row" data-i="2"><span class="arr">▶</span><div style="flex:1">MAGIC MOUSE<div class="sub">INPUT</div></div><span class="meta" style="font-size:4px;border:1px solid #0f0;color:#0f0;padding:1px 3px">CON</span></div>
+      <div style="padding:3px 8px;font-size:5px;color:#1a1a1a;letter-spacing:.1em;border-bottom:1px solid #0a0a0a;border-top:1px solid #111;background:#050505">AVAILABLE</div>
+      <div class="row" data-i="3"><span class="arr">▶</span><div style="flex:1">JBL CHARGE 5<div class="sub">SPEAKER</div></div><span class="meta">PAIR?</span></div>
+    </div>
+    <div style="border-top:2px solid #fff;padding:7px 8px;font-size:6px;color:#555;cursor:pointer;letter-spacing:.04em;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:6px">
+      <span style="display:inline-block;animation:btspin .4s steps(4) infinite">◐</span>SCANNING...
+    </div>
+    <div class="kh">SHORT:NEXT · LONG:DISCONNECT · DBL:BACK</div>
+  </div>
+  @keyframes btspin{0%{content:'◐'}25%{content:'◓'}50%{content:'◑'}75%{content:'◒'}}
+
+  <!-- STORAGE -->
+  <div class="view" id="C_storage">
+    <div class="sbar"><span>← DBL</span><span>STORAGE</span><span></span></div>
+    <div style="padding:10px 8px;border-bottom:2px solid #fff;flex-shrink:0">
+      <div style="display:flex;justify-content:space-between;font-size:7px;letter-spacing:.04em;margin-bottom:4px"><span style="font-size:14px">89.4 GB</span><span style="color:#444;font-size:6px">OF 128 GB</span></div>
+      <div style="height:8px;border:2px solid #fff;background:#000;display:flex;overflow:hidden">
+        <div style="width:33%;background:#fff"></div>
+        <div style="width:14%;background:#888"></div>
+        <div style="width:9%;background:#555"></div>
+        <div style="width:9%;background:#333"></div>
+      </div>
+      <div style="font-size:5px;color:#1a1a1a;margin-top:3px">38.6 GB FREE · 69.8% USED</div>
+    </div>
+    <div class="scroll-body">
+      <div style="display:flex;align-items:center;gap:8px;padding:7px 8px;border-bottom:1px solid #0a0a0a;font-size:6px"><div style="flex:1;color:#aaa">AI / VAULT DATA</div><span style="color:#fff">42.1 GB</span></div>
+      <div style="display:flex;align-items:center;gap:8px;padding:7px 8px;border-bottom:1px solid #0a0a0a;font-size:6px"><div style="flex:1;color:#aaa">MUSIC</div><span>18.3 GB</span></div>
+      <div style="display:flex;align-items:center;gap:8px;padding:7px 8px;border-bottom:1px solid #0a0a0a;font-size:6px"><div style="flex:1;color:#aaa">NOTES / DOCS</div><span>12.6 GB</span></div>
+      <div style="display:flex;align-items:center;gap:8px;padding:7px 8px;border-bottom:1px solid #0a0a0a;font-size:6px"><div style="flex:1;color:#aaa">SYSTEM</div><span>7.2 GB</span></div>
+      <div style="display:flex;align-items:center;gap:8px;padding:7px 8px;font-size:6px"><div style="flex:1;color:#aaa">WIDGETS</div><span>9.2 GB</span></div>
+    </div>
+    <div class="kh">DBL:BACK</div>
+  </div>
+
+  <!-- ABOUT -->
+  <div class="view" id="C_about">
+    <div class="sbar"><span>← DBL</span><span>ABOUT</span><span></span></div>
+    <div class="scroll-body">
+      <div class="sett-section">DEVICE</div>
+      <div class="about-row"><span class="about-lbl">MODEL</span><span class="about-val">BITOS DEV-1</span></div>
+      <div class="about-row"><span class="about-lbl">OS VERSION</span><span class="about-val">v1.0.0</span></div>
+      <div class="about-row"><span class="about-lbl">DISPLAY</span><span class="about-val">240×280 · 1-BIT</span></div>
+      <div class="about-row"><span class="about-lbl">SCREEN</span><span class="about-val">1.69IN · ST7789</span></div>
+      <div class="about-row"><span class="about-lbl">FONT</span><span class="about-val">PRESS START 2P</span></div>
+      <div class="sett-section">SYSTEM</div>
+      <div class="about-row"><span class="about-lbl">AI ENGINE</span><span class="about-val">ANTHROPIC</span></div>
+      <div class="about-row"><span class="about-lbl">HARDWARE</span><span class="about-val">PI ZERO 2W</span></div>
+      <div class="about-row"><span class="about-lbl">BATTERY</span><span class="about-val">PISUGAR 3</span></div>
+      <div class="about-row"><span class="about-lbl">BUILD DATE</span><span class="about-val">MAR 2026</span></div>
+      <div class="about-row"><span class="about-lbl">MADE BY</span><span class="about-val">SEB + CLAUDE</span></div>
+    </div>
+    <div class="kh">DBL:BACK</div>
+  </div>
+
+</div><!-- /screen -->
+<div class="home-btn"></div>
+```
+
+  </div>
+  <div class="btn-row">
+    <div class="ctrl-btn" onclick="C_short()">SHORT</div>
+    <div class="ctrl-btn" onclick="C_long()">LONG</div>
+    <div class="ctrl-btn" onclick="C_back()">BACK (DBL)</div>
+  </div>
+  <div class="state-display" id="C_state">settings panel</div>
+</div>
+
+</div><!-- /devices-row -->
+
+<script>
+/* ═══ SHARED UTILS ═══ */
+function showView(scrId, viewId) {
+  document.querySelectorAll('#'+scrId+' .view').forEach(v => v.classList.remove('active'));
+  document.getElementById(viewId).classList.add('active');
+}
+function focusList(listId, idx) {
+  const rows = document.querySelectorAll('#'+listId+' [data-i]');
+  rows.forEach((r, i) => r.classList.toggle('focused', i === idx));
+  if (rows[idx]) rows[idx].scrollIntoView({block:'nearest'});
+  return rows.length;
+}
+function flash(el, ms=120) {
+  if (!el) return;
+  const orig = el.style.background;
+  el.style.background = '#fff';
+  el.style.color = '#000';
+  setTimeout(() => { el.style.background = orig; el.style.color = ''; }, ms);
+}
+function tick() {
+  const n = new Date();
+  const t = String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0');
+  document.querySelectorAll('[id$="time"]').forEach(e => { if(e.id.includes('time')) e.textContent = t; });
+  if (document.getElementById('Atime')) document.getElementById('Atime').textContent = t;
+}
+tick(); setInterval(tick, 1000);
+function setState(id, txt) { const el = document.getElementById(id); if(el) el.textContent = txt; }
+
+/* ═══════════════════════════════════
+   DEVICE A · CHAT
+═══════════════════════════════════ */
+let A_screen = 'chatpanel';
+let A_panelIdx = 0;
+let A_ctxIdx = 0;
+let A_histIdx = 0;
+let A_quickIdx = 0;
+let A_vtSec = 0;
+let A_vtInt = null;
+
+function A_goTo(s) {
+  A_screen = s;
+  showView('scrA', 'A_'+s);
+  setState('A_state', s.replace(/_/g,' '));
+}
+
+// Ring animation for thinking
+let A_rs = 0;
+function A_drawRing() {
+  const c = document.getElementById('A_ring');
+  if (!c) return;
+  c.width = 72; c.height = 72;
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0,0,72,72);
+  ctx.strokeStyle='#1a1a1a'; ctx.lineWidth=5;
+  ctx.beginPath(); ctx.arc(36,36,28,0,Math.PI*2); ctx.stroke();
+  ctx.strokeStyle='#fff'; ctx.lineWidth=5;
+  ctx.beginPath(); ctx.arc(36,36,28,-Math.PI/2,-Math.PI/2+Math.PI*2*(A_rs/16)); ctx.stroke();
+}
+let A_ringInt = null;
+function A_startThink() {
+  A_rs = 0;
+  let dots = 0; let tok = 0;
+  A_ringInt = setInterval(() => {
+    A_rs = (A_rs+1)%17; A_drawRing();
+    dots = (dots+1)%3;
+    tok += 58;
+    const de = document.getElementById('A_dots');
+    const te = document.getElementById('A_tok');
+    if(de) de.textContent = ['.','..','.'][dots];
+    if(te) te.textContent = tok;
+    if(A_rs === 0) {
+      clearInterval(A_ringInt);
+      A_goTo('chat');
+    }
+  }, 200);
+}
+
+function A_short() {
+  if (A_screen === 'chatpanel') {
+    A_panelIdx = (A_panelIdx + 1) % 3;
+    focusList('A_chatpanel', A_panelIdx);
+  } else if (A_screen === 'chat') {
+    A_quickIdx = (A_quickIdx + 1) % 4;
+    focusList('A_quick', A_quickIdx);
+  } else if (A_screen === 'ctx') {
+    A_ctxIdx = (A_ctxIdx + 1) % 4;
+    focusList('A_ctxmenu', A_ctxIdx);
+  } else if (A_screen === 'history') {
+    A_histIdx = (A_histIdx + 1) % 6;
+    focusList('A_histlist', A_histIdx);
+  } else if (A_screen === 'voice') {
+    A_goTo('chat'); // send on short when in voice
+  }
+}
+
+function A_long() {
+  if (A_screen === 'chatpanel') {
+    if (A_panelIdx === 0) { A_goTo('thinking'); A_startThink(); }
+    else if (A_panelIdx === 1) { A_histIdx = 0; focusList('A_histlist', 0); A_goTo('history'); }
+    else if (A_panelIdx === 2) { A_histIdx = 0; focusList('A_histlist', 0); A_goTo('history'); }
+  } else if (A_screen === 'chat') {
+    A_goTo('voice');
+    A_vtSec = 0;
+    A_vtInt = setInterval(() => {
+      A_vtSec++;
+      const el = document.getElementById('A_vtimer');
+      if(el) el.textContent = '00:'+String(A_vtSec).padStart(2,'0');
+    }, 1000);
+  } else if (A_screen === 'voice') {
+    clearInterval(A_vtInt);
+    A_vtSec = 0;
+    A_goTo('thinking');
+    A_startThink();
+  } else if (A_screen === 'ctx') {
+    const rows = document.querySelectorAll('#A_ctxmenu [data-i]');
+    const el = rows[A_ctxIdx];
+    if(el) flash(el);
+    setTimeout(() => A_goTo('chat'), 200);
+  } else if (A_screen === 'history') {
+    const rows = document.querySelectorAll('#A_histlist [data-i]');
+    if(rows[A_histIdx]) flash(rows[A_histIdx]);
+    setTimeout(() => { A_quickIdx=0; focusList('A_quick',0); A_goTo('chat'); }, 200);
+  }
+}
+
+function A_back() {
+  if (A_screen === 'chat') { A_panelIdx=0; focusList('A_chatpanel',0); A_goTo('chatpanel'); }
+  else if (A_screen === 'voice') { clearInterval(A_vtInt); A_goTo('chat'); }
+  else if (A_screen === 'thinking') { clearInterval(A_ringInt); A_goTo('chat'); }
+  else if (A_screen === 'ctx') A_goTo('chat');
+  else if (A_screen === 'history') { A_panelIdx=0; focusList('A_chatpanel',0); A_goTo('chatpanel'); }
+}
+
+/* ═══════════════════════════════════
+   DEVICE B · TASKS
+═══════════════════════════════════ */
+let B_screen = 'taskpanel';
+let B_panelIdx = 0;
+let B_taskIdx = 0;
+let B_projIdx = 0;
+let B_confIdx = 0;
+let B_vrec = false;
+let B_vtSec = 0;
+let B_vtInt = null;
+
+function B_goTo(s) {
+  B_screen = s;
+  showView('scrB', 'B_'+s);
+  setState('B_state', s.replace(/_/g,' '));
+}
+
+function B_short() {
+  if (B_screen === 'taskpanel') {
+    B_panelIdx = (B_panelIdx+1) % 3;
+    focusList('B_panel_list', B_panelIdx);
+  } else if (B_screen === 'tasklist') {
+    B_taskIdx = (B_taskIdx+1) % 7;
+    focusList('B_tlist', B_taskIdx);
+  } else if (B_screen === 'projects') {
+    B_projIdx = (B_projIdx+1) % 5;
+    focusList('B_projlist', B_projIdx);
+  } else if (B_screen === 'confirm') {
+    B_confIdx = (B_confIdx+1) % 2;
+    focusList('B_confbtns', B_confIdx);
+  }
+}
+
+function B_long() {
+  if (B_screen === 'taskpanel') {
+    if (B_panelIdx===0) { B_taskIdx=0; focusList('B_tlist',0); B_goTo('tasklist'); }
+    else if (B_panelIdx===1) { B_projIdx=0; focusList('B_projlist',0); B_goTo('projects'); }
+    else if (B_panelIdx===2) B_goTo('voiceadd');
+  } else if (B_screen === 'tasklist') {
+    const rows = document.querySelectorAll('#B_tlist [data-i]');
+    const row = rows[B_taskIdx];
+    if (row) {
+      const cb = row.querySelector('.task-cb');
+      if (cb) {
+        const done = cb.classList.toggle('done');
+        cb.textContent = done ? '✓' : '□';
+        row.classList.toggle('done-row', done);
+        flash(row, 80);
+      }
+    }
+  } else if (B_screen === 'voiceadd') {
+    if (!B_vrec) {
+      B_vrec = true;
+      B_vtSec = 0;
+      const stEl = document.getElementById('B_vstatus');
+      const btn = document.getElementById('B_vnbtn');
+      if(stEl) stEl.textContent = 'RECORDING...';
+      if(btn) btn.classList.add('recording');
+      B_vtInt = setInterval(() => {
+        B_vtSec++;
+        const el = document.getElementById('B_vtimer');
+        if(el) el.textContent = '00:'+String(B_vtSec).padStart(2,'0');
+        if (B_vtSec >= 15) { B_stopRec(); }
+      }, 1000);
+    } else {
+      B_stopRec();
+      B_confIdx = 0;
+      focusList('B_confbtns', 0);
+      B_goTo('confirm');
+    }
+  } else if (B_screen === 'confirm') {
+    const rows = document.querySelectorAll('#B_confbtns [data-i]');
+    if (B_confIdx === 1) { // SAVE
+      flash(rows[1]);
+      setTimeout(() => { B_taskIdx=0; focusList('B_tlist',0); B_goTo('tasklist'); }, 200);
+    } else { // CANCEL
+      B_goTo('tasklist');
+    }
+  } else if (B_screen === 'projects') {
+    const rows = document.querySelectorAll('#B_projlist [data-i]');
+    if(rows[B_projIdx]) flash(rows[B_projIdx]);
+    setTimeout(() => B_goTo('tasklist'), 200);
+  }
+}
+
+function B_stopRec() {
+  clearInterval(B_vtInt);
+  B_vrec = false;
+  B_vtSec = 0;
+  const stEl = document.getElementById('B_vstatus');
+  const btn = document.getElementById('B_vnbtn');
+  const timer = document.getElementById('B_vtimer');
+  if(stEl) stEl.textContent = 'LONG PRESS TO START';
+  if(btn) btn.classList.remove('recording');
+  if(timer) timer.textContent = '00:00';
+}
+
+function B_back() {
+  if (B_screen === 'tasklist') { B_panelIdx=0; focusList('B_panel_list',0); B_goTo('taskpanel'); }
+  else if (B_screen === 'voiceadd') { B_stopRec(); B_goTo('taskpanel'); }
+  else if (B_screen === 'confirm') { B_stopRec(); B_goTo('voiceadd'); }
+  else if (B_screen === 'projects') { B_panelIdx=0; focusList('B_panel_list',0); B_goTo('taskpanel'); }
+}
+
+/* ═══════════════════════════════════
+   DEVICE C · SETTINGS
+═══════════════════════════════════ */
+let C_screen = 'settmain';
+let C_settIdx = 0;
+let C_modelIdx = 0;
+let C_agentIdx = 0;
+let C_wifiIdx = 0;
+let C_btIdx = 0;
+
+const C_SETT_TOTAL = 8;
+const C_ACTIONS = ['model','agent','toggle','toggle','wifi','bt','storage','about'];
+
+function C_goTo(s) {
+  C_screen = s;
+  showView('scrC', 'C_'+s);
+  setState('C_state', s.replace(/_/g,' '));
+}
+
+function C_short() {
+  if (C_screen === 'settmain') {
+    C_settIdx = (C_settIdx+1) % C_SETT_TOTAL;
+    focusList('C_settlist', C_settIdx);
+  } else if (C_screen === 'model') {
+    C_modelIdx = (C_modelIdx+1) % 4;
+    focusList('C_modellist', C_modelIdx);
+  } else if (C_screen === 'agent') {
+    C_agentIdx = (C_agentIdx+1) % 6;
+    focusList('C_agentlist', C_agentIdx);
+  } else if (C_screen === 'wifi') {
+    C_wifiIdx = (C_wifiIdx+1) % 4;
+    focusList('C_wifilist', C_wifiIdx);
+  } else if (C_screen === 'bt') {
+    C_btIdx = (C_btIdx+1) % 4;
+    focusList('C_btlist', C_btIdx);
+  }
+}
+
+function C_long() {
+  if (C_screen === 'settmain') {
+    const action = C_ACTIONS[C_settIdx];
+    if (action === 'toggle') {
+      // Find the toggle in focused row
+      const rows = document.querySelectorAll('#C_settlist [data-i]');
+      const tog = rows[C_settIdx]?.querySelector('.tog');
+      if (tog) {
+        tog.classList.toggle('on');
+        tog.classList.toggle('off');
+        const t = tog.querySelector('.tog-t');
+        if(t) {
+          if(tog.classList.contains('on')) { t.style.right='1px'; t.style.left=''; }
+          else { t.style.left='1px'; t.style.right=''; }
+        }
+      }
+    } else if (action === 'model') { C_modelIdx=0; focusList('C_modellist',0); C_goTo('model'); }
+    else if (action === 'agent') { C_agentIdx=0; focusList('C_agentlist',0); C_goTo('agent'); }
+    else if (action === 'wifi') { C_wifiIdx=0; focusList('C_wifilist',0); C_goTo('wifi'); }
+    else if (action === 'bt') { C_btIdx=0; focusList('C_btlist',0); C_goTo('bt'); }
+    else if (action === 'storage') C_goTo('storage');
+    else if (action === 'about') C_goTo('about');
+  } else if (C_screen === 'model') {
+    // Update all rows: clear active, set new
+    const rows = document.querySelectorAll('#C_modellist [data-i]');
+    rows.forEach((r,i) => {
+      r.classList.toggle('active-model', i===C_modelIdx);
+      const badge = r.querySelector('.model-badge');
+      if(badge) badge.textContent = i===C_modelIdx ? 'ACTIVE ✓' : (['PRO','FAST','SOON'][i-1]||'');
+    });
+    flash(rows[C_modelIdx]);
+    setTimeout(() => { C_settIdx=0; focusList('C_settlist',0); C_goTo('settmain'); }, 300);
+  } else if (C_screen === 'agent') {
+    const rows = document.querySelectorAll('#C_agentlist [data-i]');
+    rows.forEach((r,i) => {
+      r.classList.toggle('active-model', i===C_agentIdx);
+      const badge = r.querySelector('.model-badge');
+      if(badge) badge.textContent = i===C_agentIdx ? 'ACTIVE' : '';
+    });
+    flash(rows[C_agentIdx]);
+    setTimeout(() => { C_settIdx=0; focusList('C_settlist',0); C_goTo('settmain'); }, 300);
+  } else if (C_screen === 'wifi') {
+    const rows = document.querySelectorAll('#C_wifilist [data-i]');
+    if(rows[C_wifiIdx]) flash(rows[C_wifiIdx]);
+    setTimeout(() => C_goTo('settmain'), 200);
+  } else if (C_screen === 'bt') {
+    const rows = document.querySelectorAll('#C_btlist [data-i]');
+    if(rows[C_btIdx]) flash(rows[C_btIdx]);
+    setTimeout(() => C_goTo('settmain'), 200);
+  }
+}
+
+function C_back() {
+  if (['model','agent','wifi','bt','storage','about'].includes(C_screen)) {
+    C_settIdx = 0; focusList('C_settlist',0); C_goTo('settmain');
+  }
+}
+
+/* ═══ KEYBOARD ═══ */
+document.addEventListener('keydown', e => {
+  if (['INPUT','TEXTAREA'].includes(document.activeElement.tagName)) return;
+  if (e.key === ' ') { e.preventDefault(); A_short(); B_short(); C_short(); }
+  if (e.key === 'Enter') { e.preventDefault(); A_long(); B_long(); C_long(); }
+  if (e.key === 'Backspace' || e.key === 'Escape') { e.preventDefault(); A_back(); B_back(); C_back(); }
+});
+</script>
+
+</body>
+</html>
