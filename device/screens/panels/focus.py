@@ -7,7 +7,7 @@ import time
 import pygame
 
 from display.theme import load_ui_font, merge_runtime_ui_settings
-from display.tokens import BLACK, DIM1, DIM2, DIM3, HAIRLINE, PHYSICAL_H, PHYSICAL_W, WHITE
+from display.tokens import BLACK, DIM1, DIM2, DIM3, HAIRLINE, PHYSICAL_H, PHYSICAL_W, WHITE, STATUS_BAR_H, ROW_H_MIN
 from screens.base import BaseScreen
 from screens.components import NavItem, VerticalNavController
 
@@ -22,6 +22,7 @@ class FocusPanel(BaseScreen):
         self._font_title = load_ui_font("title", self._ui_settings)
         self._font_body = load_ui_font("body", self._ui_settings)
         self._font_small = load_ui_font("small", self._ui_settings)
+        self._font_hint = load_ui_font("hint", self._ui_settings)
 
         self._default_duration = max(60, int(duration_seconds))
         self._total_seconds = self._default_duration
@@ -43,8 +44,10 @@ class FocusPanel(BaseScreen):
     def handle_action(self, action: str):
         if action == "SHORT_PRESS":
             self._nav.activate_focused()
-        elif action in {"DOUBLE_PRESS", "LONG_PRESS"}:
+        elif action == "LONG_PRESS":
             self._nav.move(1)
+        elif action == "DOUBLE_PRESS":
+            self._go_back()
         elif action == "TRIPLE_PRESS":
             self._nav.move(-1)
 
@@ -77,34 +80,53 @@ class FocusPanel(BaseScreen):
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
 
-        title = self._font_title.render("FOCUS", False, WHITE)
-        surface.blit(title, (8, 8))
-        pygame.draw.line(surface, HAIRLINE, (0, 24), (PHYSICAL_W, 24))
+        # ── Status bar: inverted ──
+        pygame.draw.rect(surface, WHITE, pygame.Rect(0, 0, PHYSICAL_W, STATUS_BAR_H))
+        title = self._font_small.render("FOCUS", False, BLACK)
+        surface.blit(title, (6, (STATUS_BAR_H - title.get_height()) // 2))
 
+        # ── Timer display ──
         timer_text = self._timer_copy()
         timer_surface = self._font_title.render(timer_text, False, WHITE)
         timer_x = (PHYSICAL_W - timer_surface.get_width()) // 2
-        surface.blit(timer_surface, (timer_x, 48))
+        surface.blit(timer_surface, (timer_x, STATUS_BAR_H + 16))
 
         mode = "RUNNING" if self._running else "PAUSED"
         mode_surface = self._font_small.render(mode, False, DIM1 if self._running else DIM2)
         mode_x = (PHYSICAL_W - mode_surface.get_width()) // 2
-        surface.blit(mode_surface, (mode_x, 68))
+        surface.blit(mode_surface, (mode_x, STATUS_BAR_H + 36))
 
+        # ── Progress bar ──
+        bar_y = STATUS_BAR_H + 50
+        progress = 0.0
+        if self._total_seconds > 0:
+            progress = self._elapsed_seconds / self._total_seconds
+        pygame.draw.rect(surface, WHITE, pygame.Rect(10, bar_y, PHYSICAL_W - 20, 5), width=1)
+        fill_w = int((PHYSICAL_W - 22) * min(1.0, progress))
+        if fill_w > 0:
+            pygame.draw.rect(surface, WHITE, pygame.Rect(11, bar_y + 1, fill_w, 3))
+
+        # ── Nav rows: 26px, inverted focus ──
         self._sync_nav_labels()
-        y = 100
+        y = bar_y + 16
         for idx, item in enumerate(self._nav.items):
-            row = self._font_body.render(item.label, False, WHITE)
-            status = self._font_small.render(item.status, False, DIM2)
-            if idx == self._nav.focus_index:
-                pygame.draw.rect(surface, WHITE, pygame.Rect(4, y - 2, PHYSICAL_W - 8, 15), width=1)
-            surface.blit(row, (8, y))
-            surface.blit(status, (PHYSICAL_W - status.get_width() - 8, y + 2))
-            pygame.draw.line(surface, HAIRLINE, (8, y + 12), (PHYSICAL_W - 8, y + 12))
-            y += 20
+            focused = idx == self._nav.focus_index
+            if focused:
+                pygame.draw.rect(surface, WHITE, pygame.Rect(0, y, PHYSICAL_W, ROW_H_MIN))
+            row_color = BLACK if focused else WHITE
+            status_color = BLACK if focused else DIM2
+            row = self._font_body.render(item.label, False, row_color)
+            status = self._font_small.render(item.status, False, status_color)
+            text_y = y + (ROW_H_MIN - row.get_height()) // 2
+            surface.blit(row, (8, text_y))
+            surface.blit(status, (PHYSICAL_W - status.get_width() - 8, text_y + 2))
+            if not focused:
+                pygame.draw.line(surface, HAIRLINE, (0, y + ROW_H_MIN - 1), (PHYSICAL_W, y + ROW_H_MIN - 1))
+            y += ROW_H_MIN
 
-        hint = self._font_small.render("SEL SHORT • BACK MENU", False, DIM3)
-        surface.blit(hint, (8, PHYSICAL_H - 14))
+        # ── Key hint bar ──
+        hint = self._font_hint.render("SHORT:SEL \u00b7 LONG:NEXT \u00b7 DBL:BACK", False, DIM3)
+        surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
 
     def save_state(self) -> None:
         if not self._running or not self._repository:

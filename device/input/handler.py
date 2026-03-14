@@ -172,10 +172,12 @@ class GPIOButtonHandler:
 
         now_ms = time.time() * 1000.0
         if GPIO.input(channel) == GPIO.LOW:
-            self._press_start = now_ms
+            with self._lock:
+                self._press_start = now_ms
             return
 
-        start_ms = self._press_start if self._press_start is not None else now_ms
+        with self._lock:
+            start_ms = self._press_start if self._press_start is not None else now_ms
         duration_ms = now_ms - start_ms
         self._handle_release(duration_ms=duration_ms, now_ms=now_ms)
 
@@ -185,26 +187,18 @@ class GPIOButtonHandler:
         triple_window_ms = TRIPLE_WINDOW * 1000.0
 
         with self._lock:
+            if duration_ms >= short_threshold_ms:
+                self._press_times.clear()
+                self._on_event(ButtonEvent.LONG_PRESS)
+                return
+
             self._press_times.append(now_ms)
             self._press_times = [t for t in self._press_times if (now_ms - t) < triple_window_ms]
             count = len(self._press_times)
 
-        if duration_ms >= short_threshold_ms:
-            with self._lock:
-                self._press_times.clear()
-        self._press_times.append(now_ms)
-        self._press_times = [t for t in self._press_times if (now_ms - t) < triple_window_ms]
-        count = len(self._press_times)
-
-        if duration_ms >= short_threshold_ms:
-            self._press_times.clear()
-            self._on_event(ButtonEvent.LONG_PRESS)
-            return
-
         if count >= 3:
             with self._lock:
                 self._press_times.clear()
-            self._press_times.clear()
             self._on_event(ButtonEvent.TRIPLE_PRESS)
             return
 
@@ -215,9 +209,6 @@ class GPIOButtonHandler:
                     if len(self._press_times) < 3:
                         self._press_times.clear()
                         self._on_event(ButtonEvent.DOUBLE_PRESS)
-                if len(self._press_times) == 2:
-                    self._press_times.clear()
-                    self._on_event(ButtonEvent.DOUBLE_PRESS)
 
             threading.Thread(target=check_double, daemon=True).start()
             return
@@ -228,8 +219,5 @@ class GPIOButtonHandler:
                 if len(self._press_times) == 1:
                     self._press_times.clear()
                     self._on_event(ButtonEvent.SHORT_PRESS)
-            if len(self._press_times) == 1:
-                self._press_times.clear()
-                self._on_event(ButtonEvent.SHORT_PRESS)
 
         threading.Thread(target=check_single, daemon=True).start()

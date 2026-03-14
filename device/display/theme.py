@@ -12,6 +12,7 @@ DEFAULT_RUNTIME_UI_SETTINGS = {
         "title": FONT_SIZES["title"],
         "body": FONT_SIZES["body"],
         "small": FONT_SIZES["small"],
+        "hint": FONT_SIZES["hint"],
     },
     "layout_density": "comfy",
     "sidebar_width": 84,

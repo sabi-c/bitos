@@ -10,7 +10,7 @@ import pygame
 from screens.base import BaseScreen
 from display.tokens import (
     BLACK, WHITE, DIM2, DIM3, DIM4,
-    PHYSICAL_W, PHYSICAL_H, FONT_PATH, FONT_SIZES
+    PHYSICAL_W, PHYSICAL_H, FONT_PATH, FONT_SIZES, STATUS_BAR_H
 )
 from display.animator import StepAnimator, orb_rotate, blink_cursor
 
@@ -21,6 +21,7 @@ class BootScreen(BaseScreen):
     def __init__(self, on_complete=None, startup_health: dict | None = None, health_check=None):
         self._on_complete = on_complete
         self._startup_health = startup_health if startup_health is not None else {}
+        self._health_lock = threading.Lock()
         self._health_check = health_check
         self._orb_anim = orb_rotate()
         self._cursor_anim = blink_cursor()
@@ -93,7 +94,7 @@ class BootScreen(BaseScreen):
 
         status_surface = self._status_font.render(self._status_copy(), False, DIM2)
         status_x = (PHYSICAL_W - status_surface.get_width()) // 2
-        surface.blit(status_surface, (status_x, PHYSICAL_H - 14))
+        surface.blit(status_surface, (status_x, PHYSICAL_H - STATUS_BAR_H))
 
     def _advance(self):
         if self._done:
@@ -106,12 +107,22 @@ class BootScreen(BaseScreen):
         try:
             result = self._health_check()
             if isinstance(result, dict):
-                self._startup_health.update(result)
+                with self._health_lock:
+                    self._startup_health.update(result)
         except Exception:
-            self._startup_health.update({"backend": False})
+            with self._health_lock:
+                self._startup_health.update({"backend": False})
 
     def _status_copy(self) -> str:
-        backend_status = self._startup_health.get("backend")
+        with self._health_lock:
+            backend_status = self._startup_health.get("backend")
+            has_api_key = self._startup_health.get("api_key", False)
+            has_db = self._startup_health.get("database")
+
         if backend_status is None:
             return "CONNECTING..."
-        return "CLAUDE ONLINE ✓" if backend_status else "AI OFFLINE ⚠"
+        if has_db is False:
+            return "FIRST BOOT — SETUP"
+        if not has_api_key:
+            return "NO API KEY"
+        return "CLAUDE ONLINE ✓" if backend_status else "OFFLINE MODE ⚠"

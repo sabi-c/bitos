@@ -160,6 +160,8 @@ For **every implementation iteration** (code or docs):
 | FIX-SERVER-001 | Phase 0 | Code Quality | Logging cleanup, dead-import removal, and audio pipeline env-gate + tests | GPT-5.2-Codex | done | 2026-03-14 | Replaced print logging in device/server mains, removed dead imports, added BITOS_AUDIO mock/hw behavior and tests |
 | TEST-HW-001 | Phase 0 | Quality | Add hardware-mock safety-path tests for input/display/crypto/smoke surfaces | GPT-5.2-Codex | done | 2026-03-14 | Added focused tests for button handler, display driver, crypto parity vectors, and smoke-script coverage gates |
 | CI-GREEN-001 | Phase 0 | Quality | Make CI pass under mock env, add crypto known vector parity checks, and validate tracker | GPT-5.2-Codex | done | 2026-03-14 | Fixed keyboard gesture handling + wifi timeout test isolation, added PBKDF2 known vectors and companion HTML smoke page, validated tracker + pytest |
+| BLE-PAIR-001 | Phase 5 | WS-G Bluetooth Foundation | BLE pairing PIN display flow (PasskeyOverlay + companion pair.html) | Claude | done | 2026-03-14 | Full passkey overlay with state machine, ScreenManager wiring, companion pair.html passkey confirmation UI, 23 focused tests |
+| SHIP-PREP-001 | Phase 5 | WS-F Infra & Security | Hardware port readiness pass (Pi audit, voice loop, Vikunja, boot polish) | Claude | done | 2026-03-14 | All Pi code paths verified complete, voice capture threaded with TTS playback, Vikunja adapter with mock fallback, boot status messages for first-boot/offline/no-key, main.py critical bugs fixed |
 
 ## Iteration Log
 

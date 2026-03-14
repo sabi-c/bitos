@@ -16,7 +16,7 @@ import pygame
 from display.theme import load_ui_font, merge_runtime_ui_settings
 from overlays import QROverlay
 from bluetooth.constants import build_pair_url
-from display.tokens import BLACK, DIM2, DIM3, HAIRLINE, PHYSICAL_H, PHYSICAL_W, WHITE
+from display.tokens import BLACK, DIM2, DIM3, HAIRLINE, PHYSICAL_H, PHYSICAL_W, WHITE, STATUS_BAR_H, ROW_H_MIN
 from screens.base import BaseScreen
 from screens.components import NavItem, VerticalNavController
 from storage.repository import DeviceRepository
@@ -56,6 +56,7 @@ class SettingsPanel(BaseScreen):
         self._font_title = load_ui_font("title", self._ui_settings)
         self._font_body = load_ui_font("body", self._ui_settings)
         self._font_small = load_ui_font("small", self._ui_settings)
+        self._font_hint = load_ui_font("hint", self._ui_settings)
 
         self._web_search = bool(self._repo.get_setting("web_search", default=True))
         self._memory = bool(self._repo.get_setting("memory", default=True))
@@ -86,10 +87,10 @@ class SettingsPanel(BaseScreen):
     def handle_action(self, action: str):
         if action == "LONG_PRESS":
             self._nav.activate_focused()
-        elif action == "SHORT_PRESS" and self._nav.focused_item and self._nav.focused_item.key == "back":
-            self._nav.activate_focused()
-        elif action == "DOUBLE_PRESS":
+        elif action == "SHORT_PRESS":
             self._nav.move(1)
+        elif action == "DOUBLE_PRESS":
+            self._go_back()
         elif action == "TRIPLE_PRESS":
             self._nav.move(-1)
 
@@ -106,35 +107,43 @@ class SettingsPanel(BaseScreen):
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
 
-        title = self._font_title.render("SETTINGS", False, WHITE)
-        surface.blit(title, (8, 8))
-        pygame.draw.line(surface, HAIRLINE, (0, 24), (PHYSICAL_W, 24))
+        # ── Status bar: 18px, inverted (white bg, black text) ──
+        pygame.draw.rect(surface, WHITE, pygame.Rect(0, 0, PHYSICAL_W, STATUS_BAR_H))
+        title = self._font_small.render("SETTINGS", False, BLACK)
+        surface.blit(title, (6, (STATUS_BAR_H - title.get_height()) // 2))
 
         statuses = {
             "web_search": "ON" if self._web_search else "OFF",
             "memory": "ON" if self._memory else "OFF",
-            "ai_model": _compact_model_label(self._ai_model),
-            "agent_mode": self._agent_mode[:10].upper(),
-            "sleep": f"{self._sleep_sec}s",
-            "about": "INFO",
-            "companion": "PAIR",
+            "ai_model": _compact_model_label(self._ai_model) + " \u203a",
+            "agent_mode": self._agent_mode[:10].upper() + " \u203a",
+            "sleep": f"{self._sleep_sec}s \u203a",
+            "about": "v1.0 \u203a",
+            "companion": "PAIR \u203a",
             "back": "HOME",
         }
 
-        y = 36
+        # ── Rows: 26px minimum, inverted focus ──
+        y = STATUS_BAR_H
         for idx, item in enumerate(self._nav.items):
+            focused = idx == self._nav.focus_index
+            if focused:
+                pygame.draw.rect(surface, WHITE, pygame.Rect(0, y, PHYSICAL_W, ROW_H_MIN))
             status_copy = statuses.get(item.key, item.status)
-            row = self._font_body.render(item.label, False, WHITE)
-            status = self._font_small.render(status_copy, False, DIM2)
-            if idx == self._nav.focus_index:
-                pygame.draw.rect(surface, WHITE, pygame.Rect(4, y - 2, PHYSICAL_W - 8, 15), width=1)
-            surface.blit(row, (8, y))
-            surface.blit(status, (PHYSICAL_W - status.get_width() - 8, y + 2))
-            pygame.draw.line(surface, HAIRLINE, (8, y + 12), (PHYSICAL_W - 8, y + 12))
-            y += 16
+            row_color = BLACK if focused else WHITE
+            status_color = BLACK if focused else DIM2
+            row = self._font_body.render(item.label, False, row_color)
+            status = self._font_small.render(status_copy, False, status_color)
+            text_y = y + (ROW_H_MIN - row.get_height()) // 2
+            surface.blit(row, (8, text_y))
+            surface.blit(status, (PHYSICAL_W - status.get_width() - 8, text_y + 2))
+            if not focused:
+                pygame.draw.line(surface, HAIRLINE, (0, y + ROW_H_MIN - 1), (PHYSICAL_W, y + ROW_H_MIN - 1))
+            y += ROW_H_MIN
 
-        hint = self._font_small.render("LONG=SELECT • DBL=NEXT", False, DIM3)
-        surface.blit(hint, (8, PHYSICAL_H - 14))
+        # ── Key hint bar: 4px font, spec format ──
+        hint = self._font_hint.render("SHORT:NEXT \u00b7 LONG:OPEN/TOGGLE \u00b7 DBL:BACK", False, DIM3)
+        surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
 
     def _toggle_web_search(self):
         self._web_search = not self._web_search
@@ -190,6 +199,12 @@ class ModelPickerPanel(BaseScreen):
         ("HAIKU 4.5", "claude-haiku-4-5-20251001"),
     ]
 
+    MODEL_SUBTITLES = {
+        "claude-sonnet-4-6": "FAST \u00b7 BALANCED \u00b7 DEFAULT",
+        "claude-opus-4-6": "POWERFUL \u00b7 SLOWER",
+        "claude-haiku-4-5-20251001": "FASTEST \u00b7 LIGHTWEIGHT",
+    }
+
     def __init__(self, repository: DeviceRepository, on_back=None, ui_settings: dict | None = None):
         self._repo = repository
         self._on_back = on_back
@@ -197,6 +212,7 @@ class ModelPickerPanel(BaseScreen):
         self._font_title = load_ui_font("title", self._ui_settings)
         self._font_body = load_ui_font("body", self._ui_settings)
         self._font_small = load_ui_font("small", self._ui_settings)
+        self._font_hint = load_ui_font("hint", self._ui_settings)
 
         current = str(self._repo.get_setting("ai_model", default="claude-sonnet-4-6"))
         start = 0
@@ -222,33 +238,65 @@ class ModelPickerPanel(BaseScreen):
             self.on_enter()
             if self._on_back:
                 self._on_back()
+        elif action == "DOUBLE_PRESS":
+            if self._on_back:
+                self._on_back()
 
     def handle_input(self, event: pygame.event.Event):
         if event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_SPACE):
             self.handle_action("LONG_PRESS")
+        elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            if self._on_back:
+                self._on_back()
 
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
-        title = self._font_title.render("MODEL", False, WHITE)
-        surface.blit(title, (8, 8))
-        pygame.draw.line(surface, HAIRLINE, (0, 24), (PHYSICAL_W, 24))
 
-        y = 44
+        # ── Status bar: inverted ──
+        pygame.draw.rect(surface, WHITE, pygame.Rect(0, 0, PHYSICAL_W, STATUS_BAR_H))
+        title = self._font_small.render("AI MODEL", False, BLACK)
+        surface.blit(title, (6, (STATUS_BAR_H - title.get_height()) // 2))
+
+        # ── Rows: 26px, inverted focus ──
+        y = STATUS_BAR_H + 2
         for i, (label, value) in enumerate(self.OPTIONS):
-            active = "ACTIVE" if value == self._current_model else ""
-            prefix = ">" if i == self._index else " "
-            row = self._font_body.render(f"{prefix}{label}", False, WHITE)
-            st = self._font_small.render(active, False, DIM2)
-            surface.blit(row, (8, y))
-            surface.blit(st, (PHYSICAL_W - st.get_width() - 8, y + 2))
-            y += 20
+            focused = i == self._index
+            is_active = value == self._current_model
+            if focused:
+                pygame.draw.rect(surface, WHITE, pygame.Rect(0, y, PHYSICAL_W, ROW_H_MIN))
+            row_color = BLACK if focused else (WHITE if is_active else DIM2)
+            row = self._font_body.render(label, False, row_color)
+            text_y = y + 4
+            surface.blit(row, (8, text_y))
+            badge = "ACTIVE" if is_active else ""
+            if badge:
+                badge_color = BLACK if focused else DIM2
+                st = self._font_small.render(badge, False, badge_color)
+                surface.blit(st, (PHYSICAL_W - st.get_width() - 8, text_y + 2))
+            subtitle = self.MODEL_SUBTITLES.get(value, "")
+            if subtitle:
+                sub_color = BLACK if focused else DIM3
+                sub_surface = self._font_small.render(subtitle, False, sub_color)
+                surface.blit(sub_surface, (8, text_y + row.get_height() + 2))
+            if not focused:
+                pygame.draw.line(surface, HAIRLINE, (0, y + ROW_H_MIN - 1), (PHYSICAL_W, y + ROW_H_MIN - 1))
+            y += ROW_H_MIN
 
-        hint = self._font_small.render("SHORT NEXT • LONG SET", False, DIM3)
-        surface.blit(hint, (8, PHYSICAL_H - 14))
+        # ── Key hint bar ──
+        hint = self._font_hint.render("SHORT:NEXT \u00b7 LONG:SELECT \u00b7 DBL:BACK", False, DIM3)
+        surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
 
 
 class AgentModePanel(BaseScreen):
     OPTIONS = ["producer", "clown", "monk", "hacker", "storyteller", "director"]
+    SUBTITLES = {
+        "producer": "Operations \u00b7 coordination",
+        "clown": "Performance \u00b7 improv",
+        "monk": "Focus \u00b7 reflection",
+        "hacker": "Code \u00b7 systems",
+        "storyteller": "Narrative \u00b7 creative",
+        "director": "Strategy \u00b7 vision",
+    }
 
     def __init__(self, repository: DeviceRepository, on_back=None, ui_settings: dict | None = None):
         self._repo = repository
@@ -257,6 +305,7 @@ class AgentModePanel(BaseScreen):
         self._font_title = load_ui_font("title", self._ui_settings)
         self._font_body = load_ui_font("body", self._ui_settings)
         self._font_small = load_ui_font("small", self._ui_settings)
+        self._font_hint = load_ui_font("hint", self._ui_settings)
 
         current = str(self._repo.get_setting("agent_mode", default="producer"))
         self._index = self.OPTIONS.index(current) if current in self.OPTIONS else 0
@@ -274,29 +323,53 @@ class AgentModePanel(BaseScreen):
             self.on_enter()
             if self._on_back:
                 self._on_back()
+        elif action == "DOUBLE_PRESS":
+            if self._on_back:
+                self._on_back()
 
     def handle_input(self, event: pygame.event.Event):
         if event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_SPACE):
             self.handle_action("LONG_PRESS")
+        elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            if self._on_back:
+                self._on_back()
 
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
-        title = self._font_title.render("AGENT MODE", False, WHITE)
-        surface.blit(title, (8, 8))
-        pygame.draw.line(surface, HAIRLINE, (0, 24), (PHYSICAL_W, 24))
 
-        y = 44
+        # ── Status bar: inverted ──
+        pygame.draw.rect(surface, WHITE, pygame.Rect(0, 0, PHYSICAL_W, STATUS_BAR_H))
+        title = self._font_small.render("AGENT MODE", False, BLACK)
+        surface.blit(title, (6, (STATUS_BAR_H - title.get_height()) // 2))
+
+        # ── Rows: 26px, inverted focus ──
+        y = STATUS_BAR_H + 2
         for i, value in enumerate(self.OPTIONS):
-            active = "ACTIVE" if value == self._current_mode else ""
-            prefix = ">" if i == self._index else " "
-            row = self._font_body.render(f"{prefix}{value[:10].upper()}", False, WHITE)
-            st = self._font_small.render(active, False, DIM2)
-            surface.blit(row, (8, y))
-            surface.blit(st, (PHYSICAL_W - st.get_width() - 8, y + 2))
-            y += 20
+            focused = i == self._index
+            is_active = value == self._current_mode
+            if focused:
+                pygame.draw.rect(surface, WHITE, pygame.Rect(0, y, PHYSICAL_W, ROW_H_MIN))
+            row_color = BLACK if focused else (WHITE if is_active else DIM2)
+            row = self._font_body.render(value[:10].upper(), False, row_color)
+            text_y = y + 4
+            surface.blit(row, (8, text_y))
+            badge = "ACTIVE" if is_active else ""
+            if badge:
+                badge_color = BLACK if focused else DIM2
+                st = self._font_small.render(badge, False, badge_color)
+                surface.blit(st, (PHYSICAL_W - st.get_width() - 8, text_y + 2))
+            subtitle = self.SUBTITLES.get(value, "")
+            if subtitle:
+                sub_color = BLACK if focused else DIM3
+                sub_surface = self._font_small.render(subtitle, False, sub_color)
+                surface.blit(sub_surface, (8, text_y + row.get_height() + 2))
+            if not focused:
+                pygame.draw.line(surface, HAIRLINE, (0, y + ROW_H_MIN - 1), (PHYSICAL_W, y + ROW_H_MIN - 1))
+            y += ROW_H_MIN
 
-        hint = self._font_small.render("SHORT NEXT • LONG SET", False, DIM3)
-        surface.blit(hint, (8, PHYSICAL_H - 14))
+        # ── Key hint bar ──
+        hint = self._font_hint.render("SHORT:NEXT \u00b7 LONG:SELECT \u00b7 DBL:BACK", False, DIM3)
+        surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
 
 
 class SleepTimerPanel(BaseScreen):
@@ -309,13 +382,14 @@ class SleepTimerPanel(BaseScreen):
         self._font_title = load_ui_font("title", self._ui_settings)
         self._font_body = load_ui_font("body", self._ui_settings)
         self._font_small = load_ui_font("small", self._ui_settings)
+        self._font_hint = load_ui_font("hint", self._ui_settings)
         self._timeout = int(self._repo.get_setting("sleep_timeout_seconds", default=60))
 
     def on_enter(self):
         self._timeout = int(self._repo.get_setting("sleep_timeout_seconds", default=60))
 
     def handle_action(self, action: str):
-        if action in {"SHORT_PRESS", "LONG_PRESS"} and self._on_back:
+        if action == "DOUBLE_PRESS" and self._on_back:
             self._on_back()
 
     def handle_input(self, event: pygame.event.Event):
@@ -325,14 +399,18 @@ class SleepTimerPanel(BaseScreen):
 
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
-        title = self._font_title.render("SLEEP", False, WHITE)
-        surface.blit(title, (8, 8))
-        pygame.draw.line(surface, HAIRLINE, (0, 24), (PHYSICAL_W, 24))
 
-        value = self._font_body.render(f"{self._timeout}s", False, WHITE)
-        surface.blit(value, (8, 48))
-        hint = self._font_small.render("LONG OR SHORT: BACK", False, DIM3)
-        surface.blit(hint, (8, PHYSICAL_H - 14))
+        # ── Status bar: inverted ──
+        pygame.draw.rect(surface, WHITE, pygame.Rect(0, 0, PHYSICAL_W, STATUS_BAR_H))
+        title = self._font_small.render("SLEEP TIMER", False, BLACK)
+        surface.blit(title, (6, (STATUS_BAR_H - title.get_height()) // 2))
+
+        value = self._font_title.render(f"{self._timeout}s", False, WHITE)
+        surface.blit(value, ((PHYSICAL_W - value.get_width()) // 2, 48))
+
+        # ── Key hint bar ──
+        hint = self._font_hint.render("DBL:BACK", False, DIM3)
+        surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
 
 
 class AboutPanel(BaseScreen):
@@ -341,9 +419,11 @@ class AboutPanel(BaseScreen):
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
         self._font_title = load_ui_font("title", self._ui_settings)
         self._font_body = load_ui_font("body", self._ui_settings)
+        self._font_small = load_ui_font("small", self._ui_settings)
+        self._font_hint = load_ui_font("hint", self._ui_settings)
 
     def handle_action(self, action: str):
-        if action in {"SHORT_PRESS", "LONG_PRESS"} and self._on_back:
+        if action == "DOUBLE_PRESS" and self._on_back:
             self._on_back()
 
     def handle_input(self, event: pygame.event.Event):
@@ -353,9 +433,11 @@ class AboutPanel(BaseScreen):
 
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
-        title = self._font_title.render("ABOUT", False, WHITE)
-        surface.blit(title, (8, 8))
-        pygame.draw.line(surface, HAIRLINE, (0, 24), (PHYSICAL_W, 24))
+
+        # ── Status bar: inverted ──
+        pygame.draw.rect(surface, WHITE, pygame.Rect(0, 0, PHYSICAL_W, STATUS_BAR_H))
+        title = self._font_small.render("ABOUT", False, BLACK)
+        surface.blit(title, (6, (STATUS_BAR_H - title.get_height()) // 2))
 
         lines = [
             "BITOS v1.0",
@@ -364,11 +446,15 @@ class AboutPanel(BaseScreen):
             "Claude Sonnet 4.6",
             "Press Start 2P",
         ]
-        y = 44
+        y = STATUS_BAR_H + 8
         for line in lines:
             text = self._font_body.render(line, False, WHITE)
             surface.blit(text, (8, y))
-            y += 18
+            y += ROW_H_MIN
+
+        # ── Key hint bar ──
+        hint = self._font_hint.render("DBL:BACK", False, DIM3)
+        surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
 
 
 def _compact_model_label(model: str) -> str:

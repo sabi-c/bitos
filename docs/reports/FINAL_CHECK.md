@@ -2,7 +2,7 @@
 Date: 2026-03-14
 
 ## Test Suite
-Result: 181 passed, 0 failed, 0 skipped
+Result: 206 passed, 0 failed, 0 skipped
 Status: PASS
 
 ## Import Chain
@@ -54,12 +54,19 @@ Match: YES
 
 ## Task Tracker
 Validation: PASS
-Done: 52  Todo: 34  Blocked: 1
+Done: 54  Todo: 34  Blocked: 1
 
 ## VERDICT
 READY FOR HARDWARE
 
-## Fixes applied this sprint
+## SHIP-PREP-001 audit results (2026-03-14)
+- Pi-specific code paths: all 7 env branches (DISPLAY, AUDIO, BUTTON, BLUETOOTH, BATTERY, WIFI, ADAPTER_MODE) have complete Pi implementations
+- Voice loop: fixed blocking capture (now threaded with 5s record window), added stop_recording() sequencing, added TTS playback after LLM response
+- Vikunja adapter: `server/integrations/vikunja_adapter.py` with mock-mode fallback, wired into agent_modes system prompt
+- Boot sequence: status messages now differentiate first-boot, no-API-key, online, offline
+- main.py bugs fixed: undefined `surface` in render loop, missing `PowerOverlay` import, duplicate logger, `print()` replaced with `logger`
+
+## Fixes applied previous sprint
 - Added missing critical report file: `docs/reports/UI_SPEC_GAPS.md`.
 - Added missing `.env.template` key: `BITOS_BATTERY`.
 - Corrected malformed `.env.template` companion URL entry (`BITOS_COMPANION_URL`).

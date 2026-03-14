@@ -33,8 +33,7 @@ class PanelShellTests(unittest.TestCase):
             calls["count"] += 1
 
         panel = NotificationsPanel(on_back=on_back)
-        panel.handle_action("DOUBLE_PRESS")  # focus BACK
-        panel.handle_action("SHORT_PRESS")
+        panel.handle_action("DOUBLE_PRESS")  # DOUBLE_PRESS = back
         self.assertEqual(calls["count"], 1)
 
     def test_notifications_error_copy_setter(self):
@@ -52,9 +51,7 @@ class PanelShellTests(unittest.TestCase):
             repo = DeviceRepository(db_path=str(Path(tmpdir) / "bitos.db"))
             repo.initialize()
             panel = SettingsPanel(repository=repo, on_back=on_back)
-            for _ in range(7):
-                panel.handle_action("DOUBLE_PRESS")
-            panel.handle_action("SHORT_PRESS")
+            panel.handle_action("DOUBLE_PRESS")  # DOUBLE_PRESS = back
             self.assertEqual(calls["count"], 1)
 
 
