@@ -5,7 +5,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "device"))
 
-from audio.pipeline import AudioPipeline
+from audio.pipeline import AudioPipeline, MockAudioPipeline, WM8960Pipeline, get_audio_pipeline
 
 
 class AudioPipelineTests(unittest.TestCase):
@@ -18,32 +18,16 @@ class AudioPipelineTests(unittest.TestCase):
         else:
             os.environ["BITOS_AUDIO"] = self._prev
 
-    def test_mock_mode_is_noop_and_unavailable(self):
-        os.environ["BITOS_AUDIO"] = "mock"
-        pipeline = AudioPipeline()
+    def test_audio_pipeline_base_is_unavailable(self):
+        self.assertFalse(AudioPipeline().is_available())
 
-        self.assertFalse(pipeline.is_available())
-        self.assertEqual(pipeline.record(max_seconds=2.0), "")
-        self.assertEqual(pipeline.transcribe("/tmp/fake.wav"), "")
-        self.assertIsNone(pipeline.speak("hello"))
+    def test_factory_uses_hw_for_generic_hw_mode(self):
+        os.environ["BITOS_AUDIO"] = "hw:1"
+        self.assertIsInstance(get_audio_pipeline(), WM8960Pipeline)
 
-    def test_hw_mode_marks_available_and_raises_for_unimplemented_methods(self):
-        os.environ["BITOS_AUDIO"] = "hw:0"
-        pipeline = AudioPipeline()
-
-        self.assertTrue(pipeline.is_available())
-        with self.assertRaises(NotImplementedError):
-            pipeline.record()
-        with self.assertRaises(NotImplementedError):
-            pipeline.transcribe("/tmp/fake.wav")
-        self.assertIsNone(pipeline.speak("hello"))
-
-    def test_unknown_mode_falls_back_to_mock(self):
+    def test_factory_falls_back_to_mock_for_unknown_mode(self):
         os.environ["BITOS_AUDIO"] = "invalid"
-        pipeline = AudioPipeline()
-
-        self.assertFalse(pipeline.is_available())
-        self.assertEqual(pipeline.record(), "")
+        self.assertIsInstance(get_audio_pipeline(), MockAudioPipeline)
 
 
 if __name__ == "__main__":

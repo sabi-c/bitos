@@ -18,7 +18,6 @@ class BatteryMonitor:
         self._charging = False
         self._last_read = 0
         self._cache_ttl = 30
-        self._pisugar = None
 
     def get_status(self) -> dict:
         if time.time() - self._last_read < self._cache_ttl:
@@ -31,30 +30,13 @@ class BatteryMonitor:
         if os.environ.get("BITOS_BATTERY") == "mock":
             return
 
-        if self._read_with_pisugar():
-            return
-        self._read_with_smbus2()
-
-    def _read_with_pisugar(self) -> bool:
         try:
-            if self._pisugar is None:
-                import pisugar  # type: ignore
+            from pisugar import PiSugarServer
 
-                self._pisugar = pisugar.PiSugar()
-
-            pct = getattr(self._pisugar, "get_battery_percentage", lambda: None)()
-            charging = getattr(self._pisugar, "get_battery_charging", lambda: None)()
-            if pct is None:
-                return False
-            self._pct = int(pct)
-            if charging is not None:
-                self._charging = bool(charging)
-            return True
-        except Exception:
-            return False
-
-    def _read_with_smbus2(self) -> None:
-        try:
+            s = PiSugarServer()
+            self._pct = int(s.get_battery_level())
+            self._charging = bool(s.is_charging())
+        except ImportError:
             import smbus2
 
             bus = smbus2.SMBus(1)

@@ -207,3 +207,4 @@ For **every implementation iteration** (code or docs):
 | 2026-03-14 | GPT-5.2-Codex | work | `this-commit` | Implemented P4-003 settings real wiring + notification overlay architecture and added focused tests | `device/storage/repository.py`, `device/screens/panels/settings.py`, `device/overlays/notification.py`, `device/overlays/__init__.py`, `device/screens/manager.py`, `device/main.py`, `web_preview/server.py`, `tests/test_settings_wiring.py`, `tests/test_notification_overlay.py`, `tests/test_panel_shells.py`, `docs/planning/TASK_TRACKER.md`, `docs/planning/HANDOFF_NEXT_AGENT.md`, `README.md` | Next: P4-004 notification shade and real notification/settings data-source integration |
 
 - [x] DEPS-001 — Integrate key external libraries
+- [x] DEPS-002 — Port key external repos into BITOS
