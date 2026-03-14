@@ -45,6 +45,7 @@ For **every implementation iteration** (code or docs):
 
 | ID | Phase | Workstream | Task | Owner | Status | Updated | Notes |
 |---|---|---|---|---|---|---|---|
+| P0-AUDIT-005 | Phase 0 | Quality | Create one-page `docs/reports/MASTER_AUDIT_SUMMARY.md` from audit reports and identify critical/sprint-parallel fixes | GPT-5.2-Codex | done | 2026-03-14 | Completed summary synthesis; noted missing report artifacts requiring follow-up publication. |
 | P0-AUDIT-001 | Phase 0 | Quality | Produce code-quality audit report for `device/` and `server/`, publish findings in `docs/reports/CODE_QUALITY.md` | GPT-5.2-Codex | done | 2026-03-14 | Added as todo then completed in same iteration. |
 | 2026-03-14 | GPT-5.2-Codex | work | `33848ad` | Completed P5-007/P5-008/P5-009 BLE characteristics: WiFi config+status, device status notify, keyboard input routing, companion protocol doc, and Phase 10 planning docs/tasks | `docs/planning/TASK_TRACKER.md`, `docs/planning/HANDOFF_NEXT_AGENT.md`, `docs/planning/MAC_AI_SERVICE.md`, `README.md`, `ROADMAP.md` | Next: P5-010 NetworkManager priority tuning + BT PAN baseline |
 | 2026-03-14 | GPT-5.2-Codex | work | `34cb423` | Completed P5-004/P5-005/P5-006 BLE foundation: UUID/constants, mockable GATT server shell, pairing agent, passkey overlay, BLE secret setup update, and test coverage | `docs/planning/TASK_TRACKER.md`, `docs/planning/HANDOFF_NEXT_AGENT.md`, `scripts/setup/02b_secrets.sh` | Next: P5-007/P5-008/P5-009 characteristic handlers (wifi config/device status/keyboard input) |
