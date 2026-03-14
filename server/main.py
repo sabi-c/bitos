@@ -94,6 +94,13 @@ async def update_ui_settings(request: Request):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+@app.post("/shutdown")
+async def shutdown():
+    """Graceful shutdown hook for device power gesture flow."""
+    logging.info("[BITOS] shutdown requested")
+    return {"status": "ok"}
+
+
 @app.post("/chat")
 async def chat(payload: ChatRequest):
     """Stream model response from the active LLM bridge as SSE."""

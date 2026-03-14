@@ -17,6 +17,7 @@ class ButtonEvent(Enum):
     LONG_PRESS = auto()    # >= 600ms hold
     DOUBLE_PRESS = auto()  # 2 taps within 400ms
     TRIPLE_PRESS = auto()  # 3 taps within 600ms
+    POWER_GESTURE = auto() # 5 presses within power gesture window
     HOLD_START = auto()    # Button down (for recording)
     HOLD_END = auto()      # Button up (stop recording)
 
@@ -26,6 +27,8 @@ DEBOUNCE_MIN = 0.03       # 30ms debounce
 SHORT_THRESHOLD = 0.6     # <600ms = short press
 DOUBLE_WINDOW = 0.4       # Window for double-press detection
 TRIPLE_WINDOW = 0.6       # Window for triple-press detection
+POWER_GESTURE_COUNT = 5
+POWER_GESTURE_WINDOW_MS = 1200
 
 
 class ButtonHandler:
@@ -36,6 +39,7 @@ class ButtonHandler:
         self._keyboard_mode = os.environ.get("BITOS_BUTTON", "").lower() == "keyboard"
         self._press_time: Optional[float] = None
         self._release_times: list[float] = []
+        self._power_press_times: list[float] = []
         self._is_pressed = False
         self._long_press_fired = False
         self._pending_check_time: Optional[float] = None
@@ -86,6 +90,16 @@ class ButtonHandler:
         self._is_pressed = True
         self._press_time = now
         self._long_press_fired = False
+
+        cutoff = now - (POWER_GESTURE_WINDOW_MS / 1000.0)
+        self._power_press_times = [t for t in self._power_press_times if t >= cutoff]
+        self._power_press_times.append(now)
+        if len(self._power_press_times) >= POWER_GESTURE_COUNT:
+            self._power_press_times.clear()
+            self._release_times.clear()
+            self._pending_check_time = None
+            self._emit(ButtonEvent.POWER_GESTURE)
+
         self._emit(ButtonEvent.HOLD_START)
 
     def _on_release(self):

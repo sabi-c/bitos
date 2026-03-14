@@ -1,8 +1,10 @@
 """BITOS Device main entry point."""
 import logging
 import os
+import subprocess
 import time
 
+import httpx
 import pygame
 
 from display.driver import create_driver
@@ -351,6 +353,31 @@ def main():
     else:
         screen_mgr.push(boot)
 
+    power_overlay: PowerOverlay | None = None
+
+    def close_power_overlay():
+        nonlocal power_overlay
+        power_overlay = None
+
+    def run_power_action(action: str):
+        nonlocal running
+        _cancel_inflight_voice_recording(screen_mgr)
+        _request_backend_shutdown(client)
+        _save_runtime_state(screen_mgr, time.time())
+        _execute_power_action(action)
+        running = False
+
+    def open_power_overlay():
+        nonlocal power_overlay
+        if power_overlay is not None:
+            return
+        _cancel_inflight_voice_recording(screen_mgr)
+        power_overlay = PowerOverlay(
+            on_shutdown=lambda: run_power_action("shutdown"),
+            on_reboot=lambda: run_power_action("reboot"),
+            on_cancel=close_power_overlay,
+        )
+
     screen_mgr.attach_device_status_characteristic(device_status_char)
 
     notification_poller.start()
@@ -374,10 +401,15 @@ def main():
         logger.info("[Button] TRIPLE_PRESS")
         screen_mgr.handle_action("TRIPLE_PRESS")
 
+    def on_power_gesture():
+        print("[Button] POWER_GESTURE")
+        open_power_overlay()
+
     button.on(ButtonEvent.SHORT_PRESS, on_short)
     button.on(ButtonEvent.LONG_PRESS, on_long)
     button.on(ButtonEvent.DOUBLE_PRESS, on_double)
     button.on(ButtonEvent.TRIPLE_PRESS, on_triple)
+    button.on(ButtonEvent.POWER_GESTURE, on_power_gesture)
 
     clock = pygame.time.Clock()
     running = True
@@ -411,6 +443,9 @@ def main():
                 logger.error("[Queue] command=%s status=%s reason=%s", result.command_id, result.status, reason)
         screen_mgr.update(dt)
         screen_mgr.render(surface)
+        if power_overlay:
+            import display.tokens as tokens
+            power_overlay.render(surface, tokens)
         driver.update()
 
         clock.tick(FPS)

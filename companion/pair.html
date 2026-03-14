@@ -1,0 +1,104 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>BITOS Pair</title>
+  <style>
+    body{background:#0b0b0b;color:#f2f2f2;font-family:system-ui,sans-serif;margin:0;padding:24px}
+    .card{max-width:480px;margin:0 auto;padding:18px;border:1px solid #333;border-radius:14px;background:#121212}
+    .row{display:flex;gap:10px;margin-top:10px}
+    .btn{padding:11px 12px;border:1px solid #555;background:#1b1b1b;color:#fff;border-radius:10px;cursor:pointer}
+    .btn.wide{display:block;width:100%}
+    input,textarea{width:100%;background:#0e0e0e;color:#fff;border:1px solid #444;border-radius:8px;padding:10px}
+    textarea{min-height:88px}
+    .muted{color:#aaa;font-size:12px}
+    .step{border-top:1px solid #2b2b2b;padding-top:12px;margin-top:12px}
+    .ok{color:#8fd58f}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>COMPANION PAIR</h1>
+
+    <div class="step">
+      <h3>1. CONNECT</h3>
+      <button class="btn wide" onclick="connectDevice()">CONNECT →</button>
+      <div id="connect-status" class="muted"></div>
+    </div>
+
+    <div class="step">
+      <h3>2. READ DEVICE INFO</h3>
+      <button class="btn" onclick="readInfo()">READ</button>
+      <div id="info" class="muted"></div>
+    </div>
+
+    <div class="step">
+      <h3>3. ENTER PIN</h3>
+      <input id="pin" type="password" placeholder="Device PIN" />
+      <button class="btn" onclick="authPin()">AUTHENTICATE</button>
+      <div id="auth" class="muted"></div>
+    </div>
+
+    <div class="step">
+      <h3>4. PAIRED</h3>
+      <div id="paired" class="muted">Authenticate to continue.</div>
+      <div class="row">
+        <a href="setup.html" class="btn" style="text-decoration:none;display:inline-block">CONFIGURE WI-FI</a>
+        <button class="btn" onclick="disconnect()">DISCONNECT</button>
+      </div>
+      <h4>KEYBOARD INPUT</h4>
+      <textarea id="kb-input" placeholder="Type here → appears on device screen"></textarea>
+      <button class="btn wide" onclick="sendKeyboard()">SEND TO DEVICE →</button>
+    </div>
+  </div>
+
+  <script src="ble.js"></script>
+  <script>
+    const companion = new BitosCompanion();
+
+    async function connectDevice() {
+      try {
+        await companion.connect();
+        document.getElementById('connect-status').textContent = 'Connected';
+      } catch (e) {
+        document.getElementById('connect-status').textContent = e.message;
+      }
+    }
+
+    async function readInfo() {
+      try {
+        const info = await companion.readDeviceInfo();
+        const serial = (info.serial || 'unknown').slice(-6);
+        document.getElementById('info').innerHTML = `serial: ${serial}<br>model: ${info.model || 'BITOS'}<br>protocol: ${info.protocol || 'v1'}`;
+      } catch (e) {
+        document.getElementById('info').textContent = e.message;
+      }
+    }
+
+    async function authPin() {
+      try {
+        const pin = document.getElementById('pin').value;
+        await companion.authenticate(pin);
+        const status = await companion.readStatus();
+        document.getElementById('auth').innerHTML = '<span class="ok">Authenticated</span>';
+        document.getElementById('paired').innerHTML = `battery: ${status.battery}% · wifi: ${status.wifi} · ai: ${status.ai}`;
+      } catch (e) {
+        document.getElementById('auth').textContent = e.message;
+      }
+    }
+
+    async function sendKeyboard() {
+      const text = document.getElementById('kb-input').value;
+      await companion.sendKeyboardInput(text);
+    }
+
+    function disconnect() {
+      companion.disconnect();
+      document.getElementById('connect-status').textContent = 'Disconnected';
+      document.getElementById('auth').textContent = '';
+      document.getElementById('paired').textContent = 'Authenticate to continue.';
+    }
+  </script>
+</body>
+</html>
