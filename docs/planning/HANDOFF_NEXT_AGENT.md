@@ -25,22 +25,32 @@ This document is a practical takeover brief for the next implementation contribu
 
 ## 2) Immediate next implementation target
 
-## P5-010 — NetworkManager priority tuning + BT PAN baseline
 
-Built this sprint: P5-007/008/009 filled BLE characteristic behavior for protected WiFi provisioning writes, unprotected WiFi status reads, device status read/notify updates, and protected keyboard input routing into compose targets. `ScreenManager` now exposes compose-routing helpers and pushes active-screen status updates into the device status characteristic on screen transitions. Runtime wiring in `device/main.py` now instantiates WiFi/device-status/keyboard characteristics, starts periodic device status updates, and keeps BLE paths mock-safe.
+### Documentation sweep completed (P0-DOCS-2)
+- Audited markdown footprint (`docs/`, `scripts/`, repo root) and confirmed missing docs were restored.
+- Added committed planning/spec docs:
+  - `docs/planning/COMPANION_APP.md`
+  - `docs/planning/FIRST_BOOT.md`
+  - `docs/BLUETOOTH_NETWORK_SPEC.md`
+  - `docs/BACKEND_SPEC.md`
+- Updated README docs index to include the new planning/spec references.
+
+## P5-012 — Companion PWA implementation slices
+
+Built this sprint: completed P0-DOCS-3 plus P5-010/P5-011a/b/c/d. Added NetworkManager priority helper + setup script, QR overlay infrastructure, boot no-network QR setup flow, Settings→Companion App QR pairing row, and read-only `DEVICE_INFO` BLE characteristic wiring. Docs/roadmap/tracker were synchronized with expanded P5-P10 backlog and explicit security/development plans.
 
 Read first next iteration:
 1. `docs/planning/TASK_TRACKER.md`
-2. `device/bluetooth/characteristics/wifi_config.py` and `device/bluetooth/wifi_manager.py`
-3. `device/bluetooth/characteristics/device_status.py`, `device/screens/manager.py`, and `device/main.py`
+2. `docs/BLUETOOTH_NETWORK_SPEC.md` and `docs/planning/COMPANION_APP.md`
+3. `device/overlays/qr_code.py`, `device/bluetooth/network_manager.py`, and `device/main.py`
 
-Most important thing to know: preserve strict auth boundaries — `WIFI_CONFIG` and `KEYBOARD_INPUT` must continue rejecting invalid session tokens and never call their side-effect callbacks when auth fails.
+Most important thing to know: preserve strict auth boundaries and schema parity — keep `WIFI_CONFIG`/`KEYBOARD_INPUT` protected by session tokens, and ensure upcoming companion JS HMAC/AES implementations match Python exactly before enabling real provisioning writes.
 
 Deliver the next Phase 5 slice:
-1. P5-010: tune NetworkManager connection priority/fallback behavior and add BT PAN baseline.
+1. Implement P5-012a/b/c/d companion web assets (`setup.html`, BLE/auth/crypto JS parity).
 2. Keep `BITOS_BLUETOOTH=mock` and `BITOS_WIFI=mock` paths deterministic for desktop tests.
-3. Implement NOTIFICATION_RELAY characteristic only in its dedicated sprint (P5-008b), not opportunistically.
-4. Keep companion protocol doc aligned with characteristic payload/schema changes.
+3. Maintain QR flow compatibility with `BITOS_COMPANION_URL` and URL versioning (`v=1`).
+4. Keep companion protocol docs aligned with payload/schema changes.
 
 ### Suggested acceptance checks
 - Protected characteristic writes fail fast on invalid session token.
