@@ -34,6 +34,9 @@ class Phase2ShellFlowTests(unittest.TestCase):
             triggered["called"] = True
 
         boot = BootScreen(on_complete=on_complete)
+        boot._diagnostics.ensure_critical_results = lambda: None
+        boot._diagnostics.all_critical_passed = lambda: True
+
         boot.update(3.1)
         self.assertTrue(triggered["called"])
 

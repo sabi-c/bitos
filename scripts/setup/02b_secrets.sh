@@ -2,20 +2,28 @@
 set -euo pipefail
 
 SECRETS=${BITOS_SECRETS_FILE:-/etc/bitos/secrets}
-SUDO_BIN=${BITOS_SUDO_BIN:-sudo}
+SUDO_BIN=${BITOS_SUDO_BIN-sudo}
 
-$SUDO_BIN mkdir -p "$(dirname "$SECRETS")"
-$SUDO_BIN touch "$SECRETS"
-$SUDO_BIN chmod 600 "$SECRETS"
-$SUDO_BIN chown root:root "$SECRETS"
+run_privileged() {
+  if [ -n "$SUDO_BIN" ]; then
+    "$SUDO_BIN" "$@"
+  else
+    "$@"
+  fi
+}
+
+run_privileged mkdir -p "$(dirname "$SECRETS")"
+run_privileged touch "$SECRETS"
+run_privileged chmod 600 "$SECRETS"
+run_privileged chown root:root "$SECRETS"
 
 ensure_secret() {
   local key="$1"
   local value="$2"
-  if $SUDO_BIN grep -q "^${key}=" "$SECRETS" 2>/dev/null; then
+  if run_privileged grep -q "^${key}=" "$SECRETS" 2>/dev/null; then
     return
   fi
-  echo "${key}=${value}" | $SUDO_BIN tee -a "$SECRETS" >/dev/null
+  echo "${key}=${value}" | run_privileged tee -a "$SECRETS" >/dev/null
 }
 
 DEVICE_TOKEN=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
