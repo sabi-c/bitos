@@ -1,0 +1,97 @@
+const BITOS_SERVICE = 'b1705000-0000-4000-8000-000000000001';
+const CHARS = {
+  AUTH_CHALLENGE: 'b1705000-0001-4000-8000-000000000001',
+  AUTH_RESPONSE: 'b1705000-0002-4000-8000-000000000001',
+  WIFI_CONFIG: 'b1705000-0010-4000-8000-000000000001',
+  WIFI_STATUS: 'b1705000-0011-4000-8000-000000000001',
+  DEVICE_STATUS: 'b1705000-0030-4000-8000-000000000001',
+  DEVICE_INFO: 'b1705000-0099-4000-8000-000000000001',
+  KEYBOARD_INPUT: 'b1705000-0020-4000-8000-000000000001',
+};
+
+class BitosCompanion {
+  constructor() {
+    this.device = null;
+    this.server = null;
+    this.service = null;
+    this.chars = {};
+    this.sessionToken = null;
+    this._serial = null;
+  }
+
+  async connect(bleAddr) {
+    if (!navigator.bluetooth) {
+      throw new Error('Web Bluetooth not available. Use Chrome or Safari (iOS 16.4+).');
+    }
+    this.device = await navigator.bluetooth.requestDevice({
+      filters: [{ services: [BITOS_SERVICE] }],
+      optionalServices: [BITOS_SERVICE],
+    });
+    this.device.addEventListener('gattserverdisconnected',
+      () => { this.sessionToken = null; this.chars = {}; });
+    this.server = await this.device.gatt.connect();
+    this.service = await this.server.getPrimaryService(BITOS_SERVICE);
+    for (const [name, uuid] of Object.entries(CHARS)) {
+      try {
+        this.chars[name] = await this.service.getCharacteristic(uuid);
+      } catch (_) {}
+    }
+    // Read device serial for key derivation
+    if (this.chars.DEVICE_INFO) {
+      try {
+        const raw = await this.chars.DEVICE_INFO.readValue();
+        const info = JSON.parse(new TextDecoder().decode(raw));
+        this._serial = info.serial;
+      } catch (_) {}
+    }
+  }
+
+  async authenticate(pin) {
+    if (!this.chars.AUTH_CHALLENGE) throw new Error('Not connected');
+    const raw = await this.chars.AUTH_CHALLENGE.readValue();
+    const challenge = JSON.parse(new TextDecoder().decode(raw));
+    const serial = this._serial || 'DESKTOP-DEV-001';
+    const bleSecret = await deriveBleSecret(pin, serial);
+    // Store for WiFi encryption
+    this._bleSecret = bleSecret;
+    const hmac = await computeHMAC(bleSecret, challenge.nonce, challenge.timestamp);
+    const payload = JSON.stringify({ response: hmac, nonce: challenge.nonce });
+    await this.chars.AUTH_RESPONSE.writeValue(
+      new TextEncoder().encode(payload));
+    const resp = await this.chars.AUTH_RESPONSE.readValue();
+    const result = JSON.parse(new TextDecoder().decode(resp));
+    if (result.error) throw new Error(result.error);
+    this.sessionToken = result.session_token;
+    // Persist secret for this session
+    sessionStorage.setItem('bitos_ble_secret', bleSecret);
+    sessionStorage.setItem('bitos_session', this.sessionToken);
+  }
+
+  async sendWifiConfig(ssid, password, security = 'WPA2', priority = 100) {
+    if (!this.sessionToken) throw new Error('Not authenticated');
+    const bleSecret = this._bleSecret ||
+      sessionStorage.getItem('bitos_ble_secret');
+    const encPw = await encryptWifiPassword(password, this.sessionToken, bleSecret);
+    const payload = JSON.stringify({
+      session_token: this.sessionToken,
+      ssid, password: encPw, security, priority,
+    });
+    await this.chars.WIFI_CONFIG.writeValueWithoutResponse(
+      new TextEncoder().encode(payload));
+    // Wait for status update
+    return new Promise((res, rej) => {
+      const timer = setTimeout(() =>
+        rej(new Error('Timeout — device did not confirm')), 15000);
+      const handler = (evt) => {
+        clearTimeout(timer);
+        const s = JSON.parse(new TextDecoder().decode(evt.target.value));
+        this.chars.WIFI_STATUS.removeEventListener(
+          'characteristicvaluechanged', handler);
+        s.connected ? res(s) : rej(new Error(s.last_error || 'Failed'));
+      };
+      this.chars.WIFI_STATUS.addEventListener(
+        'characteristicvaluechanged', handler);
+      this.chars.WIFI_STATUS.startNotifications();
+    });
+  }
+}

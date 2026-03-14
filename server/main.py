@@ -10,6 +10,8 @@ from config import UI_SETTINGS_FILE
 from ui_settings import UISettingsStore, UISettingsValidationError
 from llm_bridge import create_llm_bridge, to_sse_data
 
+logger = logging.getLogger(__name__)
+
 app = FastAPI(title="BITOS Server", version="0.3.0")
 settings_store = UISettingsStore(UI_SETTINGS_FILE)
 llm_bridge = create_llm_bridge()
@@ -35,7 +37,7 @@ async def require_device_token(request: Request, call_next):
 
     if not expected:
         if not _token_warning_logged:
-            logging.warning("[BITOS] BITOS_DEVICE_TOKEN is not set; allowing all requests (dev mode)")
+            logger.warning("[BITOS] BITOS_DEVICE_TOKEN is not set; allowing all requests (dev mode)")
             _token_warning_logged = True
         return await call_next(request)
 
@@ -105,6 +107,7 @@ async def chat(request: Request):
             },
         )
     except Exception as exc:
+        logger.error("[BITOS] Chat stream failed: %s", exc)
         return {"error": str(exc)}
 
 
@@ -112,4 +115,5 @@ if __name__ == "__main__":
     import uvicorn
     from config import SERVER_HOST, SERVER_PORT
 
+    logger.info("[BITOS] Starting server on %s:%s", SERVER_HOST, SERVER_PORT)
     uvicorn.run(app, host=SERVER_HOST, port=SERVER_PORT)

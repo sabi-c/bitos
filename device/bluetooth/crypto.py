@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-from hashlib import pbkdf2_hmac
 
 
 def _hkdf_sha256(ikm: bytes, info: bytes, length: int) -> bytes:
