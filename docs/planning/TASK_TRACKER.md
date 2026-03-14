@@ -212,3 +212,5 @@ For **every implementation iteration** (code or docs):
 
 - [x] DEPS-001 — Integrate key external libraries
 - [x] DEPS-002 — Port key external repos into BITOS
+- [x] DAY-ONE-001 — First hardware session hardening
+- [x] INSTALL-SYNC-001 — Sync install.sh with two-service architecture
