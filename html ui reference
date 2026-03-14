@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BITOS · NAV ARCHITECTURE + SIMULATOR</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;image-rendering:pixelated}
+body{background:#0a0a0a;color:#fff;font-family:'Press Start 2P',monospace;padding:40px 36px;line-height:1}
+.pg-title{font-size:16px;letter-spacing:.04em;margin-bottom:6px}
+.pg-sub{font-size:6px;color:#2a2a2a;letter-spacing:.1em;margin-bottom:48px}
+.section-title{font-size:11px;letter-spacing:.06em;color:#444;margin-bottom:24px}
+.divider{border:none;border-top:2px solid #111;margin:56px 0}
+
+/* ── ARCHITECTURE DIAGRAM ── */
+.arch{display:flex;flex-direction:column;gap:0;max-width:960px}
+.arch-row{display:flex;align-items:stretch;gap:0;border-bottom:1px solid #111}
+.arch-row:last-child{border-bottom:none}
+.arch-layer-lbl{width:80px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-end;padding:0 12px 0 0;font-size:5px;color:#1a1a1a;letter-spacing:.1em;border-right:1px solid #111}
+.arch-cells{flex:1;display:flex;gap:0;padding:12px;flex-wrap:wrap}
+.arch-cell{border:2px solid #333;padding:10px 14px;font-size:7px;letter-spacing:.04em;cursor:default;position:relative;margin:3px}
+.arch-cell.purple{border-color:#7F77DD;color:#7F77DD}
+.arch-cell.teal{border-color:#1D9E75;color:#1D9E75}
+.arch-cell.amber{border-color:#BA7517;color:#BA7517}
+.arch-cell.white{border-color:#fff;color:#fff}
+.arch-cell.dim{border-color:#1a1a1a;color:#222}
+.arch-cell-sub{font-size:5px;color:#333;margin-top:4px;letter-spacing:.06em}
+.arch-cell.purple .arch-cell-sub{color:#534AB7}
+.arch-cell.teal .arch-cell-sub{color:#0F6E56}
+.arch-cell.white .arch-cell-sub{color:#666}
+.arch-arrow-row{display:flex;align-items:center;padding:4px 12px 4px 92px;font-size:5px;color:#1a1a1a;letter-spacing:.06em;gap:8px}
+
+/* ── INPUT MODEL ── */
+.input-model{display:flex;gap:0;border:2px solid #fff;max-width:720px;margin-top:24px}
+.input-col{flex:1;padding:12px;border-right:2px solid #333}
+.input-col:last-child{border-right:none}
+.input-gesture{font-size:8px;letter-spacing:.04em;margin-bottom:6px}
+.input-timing{font-size:5px;color:#333;letter-spacing:.08em;margin-bottom:6px}
+.input-action{font-size:6px;color:#aaa;letter-spacing:.04em}
+
+/* ── DEVICE SIMULATOR ── */
+.sim-wrap{display:flex;gap:48px;align-items:flex-start;flex-wrap:wrap}
+.device-outer{display:flex;flex-direction:column;align-items:center;gap:8px}
+.device-lbl{font-size:5px;color:#2a2a2a;letter-spacing:.1em}
+.device{background:#0d0d0d;border:3px solid #2a2a2a;padding:8px 8px 14px;display:flex;flex-direction:column;align-items:center;gap:8px}
+/* Actual 240x280 screen, scaled 2x for readability */
+.screen{width:240px;height:280px;background:#000;border:2px solid #555;position:relative;overflow:hidden;font-family:‘Press Start 2P’,monospace}
+.home-btn{width:32px;height:5px;background:#1a1a1a;border:1px solid #222;margin-top:6px}
+
+/* VIEWS */
+.view{position:absolute;inset:0;display:none;flex-direction:column;background:#000}
+.view.active{display:flex}
+
+/* STATUS BAR */
+.sbar{height:18px;background:#fff;color:#000;display:flex;align-items:center;justify-content:space-between;padding:0 6px;font-size:6px;letter-spacing:.06em;flex-shrink:0;border-bottom:2px solid #fff}
+.sbar.inv{background:#000;color:#fff;border-color:#333}
+
+/* KEY HINT */
+.kh{font-size:4px;color:#111;text-align:center;padding:2px 6px;letter-spacing:.06em;flex-shrink:0;border-top:1px solid #0a0a0a}
+
+/* ── BOOT SCREEN ── */
+#bootView{align-items:center;justify-content:center;gap:0}
+.boot-canvas-wrap{display:flex;flex-direction:column;align-items:center;gap:10px;padding:20px}
+
+/* ── NAV SHELL ── */
+.nav-shell{flex:1;display:flex;overflow:hidden}
+.sidebar{width:84px;flex-shrink:0;border-right:2px solid #fff;display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden}
+.sidebar::-webkit-scrollbar{width:0}
+.sb-item{padding:9px 7px;font-size:7px;letter-spacing:.04em;color:#444;cursor:pointer;border-bottom:1px solid #0a0a0a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0}
+.sb-item.selected{background:#fff;color:#000}
+.sb-item:hover:not(.selected){background:#080808;color:#aaa}
+
+/* RIGHT PANEL */
+.rpanel{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.rp-hdr{background:#fff;color:#000;padding:5px 8px;font-size:7px;letter-spacing:.06em;border-bottom:2px solid #fff;flex-shrink:0;display:flex;justify-content:space-between;align-items:center}
+.rp-body{flex:1;overflow:auto}
+.rp-body::-webkit-scrollbar{width:0}
+
+/* RIGHT PANEL: HOME */
+.home-panel .rp-time{font-size:22px;letter-spacing:.04em;text-align:center;padding:12px 8px 4px}
+.home-panel .rp-date{font-size:6px;color:#555;text-align:center;letter-spacing:.06em;margin-bottom:10px}
+.home-panel .rp-weather{display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;border:2px solid #1a1a1a;margin:0 8px 10px}
+.home-panel .rp-weather-temp{font-size:14px}
+.home-panel .rp-weather-info{font-size:5px;color:#444;letter-spacing:.06em;line-height:1.8}
+.home-panel .rp-task-hdr{font-size:5px;color:#333;letter-spacing:.1em;padding:0 8px 4px;border-bottom:1px solid #0a0a0a;margin-bottom:0}
+.home-panel .rp-task{padding:7px 8px;font-size:6px;color:#aaa;letter-spacing:.04em;border-bottom:1px solid #0a0a0a;display:flex;align-items:center;gap:6px}
+.home-panel .rp-task.focused{background:#fff;color:#000}
+.home-panel .rp-task-dot{width:5px;height:5px;background:#555;flex-shrink:0}
+.home-panel .rp-task.focused .rp-task-dot{background:#000}
+.home-panel .rp-task.urgent .rp-task-dot{background:#f44}
+
+/* RIGHT PANEL: CHAT */
+.chat-panel .ai-stat-row{display:flex;align-items:center;justify-content:space-between;padding:6px 8px;font-size:6px;letter-spacing:.04em;border-bottom:1px solid #0a0a0a;color:#aaa}
+.chat-panel .ai-stat-val{color:#fff}
+.chat-panel .ai-stat-val.ok{color:#0f0}
+.chat-panel .ai-stat-val.warn{color:#ff0}
+.chat-panel .ai-dot{width:6px;height:6px;background:#0f0;display:inline-block;margin-right:4px;animation:asdot 1s steps(1) infinite}
+@keyframes asdot{0%,100%{background:#0f0}50%{background:#0a2a0a}}
+.chat-panel .ctx-ring-row{padding:8px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #0a0a0a}
+.chat-panel .ctx-bar{flex:1;height:5px;border:1px solid #fff;background:#000}
+.chat-panel .ctx-fill{height:100%;width:84%;background:#fff}
+.chat-panel .chat-action{padding:9px 8px;font-size:7px;letter-spacing:.04em;border-bottom:1px solid #0a0a0a;color:#555;cursor:pointer;display:flex;align-items:center;gap:6px}
+.chat-panel .chat-action.focused{background:#fff;color:#000}
+.chat-panel .chat-action .ca-arr{font-size:6px}
+
+/* RIGHT PANEL: TASKS */
+.tasks-panel .task-preview{padding:7px 8px;font-size:6px;color:#aaa;letter-spacing:.04em;border-bottom:1px solid #0a0a0a;display:flex;align-items:center;gap:5px}
+.tasks-panel .task-preview .tp-dot{width:4px;height:4px;background:#555;flex-shrink:0}
+.tasks-panel .task-preview .tp-dot.hi{background:#f44}
+.tasks-panel .task-action{padding:9px 8px;font-size:7px;letter-spacing:.04em;border-bottom:1px solid #0a0a0a;color:#555;cursor:pointer;display:flex;align-items:center;gap:6px}
+.tasks-panel .task-action.focused{background:#fff;color:#000}
+
+/* RIGHT PANEL: SETTINGS */
+.settings-panel .sett-row{padding:9px 8px;font-size:7px;letter-spacing:.04em;border-bottom:1px solid #0a0a0a;color:#555;cursor:pointer;display:flex;align-items:center;justify-content:space-between}
+.settings-panel .sett-row.focused{background:#fff;color:#000}
+.settings-panel .sett-val{font-size:6px;color:#333}
+.settings-panel .sett-row.focused .sett-val{color:#666}
+
+/* RIGHT PANEL: FOCUS */
+.focus-panel .focus-action{padding:9px 8px;font-size:7px;letter-spacing:.04em;border-bottom:1px solid #0a0a0a;color:#555;cursor:pointer;display:flex;align-items:center;gap:6px}
+.focus-panel .focus-action.focused{background:#fff;color:#000}
+
+/* RIGHT PANEL: MAIL */
+.mail-panel .mail-row{padding:8px;border-bottom:1px solid #0a0a0a;cursor:pointer}
+.mail-panel .mail-row.focused{background:#fff;color:#000}
+.mail-panel .mail-from{font-size:7px;color:#aaa;letter-spacing:.04em;margin-bottom:3px;display:flex;justify-content:space-between}
+.mail-panel .mail-row.focused .mail-from{color:#000}
+.mail-panel .mail-subj{font-size:6px;color:#555;letter-spacing:.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mail-panel .mail-row.unread .mail-from{color:#fff}
+.mail-panel .mail-row.focused.unread .mail-from{color:#000}
+.mail-panel .mail-row.unread .mail-subj{color:#aaa}
+
+/* RIGHT PANEL: MESSAGES */
+.msgs-panel .msg-row{padding:8px;border-bottom:1px solid #0a0a0a;cursor:pointer;display:flex;gap:6px}
+.msgs-panel .msg-row.focused{background:#fff;color:#000}
+.msgs-panel .msg-av{width:24px;height:24px;border:2px solid #333;font-size:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.msgs-panel .msg-row.focused .msg-av{border-color:#000}
+.msgs-panel .msg-name{font-size:7px;color:#aaa;letter-spacing:.04em;margin-bottom:3px}
+.msgs-panel .msg-row.focused .msg-name{color:#000}
+.msgs-panel .msg-preview{font-size:5px;color:#333;letter-spacing:.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msgs-panel .msg-row.unread .msg-name{color:#fff}
+
+/* RIGHT PANEL: MUSIC */
+.music-panel .now-playing{padding:10px 8px;border-bottom:2px solid #fff;display:flex;flex-direction:column;align-items:center;gap:4px}
+.music-panel .np-art{width:44px;height:44px;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:18px;animation:spin 2s steps(8) infinite}
+@keyframes spin{0%{transform:rotate(0)}100%{transform:rotate(360deg)}}
+.music-panel .np-track{font-size:7px;letter-spacing:.04em;text-align:center;margin-top:4px}
+.music-panel .np-artist{font-size:5px;color:#444;letter-spacing:.04em}
+.music-panel .music-row{padding:7px 8px;font-size:6px;color:#444;letter-spacing:.04em;border-bottom:1px solid #0a0a0a;cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap;overflow:hidden}
+.music-panel .music-row.focused{background:#fff;color:#000}
+.music-panel .music-row.playing{color:#fff}
+.music-panel .music-row.playing::before{content:’♪ ’;color:#fff}
+.music-panel .music-row.focused.playing::before{color:#000}
+
+/* RIGHT PANEL: HISTORY */
+.history-panel .hist-row{padding:7px 8px;border-bottom:1px solid #0a0a0a;cursor:pointer}
+.history-panel .hist-row.focused{background:#fff;color:#000}
+.history-panel .hist-title{font-size:7px;color:#aaa;letter-spacing:.04em;margin-bottom:2px}
+.history-panel .hist-row.focused .hist-title{color:#000}
+.history-panel .hist-meta{font-size:5px;color:#333;letter-spacing:.04em}
+.history-panel .hist-row.focused .hist-meta{color:#666}
+
+/* BLOCK CURSOR */
+.bcur{display:inline-block;width:6px;height:10px;background:#fff;animation:bcu .8s steps(1) infinite;vertical-align:bottom}
+@keyframes bcu{0%,100%{opacity:1}50%{opacity:0}}
+
+/* LOADING DOTS */
+@keyframes tda{0%,100%{background:#222}50%{background:#fff}}
+
+/* LEGEND TABLE */
+.legend{border:2px solid #fff;max-width:700px;margin-top:32px}
+.legend-hdr{background:#fff;color:#000;padding:7px 12px;font-size:7px;letter-spacing:.06em;display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #fff}
+.legend-row{display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid #0a0a0a;font-size:6px;letter-spacing:.04em;gap:0}
+.legend-row:last-child{border-bottom:none}
+.legend-item{flex:1;display:flex;align-items:center;gap:8px}
+.legend-key{border:2px solid #fff;padding:2px 6px;font-size:5px;white-space:nowrap;letter-spacing:.06em}
+.legend-arrow{color:#333;padding:0 8px}
+.legend-action{color:#aaa}
+</style>
+
+</head>
+<body>
+
+<div class="pg-title">BITOS · NAV ARCHITECTURE</div>
+<div class="pg-sub">240×280PX · SIDEBAR + RIGHT PANEL · SINGLE BUTTON · SCROLL DOWN FOR SIMULATOR</div>
+
+<!-- ════ ARCHITECTURE DIAGRAM ════ -->
+
+<div class="section-title">01 · SCREEN MAP</div>
+
+<div class="arch">
+
+  <!-- BOOT ROW -->
+
+  <div class="arch-row">
+    <div class="arch-layer-lbl">BOOT</div>
+    <div class="arch-cells">
+      <div class="arch-cell white">
+        BOOT SCREEN
+        <div class="arch-cell-sub">4 pixel orbs · animated circle · tap to advance</div>
+      </div>
+      <div style="display:flex;align-items:center;color:#333;font-size:10px;padding:0 8px">→</div>
+      <div class="arch-cell white">
+        HOME PANEL
+        <div class="arch-cell-sub">lands on home row · sidebar cursor at top</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NAV SHELL ROW -->
+
+  <div class="arch-row">
+    <div class="arch-layer-lbl">SHELL</div>
+    <div class="arch-cells" style="flex-direction:column;gap:6px">
+      <div style="font-size:5px;color:#2a2a2a;letter-spacing:.1em;padding-bottom:6px;border-bottom:1px solid #111">NAV SHELL · SIDEBAR (LEFT 84PX) + RIGHT PANEL (REMAINING WIDTH) · 240×280PX TOTAL</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        <div class="arch-cell white" style="min-width:100px">
+          HOME
+          <div class="arch-cell-sub">Date · time · weather</div>
+          <div class="arch-cell-sub">1 upcoming task</div>
+        </div>
+        <div class="arch-cell purple">
+          CHAT
+          <div class="arch-cell-sub">AI status dashboard</div>
+          <div class="arch-cell-sub">New chat · Previous</div>
+        </div>
+        <div class="arch-cell teal">
+          TASKS
+          <div class="arch-cell-sub">Top 3 tasks today</div>
+          <div class="arch-cell-sub">Today · Projects · Quick add</div>
+        </div>
+        <div class="arch-cell white">
+          SETTINGS
+          <div class="arch-cell-sub">AI · Display · Network</div>
+          <div class="arch-cell-sub">System · Privacy</div>
+        </div>
+        <div class="arch-cell teal">
+          FOCUS
+          <div class="arch-cell-sub">Pomodoro · World clocks</div>
+          <div class="arch-cell-sub">Stopwatch</div>
+        </div>
+        <div class="arch-cell dim">
+          MAIL
+          <div class="arch-cell-sub">Inbox preview · 3 items</div>
+        </div>
+        <div class="arch-cell dim">
+          MESSAGES
+          <div class="arch-cell-sub">SMS threads preview</div>
+        </div>
+        <div class="arch-cell dim">
+          MUSIC
+          <div class="arch-cell-sub">Now playing · track list</div>
+        </div>
+        <div class="arch-cell dim">
+          HISTORY
+          <div class="arch-cell-sub">Recent chat sessions</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SUB-SCREENS ROW -->
+
+  <div class="arch-row">
+    <div class="arch-layer-lbl">SUB</div>
+    <div class="arch-cells" style="flex-direction:column;gap:6px">
+      <div style="font-size:5px;color:#2a2a2a;letter-spacing:.1em;padding-bottom:6px;border-bottom:1px solid #111">OPENED BY LONG PRESS ON A RIGHT-PANEL ITEM · DOUBLE PRESS ALWAYS RETURNS</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        <div class="arch-cell purple">CHAT<div class="arch-cell-sub">Streaming · voice · context menu</div></div>
+        <div class="arch-cell teal">TASK LIST<div class="arch-cell-sub">Full list + check off</div></div>
+        <div class="arch-cell teal">QUICK ADD<div class="arch-cell-sub">Voice record → task</div></div>
+        <div class="arch-cell teal">POMODORO<div class="arch-cell-sub">25/5 timer · invert on break</div></div>
+        <div class="arch-cell white">AI MODEL<div class="arch-cell-sub">Sonnet / Opus / Haiku</div></div>
+        <div class="arch-cell white">WIFI / BT<div class="arch-cell-sub">Network management</div></div>
+        <div class="arch-cell dim">EMAIL COMPOSE<div class="arch-cell-sub">Full composer</div></div>
+        <div class="arch-cell dim">CONTACT CARD<div class="arch-cell-sub">Detail view</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- OVERLAY ROW -->
+
+  <div class="arch-row">
+    <div class="arch-layer-lbl">OVERLAY</div>
+    <div class="arch-cells" style="flex-wrap:wrap;gap:6px">
+      <div class="arch-cell amber">CONFIRM DIALOG<div class="arch-cell-sub">Cancel / confirm</div></div>
+      <div class="arch-cell amber">LOADING<div class="arch-cell-sub">Thinking ring + dots</div></div>
+      <div class="arch-cell amber">STATUS OVERLAY<div class="arch-cell-sub">AI · battery · WiFi</div></div>
+      <div class="arch-cell amber">NOTIF TOAST<div class="arch-cell-sub">5s auto-dismiss</div></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- INPUT MODEL -->
+
+<div class="input-model">
+  <div class="input-col">
+    <div class="input-gesture">SHORT PRESS</div>
+    <div class="input-timing">&lt; 600MS</div>
+    <div class="input-action">Advance cursor to next item in sidebar or right panel. Wraps around.</div>
+  </div>
+  <div class="input-col">
+    <div class="input-gesture">LONG PRESS</div>
+    <div class="input-timing">600MS+</div>
+    <div class="input-action">Select item. Opens right panel for sidebar. Opens sub-screen for panel items.</div>
+  </div>
+  <div class="input-col">
+    <div class="input-gesture">DOUBLE PRESS</div>
+    <div class="input-timing">2× &lt; 400MS</div>
+    <div class="input-action">Always go back one level. Sub-screen → panel. Panel selected → sidebar focus.</div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ════ DEVICE SIMULATOR ════ -->
+
+<div class="section-title">02 · LIVE SIMULATOR · 240×280PX · PRESS START 2P</div>
+
+<div class="sim-wrap">
+
+<!-- DEVICE -->
+
+<div class="device-outer">
+  <div class="device-lbl">BITOS DEV · 240×280 · ACTUAL DISPLAY SIZE</div>
+  <div class="device">
+    <div class="screen" id="screen">
+
+```
+  <!-- BOOT VIEW -->
+  <div class="view active" id="v-boot">
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
+      <canvas id="bootCanvas" width="120" height="120"></canvas>
+      <div style="font-size:9px;letter-spacing:.08em">BITOS<span class="bcur"></span></div>
+      <div style="font-size:4px;color:#1a1a1a;letter-spacing:.1em">v1.0 · MONOCHROME AI DEVICE</div>
+    </div>
+    <div class="kh">TAP BUTTON TO BOOT</div>
+  </div>
+
+  <!-- NAV SHELL VIEW -->
+  <div class="view" id="v-nav">
+    <div class="sbar" id="navSbar"><span id="navTime">--:--</span><span>BITOS</span><span id="navStatus">AI·RDY</span></div>
+    <div class="nav-shell">
+
+      <!-- SIDEBAR -->
+      <div class="sidebar" id="sidebar">
+        <div class="sb-item selected" data-panel="home">HOME</div>
+        <div class="sb-item" data-panel="chat">CHAT</div>
+        <div class="sb-item" data-panel="tasks">TASKS</div>
+        <div class="sb-item" data-panel="settings">SETTINGS</div>
+        <div class="sb-item" data-panel="focus">FOCUS</div>
+        <div class="sb-item" data-panel="mail">MAIL</div>
+        <div class="sb-item" data-panel="messages">MSGS</div>
+        <div class="sb-item" data-panel="music">MUSIC</div>
+        <div class="sb-item" data-panel="history">HISTORY</div>
+      </div>
+
+      <!-- RIGHT PANEL CONTAINER -->
+      <div class="rpanel" id="rpanel">
+        <!-- panels rendered by JS -->
+      </div>
+
+    </div>
+    <div class="kh">SHORT:NEXT · LONG:SELECT · DBL:BACK</div>
+  </div>
+
+</div><!-- /screen -->
+<div class="home-btn"></div>
+```
+
+  </div>
+
+  <!-- CONTROLS -->
+
+  <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;justify-content:center">
+    <div onclick="handleShort()" style="border:2px solid #333;padding:5px 10px;font-size:5px;color:#555;cursor:pointer;letter-spacing:.06em" onmouseover="this.style.borderColor='#fff';this.style.color='#fff'" onmouseout="this.style.borderColor='#333';this.style.color='#555'">SHORT</div>
+    <div onclick="handleLong()" style="border:2px solid #333;padding:5px 10px;font-size:5px;color:#555;cursor:pointer;letter-spacing:.06em" onmouseover="this.style.borderColor='#fff';this.style.color='#fff'" onmouseout="this.style.borderColor='#333';this.style.color='#555'">LONG</div>
+    <div onclick="handleDouble()" style="border:2px solid #333;padding:5px 10px;font-size:5px;color:#555;cursor:pointer;letter-spacing:.06em" onmouseover="this.style.borderColor='#fff';this.style.color='#fff'" onmouseout="this.style.borderColor='#333';this.style.color='#555'">DOUBLE</div>
+    <div onclick="reboot()" style="border:2px solid #1a1a1a;padding:5px 10px;font-size:5px;color:#1a1a1a;cursor:pointer;letter-spacing:.06em" onmouseover="this.style.borderColor='#f44';this.style.color='#f44'" onmouseout="this.style.borderColor='#1a1a1a';this.style.color='#1a1a1a'">REBOOT</div>
+  </div>
+  <div style="font-size:4px;color:#111;letter-spacing:.08em;margin-top:6px;text-align:center">KEYBOARD: SPACE=SHORT · ENTER=LONG · BACKSPACE=BACK</div>
+</div>
+
+<!-- LEGEND -->
+
+<div style="flex:1;min-width:300px">
+  <div class="legend">
+    <div class="legend-hdr">NAV RULES <span style="font-size:5px;color:#555">CURRENT: 1 BUTTON</span></div>
+    <div class="legend-row">
+      <div class="legend-item"><div class="legend-key">SHORT × N</div><div class="legend-arrow">→</div><div class="legend-action">Advance N items in active list</div></div>
+    </div>
+    <div class="legend-row">
+      <div class="legend-item"><div class="legend-key">LONG (sidebar)</div><div class="legend-arrow">→</div><div class="legend-action">Open right panel · focus moves to panel items</div></div>
+    </div>
+    <div class="legend-row">
+      <div class="legend-item"><div class="legend-key">LONG (panel item)</div><div class="legend-arrow">→</div><div class="legend-action">Open sub-screen for that item</div></div>
+    </div>
+    <div class="legend-row">
+      <div class="legend-item"><div class="legend-key">DOUBLE (in panel)</div><div class="legend-arrow">→</div><div class="legend-action">Focus back to sidebar</div></div>
+    </div>
+    <div class="legend-row">
+      <div class="legend-item"><div class="legend-key">DOUBLE (in sub)</div><div class="legend-arrow">→</div><div class="legend-action">Back to right panel view</div></div>
+    </div>
+  </div>
+
+  <div style="border:2px solid #1a1a1a;padding:14px;margin-top:16px">
+    <div style="font-size:6px;color:#2a2a2a;letter-spacing:.08em;margin-bottom:10px">PANEL CONTENTS</div>
+    <div style="display:flex;flex-direction:column;gap:6px;font-size:5px;color:#1a1a1a;letter-spacing:.06em;line-height:2">
+      <div><span style="color:#fff">HOME</span> → Date · time · weather · 1 task</div>
+      <div><span style="color:#7F77DD">CHAT</span> → AI status + new chat + previous sessions</div>
+      <div><span style="color:#1D9E75">TASKS</span> → Top 3 tasks + today/projects/quick add voice</div>
+      <div><span style="color:#fff">SETTINGS</span> → AI model · display · network · system</div>
+      <div><span style="color:#1D9E75">FOCUS</span> → Pomodoro · world clocks · stopwatch</div>
+      <div><span style="color:#444">MAIL</span> → 3-item inbox preview</div>
+      <div><span style="color:#444">MSGS</span> → 3-thread SMS preview</div>
+      <div><span style="color:#444">MUSIC</span> → Now playing + 4 tracks</div>
+      <div><span style="color:#444">HISTORY</span> → Last 5 chat sessions</div>
+    </div>
+  </div>
+
+  <div style="border:2px solid #1a1a1a;padding:14px;margin-top:12px">
+    <div style="font-size:6px;color:#2a2a2a;letter-spacing:.08em;margin-bottom:10px">FUTURE WITH 3 BUTTONS</div>
+    <div style="font-size:5px;color:#1a1a1a;letter-spacing:.06em;line-height:2.4">
+      UP / DOWN buttons → direct navigation (no cycling)<br>
+      SELECT button → long press equivalent<br>
+      Single button back stays as double-press pattern
+    </div>
+  </div>
+</div>
+
+</div>
+
+<script>
+/* ════ BOOT ORBS ════ */
+let bootFrame = 0;
+function drawBoot() {
+  const c = document.getElementById('bootCanvas');
+  if (!c) return;
+  c.width = 120; c.height = 120;
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, 120, 120);
+
+  const cx = 60, cy = 60, r = 36;
+  const t = bootFrame * 0.04;
+  const orbSize = 14;
+
+  for (let i = 0; i < 4; i++) {
+    const angle = t + i * Math.PI / 2;
+    const ox = Math.round(cx + r * Math.cos(angle));
+    const oy = Math.round(cy + r * Math.sin(angle));
+
+    // Pixel-draw orb (square pixelated circle)
+    ctx.fillStyle = '#fff';
+    const pixSize = 2;
+    for (let py = -4; py <= 4; py++) {
+      for (let px = -4; px <= 4; px++) {
+        if (px*px + py*py <= 16) {
+          ctx.fillRect(ox + px*pixSize, oy + py*pixSize, pixSize, pixSize);
+        }
+      }
+    }
+
+    // Dim trail
+    const trailAngle = t + i * Math.PI / 2 - 0.3;
+    const tx2 = Math.round(cx + r * Math.cos(trailAngle));
+    const ty2 = Math.round(cy + r * Math.sin(trailAngle));
+    ctx.fillStyle = '#333';
+    for (let py = -3; py <= 3; py++) {
+      for (let px2 = -3; px2 <= 3; px2++) {
+        if (px2*px2 + py*py <= 9) {
+          ctx.fillRect(tx2 + px2*pixSize, ty2 + py*pixSize, pixSize, pixSize);
+        }
+      }
+    }
+  }
+
+  // Pixel center dot
+  ctx.fillStyle = '#222';
+  ctx.fillRect(56, 56, 8, 8);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(58, 58, 4, 4);
+
+  bootFrame++;
+  requestAnimationFrame(drawBoot);
+}
+drawBoot();
+
+/* ════ CLOCK ════ */
+function tick() {
+  const n = new Date();
+  const t = String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0');
+  const el = document.getElementById('navTime');
+  if (el) el.textContent = t;
+}
+tick(); setInterval(tick, 1000);
+
+/* ════ STATE ════ */
+let state = 'boot'; // boot | sidebar | panel
+let sidebarIdx = 0;
+let panelIdx = 0;
+const SIDEBAR_ITEMS = ['home','chat','tasks','settings','focus','mail','messages','music','history'];
+
+/* ════ PANELS ════ */
+const PANELS = {
+  home: () => `
+    <div class="home-panel">
+      <div class="rp-hdr">HOME <span id="rp-home-time" style="font-size:6px;color:#555">--:--</span></div>
+      <div class="rp-body">
+        <div class="rp-time" id="rp-clock">--:--</div>
+        <div class="rp-date" id="rp-date">LOADING...</div>
+        <div class="rp-weather">
+          <div class="rp-weather-temp">72°</div>
+          <div class="rp-weather-info">PARTLY CLOUDY<br>BURBANK CA<br>H:76 L:61</div>
+        </div>
+        <div class="rp-task-hdr">NEXT TASK</div>
+        <div class="rp-task urgent focused"><div class="rp-task-dot hi"></div>INVOICE JOAQUIN</div>
+        <div class="rp-task"><div class="rp-task-dot"></div>TICKET FORMATTER</div>
+        <div class="rp-task"><div class="rp-task-dot"></div>EL CAMINO BRAKES</div>
+      </div>
+    </div>`,
+
+  chat: () => `
+    <div class="chat-panel">
+      <div class="rp-hdr">CHAT <span style="font-size:5px;color:#0f0"><span class="ai-dot"></span>ONLINE</span></div>
+      <div class="rp-body">
+        <div class="ai-stat-row"><span>MODEL</span><span class="ai-stat-val">SONNET 4.6</span></div>
+        <div class="ai-stat-row"><span>CONTEXT</span><span class="ai-stat-val warn">84%</span></div>
+        <div class="ai-stat-row"><span>SESSION</span><span class="ai-stat-val">$0.84</span></div>
+        <div style="padding:6px 8px;border-bottom:1px solid #0a0a0a">
+          <div style="font-size:5px;color:#333;margin-bottom:3px;letter-spacing:.08em">CONTEXT</div>
+          <div class="ctx-bar"><div class="ctx-fill"></div></div>
+          <div style="display:flex;justify-content:space-between;font-size:4px;color:#1a1a1a;margin-top:2px"><span>0</span><span>8.4K / 10K</span></div>
+        </div>
+        <div class="chat-action focused" data-action="newchat"><span class="ca-arr">▶</span>NEW CHAT</div>
+        <div class="chat-action" data-action="previous"><span class="ca-arr">▶</span>PREVIOUS SESSION</div>
+        <div class="chat-action" data-action="history"><span class="ca-arr">▶</span>ALL HISTORY</div>
+      </div>
+    </div>`,
+
+  tasks: () => `
+    <div class="tasks-panel">
+      <div class="rp-hdr">TASKS <span style="font-size:6px;color:#555">5 OPEN</span></div>
+      <div class="rp-body">
+        <div style="padding:5px 8px;font-size:5px;color:#333;letter-spacing:.1em;border-bottom:1px solid #0a0a0a">TODAY</div>
+        <div class="task-preview"><div class="tp-dot hi"></div>INVOICE JOAQUIN</div>
+        <div class="task-preview"><div class="tp-dot hi"></div>TICKET FORMATTER</div>
+        <div class="task-preview"><div class="tp-dot"></div>EL CAMINO BRAKES</div>
+        <div style="padding:5px 8px;font-size:5px;color:#333;letter-spacing:.1em;border-bottom:1px solid #0a0a0a;border-top:1px solid #111">ACTIONS</div>
+        <div class="task-action focused" data-action="today"><span style="font-size:6px">▶</span>TODAY'S TASKS</div>
+        <div class="task-action" data-action="projects"><span style="font-size:6px">▶</span>PROJECTS</div>
+        <div class="task-action" data-action="quickadd"><span style="font-size:6px">▶</span>QUICK ADD (VOICE)</div>
+      </div>
+    </div>`,
+
+  settings: () => `
+    <div class="settings-panel">
+      <div class="rp-hdr">SETTINGS</div>
+      <div class="rp-body">
+        <div class="sett-row focused"><span>AI MODEL</span><span class="sett-val">SONNET ›</span></div>
+        <div class="sett-row"><span>AGENT MODE</span><span class="sett-val">PRODUCER ›</span></div>
+        <div class="sett-row"><span>WEB SEARCH</span><div style="width:20px;height:10px;border:2px solid #fff;position:relative;flex-shrink:0"><div style="position:absolute;right:1px;top:1px;width:6px;height:6px;background:#fff"></div></div></div>
+        <div class="sett-row"><span>MEMORY</span><div style="width:20px;height:10px;border:2px solid #fff;position:relative;flex-shrink:0"><div style="position:absolute;right:1px;top:1px;width:6px;height:6px;background:#fff"></div></div></div>
+        <div class="sett-row"><span>WI-FI</span><span class="sett-val">STUDIO ›</span></div>
+        <div class="sett-row"><span>BLUETOOTH</span><span class="sett-val">3 DEV ›</span></div>
+        <div class="sett-row"><span>STORAGE</span><span class="sett-val">89/128G ›</span></div>
+        <div class="sett-row"><span>ABOUT</span><span class="sett-val">v1.0 ›</span></div>
+      </div>
+    </div>`,
+
+  focus: () => `
+    <div class="focus-panel">
+      <div class="rp-hdr">FOCUS</div>
+      <div class="rp-body">
+        <div style="padding:12px 8px;text-align:center;border-bottom:2px solid #fff">
+          <div style="font-size:8px;color:#333;letter-spacing:.08em;margin-bottom:4px">LAST SESSION</div>
+          <div style="font-size:18px;letter-spacing:.04em">25:00</div>
+          <div style="font-size:5px;color:#555;margin-top:3px">WORK · 1/4 ROUNDS</div>
+        </div>
+        <div class="focus-action focused" data-action="pomo"><span style="font-size:6px">▶</span>START POMODORO</div>
+        <div class="focus-action" data-action="clocks"><span style="font-size:6px">▶</span>WORLD CLOCKS</div>
+        <div class="focus-action" data-action="stopwatch"><span style="font-size:6px">▶</span>STOPWATCH</div>
+      </div>
+    </div>`,
+
+  mail: () => `
+    <div class="mail-panel">
+      <div class="rp-hdr">MAIL <span class="badge" style="border:2px solid #fff;padding:0 4px;font-size:5px">3</span></div>
+      <div class="rp-body">
+        <div class="mail-row unread focused">
+          <div class="mail-from"><span>JOAQUIN · SSS</span><span style="font-size:5px;color:#333">9:44</span></div>
+          <div class="mail-subj">RE: NIKE HOUSE INVOICE</div>
+        </div>
+        <div class="mail-row unread">
+          <div class="mail-from"><span>OVATION TRAVEL</span><span style="font-size:5px;color:#333">8:30</span></div>
+          <div class="mail-subj">LAX→JFK MAR 18 ITINERARY</div>
+        </div>
+        <div class="mail-row unread">
+          <div class="mail-from"><span>BEN WOLIN</span><span style="font-size:5px;color:#333">YEST.</span></div>
+          <div class="mail-subj">HYPNOTIST DOC UPDATE</div>
+        </div>
+        <div class="mail-row">
+          <div class="mail-from"><span>ANTHROPIC</span><span style="font-size:5px;color:#333">MON</span></div>
+          <div class="mail-subj">SONNET 4.6 RELEASE NOTES</div>
+        </div>
+        <div style="border-top:2px solid #333;padding:6px 8px;font-size:5px;color:#2a2a2a;letter-spacing:.08em;cursor:pointer">▶ OPEN FULL INBOX</div>
+      </div>
+    </div>`,
+
+  messages: () => `
+    <div class="msgs-panel">
+      <div class="rp-hdr">MESSAGES <span class="badge" style="border:2px solid #fff;padding:0 4px;font-size:5px">2</span></div>
+      <div class="rp-body">
+        <div class="msg-row unread focused">
+          <div class="msg-av">JQ</div>
+          <div style="flex:1;min-width:0">
+            <div class="msg-name">JOAQUIN</div>
+            <div class="msg-preview">Can you call me re: overtime rate?</div>
+          </div>
+        </div>
+        <div class="msg-row unread">
+          <div class="msg-av">AN</div>
+          <div style="flex:1;min-width:0">
+            <div class="msg-name">ANTHONY</div>
+            <div class="msg-preview">Yo did you fix the El Camino lol</div>
+          </div>
+        </div>
+        <div class="msg-row">
+          <div class="msg-av">BW</div>
+          <div style="flex:1;min-width:0">
+            <div class="msg-name">BEN W.</div>
+            <div class="msg-preview">Casting went great. Debrief Fri?</div>
+          </div>
+        </div>
+        <div style="border-top:2px solid #333;padding:6px 8px;font-size:5px;color:#2a2a2a;letter-spacing:.08em;cursor:pointer">▶ NEW MESSAGE</div>
+      </div>
+    </div>`,
+
+  music: () => `
+    <div class="music-panel">
+      <div class="rp-hdr">MUSIC <span style="font-size:6px;color:#555">♪ PLAYING</span></div>
+      <div class="rp-body">
+        <div class="now-playing">
+          <div class="np-art">♫</div>
+          <div class="np-track">NO TENDER LEFT BEHIND</div>
+          <div class="np-artist">TENDER FEST OST · 1:24/3:42</div>
+          <div style="width:100%;height:4px;border:1px solid #fff;background:#000;margin-top:6px"><div style="height:100%;width:38%;background:#fff"></div></div>
+          <div style="display:flex;gap:4px;margin-top:6px">
+            <div style="border:2px solid #fff;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:8px;cursor:pointer">◀</div>
+            <div style="border:2px solid #fff;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:8px;cursor:pointer">▶</div>
+            <div style="border:2px solid #fff;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:8px;cursor:pointer">▶▶</div>
+          </div>
+        </div>
+        <div class="music-row playing focused">NO TENDER LEFT BEHIND</div>
+        <div class="music-row">THE DIPPING POINT</div>
+        <div class="music-row">SAUCE ON MY MIND</div>
+        <div class="music-row">CRISPY DREAM</div>
+      </div>
+    </div>`,
+
+  history: () => `
+    <div class="history-panel">
+      <div class="rp-hdr">HISTORY <span style="font-size:6px;color:#555">12</span></div>
+      <div class="rp-body">
+        <div class="hist-row focused"><div class="hist-title">SSS TASK STATUS</div><div class="hist-meta">TODAY 09:44</div></div>
+        <div class="hist-row"><div class="hist-title">EL CAMINO REPAIR</div><div class="hist-meta">TODAY 07:20</div></div>
+        <div class="hist-row"><div class="hist-title">TENDER FEST IDEAS</div><div class="hist-meta">YESTERDAY</div></div>
+        <div class="hist-row"><div class="hist-title">OBSIDIAN MCP SETUP</div><div class="hist-meta">2 DAYS AGO</div></div>
+        <div class="hist-row"><div class="hist-title">CLOWN WAITER BIT</div><div class="hist-meta">3 DAYS AGO</div></div>
+        <div class="hist-row"><div class="hist-title">LUNA LUNA DECK</div><div class="hist-meta">5 DAYS AGO</div></div>
+      </div>
+    </div>`,
+};
+
+/* ════ RENDER PANEL ════ */
+function renderPanel(name) {
+  const rp = document.getElementById('rpanel');
+  rp.innerHTML = PANELS[name]?.() || `<div class="rp-hdr">${name.toUpperCase()}</div><div style="padding:12px 8px;font-size:6px;color:#222">COMING SOON</div>`;
+  // Update home clock
+  if (name === 'home') updateHomePanel();
+}
+
+function updateHomePanel() {
+  const n = new Date();
+  const h = n.getHours()%12||12, m = String(n.getMinutes()).padStart(2,'0');
+  const days = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+  const mons = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  const el = document.getElementById('rp-clock');
+  const del = document.getElementById('rp-date');
+  if (el) el.textContent = h+':'+m;
+  if (del) del.textContent = days[n.getDay()]+' '+mons[n.getMonth()]+' '+n.getDate();
+}
+
+/* ════ NAV LOGIC ════ */
+function goNav() {
+  document.getElementById('v-boot').classList.remove('active');
+  document.getElementById('v-nav').classList.add('active');
+  state = 'sidebar';
+  sidebarIdx = 0;
+  updateSidebar();
+  renderPanel(SIDEBAR_ITEMS[0]);
+}
+
+function updateSidebar() {
+  document.querySelectorAll('.sb-item').forEach((el, i) => {
+    el.classList.toggle('selected', i === sidebarIdx);
+  });
+  // scroll sidebar to show selected
+  const items = document.querySelectorAll('.sb-item');
+  if (items[sidebarIdx]) items[sidebarIdx].scrollIntoView({block:'nearest'});
+}
+
+function updatePanelFocus(idx) {
+  const rp = document.getElementById('rpanel');
+  const focusable = rp.querySelectorAll('[class*="action"],[class*="sett-row"],[class*="mail-row"],[class*="msg-row"],[class*="music-row"],[class*="hist-row"],[class*="chat-action"],[class*="task-action"],[class*="focus-action"],[class*="rp-task"]');
+  focusable.forEach((el, i) => el.classList.toggle('focused', i === idx));
+  if (focusable[idx]) focusable[idx].scrollIntoView({block:'nearest'});
+}
+
+function getPanelItems() {
+  const rp = document.getElementById('rpanel');
+  return [...rp.querySelectorAll('[class*="action"],[class*="sett-row"],[class*="mail-row"],[class*="msg-row"],[class*="music-row"],[class*="hist-row"],[class*="chat-action"],[class*="task-action"],[class*="focus-action"],[class*="rp-task"]')];
+}
+
+function handleShort() {
+  if (state === 'boot') return;
+  if (state === 'sidebar') {
+    sidebarIdx = (sidebarIdx + 1) % SIDEBAR_ITEMS.length;
+    updateSidebar();
+    renderPanel(SIDEBAR_ITEMS[sidebarIdx]);
+    panelIdx = 0;
+  } else if (state === 'panel') {
+    const items = getPanelItems();
+    if (!items.length) return;
+    panelIdx = (panelIdx + 1) % items.length;
+    updatePanelFocus(panelIdx);
+  }
+}
+
+function handleLong() {
+  if (state === 'boot') {
+    goNav();
+    return;
+  }
+  if (state === 'sidebar') {
+    // Enter panel mode — focus moves to right panel
+    state = 'panel';
+    panelIdx = 0;
+    updatePanelFocus(0);
+    // visual: dim sidebar slightly
+    document.querySelectorAll('.sb-item').forEach(el => {
+      if (el.classList.contains('selected')) el.style.background = '#111';
+    });
+  } else if (state === 'panel') {
+    // Would open sub-screen — for now flash selection
+    const items = getPanelItems();
+    if (items[panelIdx]) {
+      const el = items[panelIdx];
+      const prev = el.style.background;
+      el.style.background = '#fff';
+      el.style.color = '#000';
+      setTimeout(() => { el.style.background = ''; el.style.color = ''; updatePanelFocus(panelIdx); }, 150);
+    }
+  }
+}
+
+function handleDouble() {
+  if (state === 'boot') return;
+  if (state === 'panel') {
+    state = 'sidebar';
+    // unfocus panel items
+    getPanelItems().forEach(el => el.classList.remove('focused'));
+    // restore sidebar selection
+    document.querySelectorAll('.sb-item').forEach(el => el.style.background = '');
+    updateSidebar();
+    panelIdx = 0;
+  } else if (state === 'sidebar') {
+    // already at top level — maybe show status or do nothing
+  }
+}
+
+function reboot() {
+  state = 'boot';
+  document.getElementById('v-nav').classList.remove('active');
+  document.getElementById('v-boot').classList.add('active');
+  sidebarIdx = 0;
+  panelIdx = 0;
+}
+
+/* ════ KEYBOARD ════ */
+document.addEventListener('keydown', e => {
+  if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
+  if (e.key === ' ') { e.preventDefault(); handleShort(); }
+  if (e.key === 'Enter') { e.preventDefault(); handleLong(); }
+  if (e.key === 'Backspace' || e.key === 'Escape') { e.preventDefault(); handleDouble(); }
+});
+
+/* ════ SIDEBAR CLICK ════ */
+document.querySelectorAll('.sb-item').forEach((el, i) => {
+  el.addEventListener('click', () => {
+    sidebarIdx = i;
+    state = 'sidebar';
+    updateSidebar();
+    renderPanel(SIDEBAR_ITEMS[i]);
+    panelIdx = 0;
+  });
+});
+
+/* ════ INIT ════ */
+renderPanel('home');
+setInterval(() => { if (document.getElementById('rp-clock')) updateHomePanel(); }, 1000);
+</script>
+
+</body>
+</html>
