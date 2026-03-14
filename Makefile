@@ -1,4 +1,4 @@
-.PHONY: dev-server dev-device dev-preview dev-both run-dev run-server run-both verify-hw run-pi run-pi-server install ssh ssh-pi start stop restart status logs logs-device logs-server db-web vnc push deploy ship setup-offline-ai flash
+.PHONY: dev-server dev-device dev-preview dev-both run-dev run-server run-both verify-hw run-pi run-pi-server install ssh ssh-pi start stop restart status logs logs-device logs-server db-web vnc push deploy ship setup-offline-ai flash mac-setup mac-start mac-stop mac-restart mac-logs mac-logs-error mac-status mac-uninstall
 
 install:
 	pip install -r requirements.txt
@@ -97,3 +97,51 @@ ssh: ssh-pi
 
 flash:
 	@bash scripts/flash_sd.sh
+
+
+# Mac mini management
+mac-setup:
+	@bash scripts/mac_setup.sh
+
+mac-start:
+	@launchctl load \
+	  ~/Library/LaunchAgents/com.bitos.server.plist
+	@echo "BITOS server starting..."
+
+mac-stop:
+	@launchctl unload \
+	  ~/Library/LaunchAgents/com.bitos.server.plist
+	@echo "BITOS server stopped"
+
+mac-restart:
+	@launchctl unload \
+	  ~/Library/LaunchAgents/com.bitos.server.plist \
+	  2>/dev/null || true
+	@sleep 1
+	@launchctl load \
+	  ~/Library/LaunchAgents/com.bitos.server.plist
+	@echo "BITOS server restarted"
+
+mac-logs:
+	@tail -f ~/.bitos/logs/bitos-server.log
+
+mac-logs-error:
+	@tail -f ~/.bitos/logs/bitos-server-error.log
+
+mac-status:
+	@echo "=== BITOS Server ===" && \
+	 curl -sf http://localhost:8000/health | python3 -m json.tool \
+	 || echo "OFFLINE" && \
+	 echo "" && \
+	 echo "=== Vikunja ===" && \
+	 curl -sf http://localhost:3456/api/v1/info \
+	 | python3 -m json.tool 2>/dev/null || echo "OFFLINE"
+
+mac-uninstall:
+	@launchctl unload \
+	  ~/Library/LaunchAgents/com.bitos.server.plist \
+	  2>/dev/null || true
+	@rm -f ~/Library/LaunchAgents/com.bitos.server.plist
+	@docker compose -f ~/.bitos/vikunja/docker-compose.yml \
+	  down 2>/dev/null || true
+	@echo "BITOS Mac services removed"
