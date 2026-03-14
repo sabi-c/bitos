@@ -254,16 +254,7 @@ class BackendClient:
             logging.warning("mail_create_draft_failed thread=%s error=%s", thread_id[:24], exc)
             return ""
 
-    def get_integrations_status(self) -> dict:
-        """GET /status/integrations."""
-        try:
-            resp = httpx.get(f"{self.base_url}/status/integrations", timeout=5, headers=self._request_headers())
-            resp.raise_for_status()
-            return resp.json()
-        except Exception as exc:
-            logging.warning("integrations_status_failed error=%s", exc)
-            return {}
-    async def get_tasks(self) -> list[dict]:
+    def get_tasks(self) -> list[dict]:
         """GET /tasks/today from server."""
         try:
             resp = httpx.get(
@@ -276,3 +267,13 @@ class BackendClient:
         except Exception as exc:
             logging.warning("tasks_fetch_failed error=%s", exc)
             return []
+
+    def get_morning_brief(self) -> dict:
+        """GET /brief from server."""
+        try:
+            resp = httpx.get(f"{self.base_url}/brief", timeout=5, headers=self._request_headers())
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as exc:
+            logging.warning("morning_brief_failed error=%s", exc)
+            return {}

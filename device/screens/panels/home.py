@@ -13,6 +13,7 @@ class HomePanel(BaseScreen):
 
     def __init__(
         self,
+        on_back=None,
         on_open_chat=None,
         on_open_focus=None,
         on_open_tasks=None,
@@ -29,6 +30,7 @@ class HomePanel(BaseScreen):
         status_state=None,
     ):
         self._on_open_chat = on_open_chat
+        self._on_back = on_back
         self._on_open_focus = on_open_focus
         self._on_open_tasks = on_open_tasks
         self._on_open_captures = on_open_captures
@@ -57,6 +59,9 @@ class HomePanel(BaseScreen):
                 NavItem(key="msgs", label="MSGS", status="SYNC", action=self._open_messages),
                 NavItem(key="mail", label="MAIL", status="SYNC", action=self._open_mail),
                 NavItem(key="captures", label="CAPTURES", status="", action=self._open_captures),
+                NavItem(key="home", label="HOME", status="READY", action=self._open_home),
+                NavItem(key="history", label="HISTORY", status="", action=self._open_history),
+                NavItem(key="music", label="MUSIC", status="", action=self._open_music),
             ]
         )
 
@@ -65,13 +70,10 @@ class HomePanel(BaseScreen):
         if action == "SHORT_PRESS":
             self._nav.activate_focused()
         elif action == "DOUBLE_PRESS":
-            self._open_shade()
+            if self._on_back:
+                self._on_back()
         elif action == "LONG_PRESS":
-            focused = self._nav.focused_item
-            if focused and focused.key == "msgs":
-                self._open_messages()
-            else:
-                self._nav.move(1)
+            self._nav.move(1)
         elif action == "TRIPLE_PRESS":
             self._nav.move(-1)
 
@@ -109,6 +111,9 @@ class HomePanel(BaseScreen):
             elif item.key == "msgs":
                 unread = int(getattr(self._status_state, "imessage_unread", 0)) if self._status_state else 0
                 label = f"MSGS ({unread})" if unread > 0 else "MSGS"
+            elif item.key == "mail":
+                unread = int(getattr(self._status_state, "gmail_unread", 0)) if self._status_state else 0
+                label = f"MAIL ({unread})" if unread > 0 else "MAIL"
             row = self._font_body.render(label, False, row_color)
             st = self._font_small.render(item.status, False, status_color)
             text_y = y + (ROW_H_MIN - row.get_height()) // 2
@@ -118,7 +123,7 @@ class HomePanel(BaseScreen):
                 pygame.draw.line(surface, HAIRLINE, (0, y + ROW_H_MIN - 1), (PHYSICAL_W, y + ROW_H_MIN - 1))
             y += ROW_H_MIN
 
-        hint = self._font_hint.render("SHORT:SEL · LONG:NEXT · DBL:SHADE", False, DIM3)
+        hint = self._font_hint.render("SHORT:SEL · LONG:NEXT · DBL:BACK", False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
 
     def _open_chat(self):
@@ -145,6 +150,14 @@ class HomePanel(BaseScreen):
         if self._on_open_messages:
             self._on_open_messages()
 
+    def _open_history(self):
+        # History currently maps to captures browsing.
+        self._open_captures()
+
+    def _open_music(self):
+        # Reserved for upcoming music panel.
+        return
+
     def _open_mail(self):
         if self._on_open_mail:
             self._on_open_mail()
@@ -168,4 +181,6 @@ class HomePanel(BaseScreen):
         if backend is None:
             return "AI ?"
         return "AI ✓" if backend else "AI ⚠"
-
+    def _open_home(self):
+        # Already on home panel.
+        return
