@@ -57,33 +57,62 @@ class AnthropicBridge(LLMBridge):
 
 
 class OpenAICompatibleBridge(LLMBridge):
-    """Works with OpenAI-compatible `/v1/chat/completions` endpoints."""
+    """Works with OpenAI-compatible `/v1/chat/completions` endpoints.
+
+    Supports any local server (OpenClaw, NanoClaw, llama.cpp, Ollama, etc.)
+    that exposes the OpenAI chat completions API.  Accepts ``ws://`` and
+    ``wss://`` URLs (transparently converted to ``http``/``https`` for
+    the REST call).  API key is optional — omit or leave empty for local
+    servers that don't require auth.
+    """
 
     def __init__(self, provider: str, api_key: str, base_url: str, model: str):
         super().__init__(provider=provider, model=model)
         self._api_key = api_key
-        self._base_url = base_url.rstrip("/")
+        self._base_url = _normalise_base_url(base_url)
 
     def stream_text(self, message: str, system_prompt: str | None = None) -> Generator[str, None, None]:
-        if not self._api_key:
-            raise RuntimeError(f"{self.provider.upper()} API key not configured")
+        url = f"{self._base_url}/chat/completions"
+        headers: dict[str, str] = {"Content-Type": "application/json"}
+        if self._api_key:
+            headers["Authorization"] = f"Bearer {self._api_key}"
 
-        response = httpx.post(
-            f"{self._base_url}/chat/completions",
-            timeout=45.0,
-            headers={
-                "Authorization": f"Bearer {self._api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": self.model,
-                "messages": [
-                    {"role": "system", "content": system_prompt or SYSTEM_PROMPT},
-                    {"role": "user", "content": message},
-                ],
-                "temperature": 0.2,
-            },
-        )
+        body = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system_prompt or SYSTEM_PROMPT},
+                {"role": "user", "content": message},
+            ],
+            "temperature": 0.2,
+            "stream": True,
+        }
+
+        # Try SSE streaming first; fall back to non-streaming on error.
+        try:
+            yield from self._stream_sse(url, headers, body)
+        except Exception:
+            body["stream"] = False
+            yield from self._request_sync(url, headers, body)
+
+    # -- internal -----------------------------------------------------------
+
+    def _stream_sse(self, url: str, headers: dict, body: dict) -> Generator[str, None, None]:
+        with httpx.stream("POST", url, headers=headers, json=body, timeout=45.0) as resp:
+            resp.raise_for_status()
+            for line in resp.iter_lines():
+                if not line.startswith("data: "):
+                    continue
+                payload = line[len("data: "):]
+                if payload.strip() == "[DONE]":
+                    break
+                chunk = json.loads(payload)
+                delta = (chunk.get("choices") or [{}])[0].get("delta") or {}
+                text = delta.get("content")
+                if text:
+                    yield text
+
+    def _request_sync(self, url: str, headers: dict, body: dict) -> Generator[str, None, None]:
+        response = httpx.post(url, headers=headers, json=body, timeout=45.0)
         response.raise_for_status()
         payload = response.json()
 
@@ -108,6 +137,19 @@ class EchoBridge(LLMBridge):
         for token in out.split(" "):
             if token:
                 yield token + " "
+
+
+def _normalise_base_url(url: str) -> str:
+    """Convert ws(s):// to http(s):// and ensure path ends with /v1."""
+    url = url.strip().rstrip("/")
+    if url.startswith("ws://"):
+        url = "http://" + url[len("ws://"):]
+    elif url.startswith("wss://"):
+        url = "https://" + url[len("wss://"):]
+    # Ensure the URL ends with a /v1 path so /chat/completions resolves correctly.
+    if not url.endswith("/v1"):
+        url += "/v1"
+    return url
 
 
 def _extract_openai_content(payload: dict) -> str:
