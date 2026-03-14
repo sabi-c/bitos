@@ -55,7 +55,7 @@ class ChatPanel(BaseScreen):
     STATUS_DEGRADED = "degraded"
 
     ERROR_MESSAGES = {
-        "offline": "offline: start server",
+        "offline": "Claude offline — check connection",
         "timeout": "timeout: retry",
         "auth": "auth failed",
         "rate_limit": "rate limited",
@@ -132,6 +132,12 @@ class ChatPanel(BaseScreen):
             self._input_text += event.unicode
 
     def handle_action(self, action: str):
+        if action == "SHORT_PRESS" and self._audio_pipeline and self._audio_pipeline.is_speaking():
+            self._audio_pipeline.stop_speaking()
+            with self._messages_lock:
+                self._status_detail = "speech stopped"
+            return
+
         if self._showing_templates() and action == "SHORT_PRESS":
             if self._templates:
                 self._template_index = (self._template_index + 1) % len(self._templates)
@@ -241,13 +247,17 @@ class ChatPanel(BaseScreen):
 
     def _do_voice_capture(self):
         import time as _time
+
+        timeout_seconds = 30
         try:
-            audio_path = self._audio_pipeline.record()
+            audio_path = self._audio_pipeline.record(max_seconds=timeout_seconds)
             if not audio_path:
                 self._is_streaming = False
                 return
-            _time.sleep(5)
+            _time.sleep(timeout_seconds)
             self._audio_pipeline.stop_recording()
+            with self._messages_lock:
+                self._status_detail = "Recording stopped (30s max)"
             text = self._audio_pipeline.transcribe(audio_path).strip()
         except Exception as exc:
             self._is_streaming = False
@@ -258,7 +268,7 @@ class ChatPanel(BaseScreen):
         self._is_streaming = False
         if not text:
             with self._messages_lock:
-                self._status_detail = ""
+                self._status_detail = "Didn't catch that — try again"
             return
         self._input_text = text
         self._send_message()
@@ -321,6 +331,8 @@ class ChatPanel(BaseScreen):
 
             if self._audio_pipeline and response_text:
                 try:
+                    with self._messages_lock:
+                        self._status_detail = "◎ SPEAKING..."
                     self._audio_pipeline.speak(response_text)
                 except Exception:
                     pass
@@ -346,6 +358,7 @@ class ChatPanel(BaseScreen):
             self._status_detail = error_copy
             self._last_error_retryable = retryable
             self._last_failed_message = message if retryable else None
+            self._input_text = message
             self._messages.append({"role": "assistant", "text": f"[{error_copy}]"})
 
         if self._repository and self._session_id is not None:

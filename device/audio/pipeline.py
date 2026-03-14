@@ -28,6 +28,12 @@ class AudioPipeline:
     def speak(self, text: str) -> None:
         raise NotImplementedError
 
+    def is_speaking(self) -> bool:
+        return False
+
+    def stop_speaking(self) -> None:
+        return None
+
     def is_available(self) -> bool:
         return False
 
@@ -37,6 +43,7 @@ class MockAudioPipeline(AudioPipeline):
 
     def __init__(self):
         self._last_typed_text = ""
+        self._speaking = False
 
     def record(self, max_seconds: int = 60) -> str | None:
         fd, out = tempfile.mkstemp(prefix="bitos_mock_rec_", suffix=".txt")
@@ -56,7 +63,17 @@ class MockAudioPipeline(AudioPipeline):
                 os.remove(audio_path)
 
     def speak(self, text: str) -> None:
-        logger.info("mock_speak text_len=%s", len(text))
+        self._speaking = True
+        try:
+            logger.info("mock_speak text_len=%s", len(text))
+        finally:
+            self._speaking = False
+
+    def is_speaking(self) -> bool:
+        return self._speaking
+
+    def stop_speaking(self) -> None:
+        self._speaking = False
 
     def is_available(self) -> bool:
         return True
@@ -77,6 +94,7 @@ class WM8960Pipeline(AudioPipeline):
 
     def __init__(self):
         self._rec_proc: subprocess.Popen | None = None
+        self._speak_proc: subprocess.Popen | None = None
 
     def record(self, max_seconds: int = 60) -> str | None:
         """Record until button released or max_seconds."""
@@ -138,12 +156,7 @@ class WM8960Pipeline(AudioPipeline):
         out = "/tmp/bitos_tts.mp3"
         with client.audio.speech.with_streaming_response.create(model="tts-1", voice="alloy", input=text) as resp:
             resp.stream_to_file(out)
-        subprocess.run(
-            ["aplay", "-D", self.ALSA_DEVICE, out],
-            capture_output=True,
-            timeout=30,
-            check=False,
-        )
+        self._play_audio(out, timeout=30)
 
     def _speak_piper(self, text: str) -> None:
         model = os.environ.get("PIPER_MODEL", "/home/pi/bitos/models/tts/en_US-lessac-medium.onnx")
@@ -158,12 +171,31 @@ class WM8960Pipeline(AudioPipeline):
             timeout=30,
             check=False,
         )
-        subprocess.run(
-            ["aplay", "-D", self.ALSA_DEVICE, out],
-            capture_output=True,
-            timeout=10,
-            check=False,
+        self._play_audio(out, timeout=10)
+
+    def _play_audio(self, path: str, timeout: int) -> None:
+        self._speak_proc = subprocess.Popen(
+            ["aplay", "-D", self.ALSA_DEVICE, path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
+        try:
+            self._speak_proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            self.stop_speaking()
+        finally:
+            self._speak_proc = None
+
+    def is_speaking(self) -> bool:
+        return self._speak_proc is not None and self._speak_proc.poll() is None
+
+    def stop_speaking(self) -> None:
+        if self._speak_proc and self._speak_proc.poll() is None:
+            self._speak_proc.terminate()
+            try:
+                self._speak_proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                self._speak_proc.kill()
 
     def is_available(self) -> bool:
         return True
