@@ -59,3 +59,17 @@ class CryptoParityTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+
+def test_ble_secret_known_vector():
+    """PBKDF2 output must match — JS companion uses same algorithm."""
+    import hashlib
+
+    result = hashlib.pbkdf2_hmac(
+        "sha256", b"0000", b"DESKTOP-DEV-001", 100000, 32
+    ).hex()
+    # This value must match deriveBleSecret("0000","DESKTOP-DEV-001") in auth.js
+    EXPECTED = "42edacede1532e7c44cef406185c9ecbd9ceee22bd35f4944560a55de06a6abf"
+    assert result == EXPECTED
+    assert len(result) == 64  # 32 bytes = 64 hex chars

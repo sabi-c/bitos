@@ -4,6 +4,11 @@ This document is a practical takeover brief for the next implementation contribu
 
 ## 1) Current state snapshot
 
+Pre-hardware sprints complete. Device arriving today.
+Next: hardware bring-up via FIRST_BOOT.md.
+Run scripts/verify_hardware.py first on Pi.
+
+
 ### Completed in this branch sequence
 - Phase 2 shell progression: boot → lock → home flow.
 - Button-first navigation in Home + reusable nav primitives (`NavItem`, `VerticalNavController`).

@@ -1,3 +1,4 @@
+import os
 import subprocess
 import unittest
 from pathlib import Path
@@ -12,6 +13,7 @@ from bluetooth.wifi_manager import WiFiManager
 class WiFiManagerTimeoutTests(unittest.TestCase):
     @patch("bluetooth.wifi_manager.logging.warning")
     @patch("bluetooth.wifi_manager.subprocess.run")
+    @patch.dict("os.environ", {}, clear=True)
     def test_add_network_timeout_returns_false_and_logs_warning(self, mock_run, mock_warning):
         mock_run.side_effect = subprocess.TimeoutExpired(cmd=["nmcli"], timeout=8)
 
@@ -23,6 +25,7 @@ class WiFiManagerTimeoutTests(unittest.TestCase):
 
     @patch("bluetooth.wifi_manager.logging.warning")
     @patch("bluetooth.wifi_manager.subprocess.run")
+    @patch.dict("os.environ", {}, clear=True)
     def test_connection_up_timeout_returns_false_and_logs_warning(self, mock_run, mock_warning):
         first = MagicMock(returncode=0, stderr="", stdout="")
         mock_run.side_effect = [first, subprocess.TimeoutExpired(cmd=["nmcli", "connection", "up"], timeout=8)]
@@ -34,6 +37,7 @@ class WiFiManagerTimeoutTests(unittest.TestCase):
         mock_warning.assert_called()
 
     @patch("bluetooth.wifi_manager.subprocess.run")
+    @patch.dict("os.environ", {}, clear=True)
     def test_get_status_timeout_returns_safe_defaults(self, mock_run):
         mock_run.side_effect = subprocess.TimeoutExpired(cmd=["nmcli"], timeout=3)
 
