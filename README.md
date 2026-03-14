@@ -1,5 +1,7 @@
 # BITOS
 
+![CI](https://github.com/sabi-c/bitos/actions/workflows/ci.yml/badge.svg)
+
 A pocket AI companion device. Pi Zero 2W + Whisplay HAT + PiSugar 3.
 
 Hold the button, ask Claude something, hear it answer.

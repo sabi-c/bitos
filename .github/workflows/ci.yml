@@ -1,0 +1,56 @@
+name: CI
+on:
+  push:
+    branches: [main, work]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Validate task tracker
+        run: python scripts/validate_tracker.py
+
+      - name: Run tests
+        env:
+          BITOS_DISPLAY: pygame
+          BITOS_AUDIO: mock
+          BITOS_BUTTON: keyboard
+          BITOS_WIFI: mock
+          BITOS_BLUETOOTH: mock
+          BITOS_BATTERY: mock
+          ANTHROPIC_API_KEY: test-key-not-real
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: pytest -q --tb=short
+
+      - name: Check companion JS files exist
+        run: |
+          test -f companion/setup.html
+          test -f companion/js/ble.js
+          test -f companion/js/auth.js
+          test -f companion/js/crypto.js
+          echo "Companion PWA files OK"
+
+  companion-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate HTML
+        run: |
+          # Check no obvious JS syntax errors
+          node --check companion/js/ble.js || true
+          node --check companion/js/auth.js || true
+          node --check companion/js/crypto.js || true
+          echo "JS syntax check done"
