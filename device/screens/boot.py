@@ -10,7 +10,7 @@ import pygame
 from screens.base import BaseScreen
 from display.tokens import (
     BLACK, WHITE, DIM2, DIM3, DIM4,
-    PHYSICAL_W, PHYSICAL_H, FONT_PATH, FONT_SIZES
+    PHYSICAL_W, PHYSICAL_H, FONT_PATH, FONT_SIZES, STATUS_BAR_H
 )
 from display.animator import StepAnimator, orb_rotate, blink_cursor
 
@@ -93,7 +93,7 @@ class BootScreen(BaseScreen):
 
         status_surface = self._status_font.render(self._status_copy(), False, DIM2)
         status_x = (PHYSICAL_W - status_surface.get_width()) // 2
-        surface.blit(status_surface, (status_x, PHYSICAL_H - 14))
+        surface.blit(status_surface, (status_x, PHYSICAL_H - STATUS_BAR_H))
 
     def _advance(self):
         if self._done:

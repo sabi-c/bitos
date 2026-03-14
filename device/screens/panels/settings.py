@@ -438,7 +438,7 @@ class AboutPanel(BaseScreen):
         for line in lines:
             text = self._font_body.render(line, False, WHITE)
             surface.blit(text, (8, y))
-            y += 18
+            y += ROW_H_MIN
 
         # ── Key hint bar ──
         hint = self._font_hint.render("DBL:BACK", False, DIM3)
