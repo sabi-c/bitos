@@ -1,34 +1,63 @@
 """
-BITOS Chat Panel (Phase 1 — simplified)
-Text input via keyboard, streaming response rendered line-by-line.
+BITOS Chat Panel (Phase 2 — reliability UX)
+Text input via keyboard/button, streaming response rendered line-by-line.
 """
 import threading
+
 import pygame
 
 from screens.base import BaseScreen
 from display.tokens import (
-    BLACK, WHITE, DIM2, DIM3, HAIRLINE,
-    PHYSICAL_W, PHYSICAL_H
+    BLACK,
+    WHITE,
+    DIM1,
+    DIM2,
+    DIM3,
+    HAIRLINE,
+    PHYSICAL_W,
+    PHYSICAL_H,
 )
 from display.animator import blink_cursor
 from display.theme import merge_runtime_ui_settings, load_ui_font, ui_line_height
-from client.api import BackendClient
+from client.api import BackendClient, BackendChatError
 from storage.repository import DeviceRepository
 
 
 class ChatPanel(BaseScreen):
-    """Simplified chat: keyboard input → streaming Claude response."""
+    """Chat panel with reliability status and retry controls."""
+
+    STATUS_CONNECTED = "connected"
+    STATUS_RETRYING = "retrying"
+    STATUS_OFFLINE = "offline"
+    STATUS_DEGRADED = "degraded"
+
+    ERROR_MESSAGES = {
+        "offline": "offline: start server",
+        "timeout": "timeout: retry",
+        "auth": "auth failed",
+        "rate_limit": "rate limited",
+        "upstream": "provider busy",
+        "network": "network unstable",
+        "request": "request failed",
+        "unknown": "unknown error",
+    }
 
     def __init__(self, client: BackendClient, ui_settings: dict | None = None, repository: DeviceRepository | None = None):
         self._client = client
         self._cursor_anim = blink_cursor()
         self._repository = repository
+        self._messages_lock = threading.Lock()
 
         # State
         self._input_text = ""
         self._messages: list[dict] = []  # {"role": "user"|"assistant", "text": "..."}
         self._is_streaming = False
         self._scroll_offset = 0
+        self._status = self.STATUS_CONNECTED
+        self._status_detail = ""
+        self._last_failed_message: str | None = None
+        self._last_error_retryable = False
+        self._session_id = None
 
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
         self._font = load_ui_font("body", self._ui_settings)
@@ -38,13 +67,18 @@ class ChatPanel(BaseScreen):
         if self._repository:
             self._session_id, restored = self._repository.load_latest_session_messages()
             if restored:
-                self._messages = [{"role": m["role"], "text": m["text"]} for m in restored]
+                with self._messages_lock:
+                    self._messages = [{"role": m["role"], "text": m["text"]} for m in restored]
 
     def update(self, dt: float):
         self._cursor_anim.update(dt)
 
     def handle_input(self, event: pygame.event.Event):
         if event.type != pygame.KEYDOWN:
+            return
+
+        if event.key == pygame.K_r and self._can_retry():
+            self._retry_last_failed()
             return
 
         if self._is_streaming:
@@ -61,28 +95,41 @@ class ChatPanel(BaseScreen):
         elif event.unicode and event.unicode.isprintable():
             self._input_text += event.unicode
 
+    def handle_action(self, action: str):
+        if action == "LONG_PRESS" and self._can_retry():
+            self._retry_last_failed()
+
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
 
-        # ── Header ──
+        # ── Header + status banner ──
         header_y = 2
         header_text = self._font_small.render("CHAT", False, DIM3)
         surface.blit(header_text, (4, header_y))
+
+        status_copy = self._status_copy()
+        status_color = self._status_color()
+        status_surface = self._font_small.render(status_copy, False, status_color)
+        status_x = max(70, PHYSICAL_W - status_surface.get_width() - 4)
+        surface.blit(status_surface, (status_x, header_y))
+
         pygame.draw.line(surface, HAIRLINE, (0, header_y + 10), (PHYSICAL_W, header_y + 10))
 
         # ── Messages area ──
         msg_y = header_y + 14
-        max_y = PHYSICAL_H - 24  # Leave room for input bar
+        max_y = PHYSICAL_H - 26  # Leave room for input bar + hint
+
+        with self._messages_lock:
+            snapshot = list(self._messages)
 
         visible_lines = []
-        for msg in self._messages:
+        for msg in snapshot:
             prefix = "> " if msg["role"] == "user" else ""
             color = DIM2 if msg["role"] == "user" else WHITE
             lines = self._wrap_text(prefix + msg["text"], PHYSICAL_W - 8)
             for line in lines:
                 visible_lines.append((line, color))
 
-        # Apply scroll
         start = max(0, len(visible_lines) - int((max_y - msg_y) / self._line_height) - self._scroll_offset)
         for line_text, color in visible_lines[start:]:
             if msg_y > max_y:
@@ -91,11 +138,14 @@ class ChatPanel(BaseScreen):
             surface.blit(text_surface, (4, msg_y))
             msg_y += self._line_height
 
-        # ── Streaming indicator ──
+        # ── Streaming indicator / retry hint ──
         if self._is_streaming:
             dots = "." * ((pygame.time.get_ticks() // 400) % 4)
             indicator = self._font_small.render(dots, False, DIM3)
             surface.blit(indicator, (4, max_y - 8))
+        elif self._can_retry():
+            hint = self._font_small.render("R/LONG: retry", False, DIM1)
+            surface.blit(hint, (4, max_y - 8))
 
         # ── Input bar ──
         input_y = PHYSICAL_H - 18
@@ -108,7 +158,6 @@ class ChatPanel(BaseScreen):
         input_surface = self._font.render(display_text, False, WHITE)
         surface.blit(input_surface, (4, input_y))
 
-        # Cursor
         if not self._is_streaming and self._cursor_anim.step == 0:
             cursor_x = 4 + input_surface.get_width() + 1
             pygame.draw.rect(surface, WHITE, (cursor_x, input_y, 6, self._font.get_height()))
@@ -118,37 +167,94 @@ class ChatPanel(BaseScreen):
         if not text:
             return
 
-        self._messages.append({"role": "user", "text": text})
+        with self._messages_lock:
+            self._messages.append({"role": "user", "text": text})
+
         if self._repository:
             if self._session_id is None:
                 self._session_id = self._repository.create_session(title=text[:24])
             self._repository.add_message(self._session_id, "user", text)
+
         self._input_text = ""
         self._is_streaming = True
         self._scroll_offset = 0
+        self._status = self.STATUS_CONNECTED
+        self._status_detail = ""
+        self._last_failed_message = None
+        self._last_error_retryable = False
 
-        # Stream response in background thread
         thread = threading.Thread(target=self._stream_response, args=(text,), daemon=True)
+        thread.start()
+
+    def _retry_last_failed(self):
+        if not self._last_failed_message or self._is_streaming:
+            return
+
+        self._is_streaming = True
+        self._status = self.STATUS_RETRYING
+        self._status_detail = ""
+
+        thread = threading.Thread(target=self._stream_response, args=(self._last_failed_message,), daemon=True)
         thread.start()
 
     def _stream_response(self, message: str):
         try:
             response_text = ""
-            self._messages.append({"role": "assistant", "text": ""})
+            with self._messages_lock:
+                self._messages.append({"role": "assistant", "text": ""})
 
             for chunk in self._client.chat(message):
                 response_text += chunk
-                self._messages[-1]["text"] = response_text
+                with self._messages_lock:
+                    self._messages[-1]["text"] = response_text
 
             if self._repository and self._session_id is not None:
                 self._repository.add_message(self._session_id, "assistant", response_text)
-        except Exception as e:
-            error_text = f"[error: {e}]"
-            self._messages.append({"role": "assistant", "text": error_text})
-            if self._repository and self._session_id is not None:
-                self._repository.add_message(self._session_id, "assistant", error_text)
+
+            self._status = self.STATUS_CONNECTED
+            self._status_detail = ""
+            self._last_failed_message = None
+            self._last_error_retryable = False
+        except BackendChatError as exc:
+            self._mark_failed(message, exc.kind, exc.retryable)
+        except Exception:
+            self._mark_failed(message, "unknown", True)
         finally:
             self._is_streaming = False
+
+    def _mark_failed(self, message: str, kind: str, retryable: bool):
+        status = self.STATUS_OFFLINE if kind in ("offline", "network") else self.STATUS_DEGRADED
+        error_copy = self.ERROR_MESSAGES.get(kind, self.ERROR_MESSAGES["unknown"])
+
+        self._status = status
+        self._status_detail = error_copy
+        self._last_error_retryable = retryable
+        self._last_failed_message = message if retryable else None
+
+        with self._messages_lock:
+            self._messages.append({"role": "assistant", "text": f"[{error_copy}]"})
+
+        if self._repository and self._session_id is not None:
+            self._repository.add_message(self._session_id, "assistant", f"[{error_copy}]")
+
+    def _can_retry(self) -> bool:
+        return bool(self._last_failed_message and self._last_error_retryable and not self._is_streaming)
+
+    def _status_copy(self) -> str:
+        if self._status == self.STATUS_CONNECTED:
+            return "connected"
+        if self._status == self.STATUS_RETRYING:
+            return "retrying"
+        if self._status_detail:
+            return self._status_detail
+        return self._status
+
+    def _status_color(self):
+        if self._status == self.STATUS_CONNECTED:
+            return DIM1
+        if self._status == self.STATUS_RETRYING:
+            return DIM2
+        return WHITE
 
     def _wrap_text(self, text: str, max_width: int) -> list[str]:
         """Simple character-level word wrap."""
