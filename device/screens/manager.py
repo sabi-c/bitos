@@ -1,10 +1,7 @@
-"""
-BITOS Screen Manager
-Push/pop screen stack with white-flash transition.
-"""
+"""BITOS Screen Manager: stack + simple route transitions."""
 import pygame
 from screens.base import BaseScreen
-from display.tokens import BLACK, WHITE, PHYSICAL_W, PHYSICAL_H
+from display.tokens import BLACK, WHITE
 
 
 class ScreenManager:
@@ -12,18 +9,16 @@ class ScreenManager:
 
     def __init__(self):
         self._stack: list[BaseScreen] = []
-        self._flash_frames = 0  # White flash transition counter
+        self._flash_frames = 0
 
     def push(self, screen: BaseScreen):
-        """Push a new screen on top. Triggers white flash."""
         if self._stack:
             self._stack[-1].on_exit()
-            self._flash_frames = 2  # 2 frames of white
+            self._flash_frames = 2
         self._stack.append(screen)
         screen.on_enter()
 
     def pop(self) -> BaseScreen | None:
-        """Pop top screen. Returns it."""
         if not self._stack:
             return None
         screen = self._stack.pop()
@@ -34,7 +29,6 @@ class ScreenManager:
         return screen
 
     def replace(self, screen: BaseScreen):
-        """Replace top screen (pop + push without double flash)."""
         if self._stack:
             self._stack[-1].on_exit()
             self._stack.pop()
@@ -49,6 +43,10 @@ class ScreenManager:
     def handle_input(self, event: pygame.event.Event):
         if self.current:
             self.current.handle_input(event)
+
+    def handle_action(self, action: str):
+        if self.current:
+            self.current.handle_action(action)
 
     def update(self, dt: float):
         if self.current:

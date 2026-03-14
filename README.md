@@ -38,6 +38,7 @@ Device (Pygame/ST7789) ──HTTP──▶ Server (FastAPI) ──▶ Claude API
 - [ROADMAP.md](ROADMAP.md) — Full project roadmap
 - [docs/planning/IMPLEMENTATION_PLAN_NEXT.md](docs/planning/IMPLEMENTATION_PLAN_NEXT.md) — Detailed implementation sequencing for Phases 2–4
 - [docs/planning/TASK_TRACKER.md](docs/planning/TASK_TRACKER.md) — Canonical backlog + per-iteration log for all contributors/agents
+- [docs/reference-ui/README.md](docs/reference-ui/README.md) — Canonical location and naming conventions for imported HTML UI reference files
 
 ## License
 

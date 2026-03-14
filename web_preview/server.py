@@ -78,6 +78,8 @@ if __name__ == "__main__":
     from input.handler import ButtonHandler
     from screens.manager import ScreenManager
     from screens.boot import BootScreen
+    from screens.lock import LockScreen
+    from screens.panels.home import HomePanel
     from screens.panels.chat import ChatPanel
     from client.api import BackendClient
 
@@ -91,8 +93,14 @@ if __name__ == "__main__":
     screen_mgr = ScreenManager()
     client = BackendClient()
 
-    def on_boot_complete():
+    def open_chat():
         screen_mgr.replace(ChatPanel(client))
+
+    def on_unlock():
+        screen_mgr.replace(HomePanel(on_open_chat=open_chat))
+
+    def on_boot_complete():
+        screen_mgr.replace(LockScreen(on_unlock=on_unlock))
 
     screen_mgr.push(BootScreen(on_complete=on_boot_complete))
 

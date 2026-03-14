@@ -1,11 +1,6 @@
-"""
-BITOS Screen Base + Manager
-Manages a stack of screens with white-flash transitions.
-"""
+"""BITOS screen base abstractions."""
 from abc import ABC, abstractmethod
 import pygame
-
-from display.tokens import BLACK, WHITE, PHYSICAL_W, PHYSICAL_H
 
 
 class BaseScreen(ABC):
@@ -14,21 +9,19 @@ class BaseScreen(ABC):
     @abstractmethod
     def render(self, surface: pygame.Surface):
         """Draw this screen to the surface."""
-        pass
 
     @abstractmethod
     def handle_input(self, event: pygame.event.Event):
-        """Process input events."""
-        pass
+        """Process keyboard/mouse input events."""
+
+    def handle_action(self, action: str):
+        """Process high-level button actions (SHORT_PRESS, LONG_PRESS, etc.)."""
 
     def update(self, dt: float):
         """Update logic per frame. Override if needed."""
-        pass
 
     def on_enter(self):
         """Called when this screen becomes active."""
-        pass
 
     def on_exit(self):
         """Called when this screen is removed."""
-        pass
