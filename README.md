@@ -24,6 +24,12 @@ make dev-preview  # Terminal 3: Mobile web preview on :5001
 
 ## Architecture
 
+## Current Delivery Status
+
+- Phase 4 shell set is complete (lock/home/chat/settings/focus/notifications overlay).
+- BLE foundation slices `P5-007`, `P5-008`, and `P5-009` are done (WiFi config/status, device status notify, keyboard routing).
+- Next up: `P5-010` NetworkManager priority + BT PAN baseline and `P5-011` QR companion pairing flow.
+
 ```
 Device (Pygame/ST7789) ──HTTP──▶ Server (FastAPI) ──▶ Claude API
 ```
@@ -117,6 +123,10 @@ If handing implementation to a new contributor/agent, start here:
 | Document | Purpose |
 |---|---|
 | docs/planning/MAC_AI_SERVICE.md | Multi-agent Mac service + collab-electron pattern |
+| docs/planning/COMPANION_APP.md | Companion app scope, security expectations, and MVP acceptance criteria |
+| docs/planning/FIRST_BOOT.md | First-boot provisioning flow, state machine, and failure handling |
+| docs/BLUETOOTH_NETWORK_SPEC.md | BLE provisioning/status contract and network behavior expectations |
+| docs/BACKEND_SPEC.md | Backend endpoint, auth, provider, and error contract specification |
 
 - [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) — Phase 1 build plan
 - [ROADMAP.md](ROADMAP.md) — Full project roadmap
