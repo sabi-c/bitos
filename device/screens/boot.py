@@ -21,6 +21,7 @@ class BootScreen(BaseScreen):
     def __init__(self, on_complete=None, startup_health: dict | None = None, health_check=None):
         self._on_complete = on_complete
         self._startup_health = startup_health if startup_health is not None else {}
+        self._health_lock = threading.Lock()
         self._health_check = health_check
         self._orb_anim = orb_rotate()
         self._cursor_anim = blink_cursor()
@@ -106,12 +107,15 @@ class BootScreen(BaseScreen):
         try:
             result = self._health_check()
             if isinstance(result, dict):
-                self._startup_health.update(result)
+                with self._health_lock:
+                    self._startup_health.update(result)
         except Exception:
-            self._startup_health.update({"backend": False})
+            with self._health_lock:
+                self._startup_health.update({"backend": False})
 
     def _status_copy(self) -> str:
-        backend_status = self._startup_health.get("backend")
+        with self._health_lock:
+            backend_status = self._startup_health.get("backend")
         if backend_status is None:
             return "CONNECTING..."
         return "CLAUDE ONLINE ✓" if backend_status else "AI OFFLINE ⚠"

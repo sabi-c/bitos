@@ -302,10 +302,11 @@ class ChatPanel(BaseScreen):
             if self._repository and self._session_id is not None:
                 self._repository.add_message(self._session_id, "assistant", response_text)
 
-            self._status = self.STATUS_CONNECTED
-            self._status_detail = ""
-            self._last_failed_message = None
-            self._last_error_retryable = False
+            with self._messages_lock:
+                self._status = self.STATUS_CONNECTED
+                self._status_detail = ""
+                self._last_failed_message = None
+                self._last_error_retryable = False
         except BackendChatError as exc:
             self._mark_failed(message, exc.kind, exc.retryable)
         except Exception:
@@ -317,12 +318,11 @@ class ChatPanel(BaseScreen):
         status = self.STATUS_OFFLINE if kind in ("offline", "network") else self.STATUS_DEGRADED
         error_copy = self.ERROR_MESSAGES.get(kind, self.ERROR_MESSAGES["unknown"])
 
-        self._status = status
-        self._status_detail = error_copy
-        self._last_error_retryable = retryable
-        self._last_failed_message = message if retryable else None
-
         with self._messages_lock:
+            self._status = status
+            self._status_detail = error_copy
+            self._last_error_retryable = retryable
+            self._last_failed_message = message if retryable else None
             self._messages.append({"role": "assistant", "text": f"[{error_copy}]"})
 
         if self._repository and self._session_id is not None:
