@@ -181,12 +181,19 @@ class GPIOButtonHandler:
         if duration_ms >= short_threshold_ms:
             with self._lock:
                 self._press_times.clear()
+        self._press_times.append(now_ms)
+        self._press_times = [t for t in self._press_times if (now_ms - t) < triple_window_ms]
+        count = len(self._press_times)
+
+        if duration_ms >= short_threshold_ms:
+            self._press_times.clear()
             self._on_event(ButtonEvent.LONG_PRESS)
             return
 
         if count >= 3:
             with self._lock:
                 self._press_times.clear()
+            self._press_times.clear()
             self._on_event(ButtonEvent.TRIPLE_PRESS)
             return
 
@@ -197,6 +204,9 @@ class GPIOButtonHandler:
                     if len(self._press_times) < 3:
                         self._press_times.clear()
                         self._on_event(ButtonEvent.DOUBLE_PRESS)
+                if len(self._press_times) == 2:
+                    self._press_times.clear()
+                    self._on_event(ButtonEvent.DOUBLE_PRESS)
 
             threading.Thread(target=check_double, daemon=True).start()
             return
@@ -207,5 +217,8 @@ class GPIOButtonHandler:
                 if len(self._press_times) == 1:
                     self._press_times.clear()
                     self._on_event(ButtonEvent.SHORT_PRESS)
+            if len(self._press_times) == 1:
+                self._press_times.clear()
+                self._on_event(ButtonEvent.SHORT_PRESS)
 
         threading.Thread(target=check_single, daemon=True).start()

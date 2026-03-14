@@ -1,130 +1,48 @@
-# BITOS Roadmap
+# BITOS · ROADMAP
 
-This roadmap turns the original phase sketch into a delivery sequence with explicit outcomes and gates.
-
-## North Star
-
-Ship a dependable pocket AI companion where voice interaction, navigation, and core daily workflows are fast on-device and resilient when backend services are degraded.
-
-## Phase 1 — Voice Works (current baseline)
-
-**Outcome:** Desktop simulator + backend streaming chat is functional end-to-end.
-
-- Pygame device loop, boot animation, chat panel
-- FastAPI `/health` and `/chat` streaming endpoint
-- Web preview server (MJPEG)
-- Baseline project scaffolding and local run commands
-
-**Exit criteria**
-- `make dev-server`, `make dev-device`, and `make dev-preview` run locally
-- Message send + streamed assistant output visible in chat panel
+## Phase 1 — Voice Works
+Desktop simulator + backend streaming chat baseline.
 
 ## Phase 2 — Navigation + Persistence
+Lock/home flow, nav shell, SQLite persistence, settings catalog integration.
 
-**Outcome:** Device feels like a multi-screen product instead of a single chat view.
+## Phase 3 — Tasks + Integrations
+Adapter boundaries, outbound queue, permission gates, worker runtime loop.
 
-- Lock screen + sidebar navigation shell
-- Persistent local SQLite store (chat sessions, settings, recent activity)
-- Backend settings catalog + UI theming controls (`/settings/catalog`, `/settings/ui`)
-- Session restore at boot
-- Error states for backend unavailable / timeout
-- Provider-agnostic LLM bridge (Anthropic/OpenAI/OpenClaw/NanoClaw)
+## Phase 4 — Complete
+Nav shell, chat, tasks, settings, focus, notifications overlay.
+All tests green. P4-001 through P4-004 done.
 
-**Exit criteria**
-- Boot lands on lock/home flow
-- Navigation can reach all implemented screens with button-only controls
-- Chat history survives restart
-- Active LLM provider can be swapped via config without UI changes
-- UI settings changes are persisted and reflected in device/preview runtime
+## Phase 5 — Infrastructure + Connectivity (current)
+Tailscale, firewall, BLE GATT server, companion PWA, WiFi provisioning.
+Reference: docs/BLUETOOTH_NETWORK_SPEC.md + docs/planning/COMPANION_APP.md
+Tasks: P5-001 (done) → P5-012f (todo)
 
-## Phase 3 — Tasks + MCP Foundations
+## Phase 6 — Resilience + Reliability
+5-press shutdown, offline UI, audit log, cert pinning, request signing.
+Reference: docs/BACKEND_SPEC.md sections 2 and 4
+Tasks: P6-001 → P6-006
 
-**Outcome:** First utility workflow beyond chat, with external integration boundaries in place.
+## Phase 7 — Offline AI
+Piper TTS, whisper.cpp STT, response cache, optional llama.cpp.
+Reference: docs/planning/OFFLINE_AI.md
+Tasks: P7-001 → P7-004 (P7-004 blocked until Pi 5)
 
-- Task capture + task list panel
-- Integration adapter boundary for Things (or pluggable task provider)
-- Local queue + retry for outbound sync
-- Permission/confirmation UX for external actions
-- OS bridge adapters for tasks/messages/email/calendar with provider-independent contracts
+## Phase 8 — AI Intelligence
+Global workspace, morning brief, session distiller, agent modes, proactive notifs.
+Reference: docs/BACKEND_SPEC.md section 3 (Phase 4)
+Tasks: P8-001 → P8-005
+Dependency: Phase 5 complete.
 
-**Exit criteria**
-- User can capture, browse, and complete tasks on-device
-- Sync failures are visible and recoverable
-- Domain adapter boundaries allow local/runtime-specific implementations without screen-layer edits
-
-## Phase 4 — Core Screen Set
-
-**Outcome:** Core information architecture is implemented.
-
-- Focus timer view
-- Mail summary view
-- Settings and notifications screens
-- Shared UI primitives across screens
-
-**Exit criteria**
-- All priority screens accessible and visually consistent
-- Screen-level smoke tests pass
-
-## Phase 5 — Hardware Deployment
-
-**Outcome:** Same UX runs on Pi Zero 2W + Whisplay HAT + PiSugar.
-
-- ST7789 display driver implementation
-- WM8960 audio pipeline integration (record, STT, TTS playback)
-- Device startup/service supervision (systemd)
-- Hardware diagnostics mode
-
-**Exit criteria**
-- Physical button, display, and audio path function reliably
-- Device auto-starts app after reboot
-
-## Phase 6 — Global Workspace Intelligence
-
-**Outcome:** Contextual memory and proactive summaries become useful.
-
-- Shared memory model for sessions/events
-- Morning brief + proactive suggestions
-- Retrieval boundaries and privacy policy enforcement
-
-**Exit criteria**
-- Daily brief generated from local + integrated data
-- Context retrieval improves response quality without notable latency regressions
-
-## Phase 7 — Companion App
-
-**Outcome:** Onboarding and remote interaction are simple for non-technical users.
-
-- iOS/macOS companion app for Wi-Fi setup and device config
-- Optional keyboard relay and remote prompt handoff
-- Device management surface (status, logs, updates)
-
-**Exit criteria**
-- Fresh device can be provisioned without shell access
-- Remote controls are authenticated and encrypted
-
-
-## Execution hygiene (required each iteration)
-
-- Update `docs/planning/TASK_TRACKER.md` before and after each iteration.
-- Record per-iteration progress in the tracker's **Iteration Log** (who, commit, what changed, what's next).
-- Keep roadmap and implementation docs synchronized when scope/sequence changes.
-- PRs should map changes to at least one tracker task ID.
-- Maintain/update `docs/planning/HANDOFF_NEXT_AGENT.md` when transitions between contributors are expected.
-
-## Cross-phase quality bars
-
-- Startup time and UI responsiveness budgets are tracked each phase
-- Fallback UX exists for network/API outages
-- Feature flags for unfinished capabilities on default branch
-- Every phase ships with a manual QA checklist and at least one automated smoke test path
-
+## Phase 9 — Companion + Extended Features
+PWA companion, BLE keyboard, wake word, voice notes, conversation branching.
+Reference: docs/planning/FUNCTIONALITY_ROADMAP.md
+Tasks: P9-001 → P9-005
 
 ## Phase 10 — Multi-Agent Mac Service
-
-Code/Ops/Research/Creative agent services running as separate
-processes on Mac mini. Background task queue with device
-notification on completion. Optional Electron monitor.
+Code/Ops/Research/Creative agent services on Mac mini.
+Background tasks with device notification on completion.
+Optional Electron monitor app.
 Reference: docs/planning/MAC_AI_SERVICE.md
 Dependency: Phase 8 (Global Workspace) must complete first.
-Tasks: P10-001 through P10-008
-
+Tasks: P10-001 → P10-008
