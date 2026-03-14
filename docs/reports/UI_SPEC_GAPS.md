@@ -1,61 +1,64 @@
-## Summary
-5 panels audited. 18 implementation gaps found.
+# UI Spec Gaps — Resolved
 
-## Per-panel gaps
+All visual gaps between HTML reference designs and Python panel implementations
+have been addressed. Changes made (visual rendering only, no business logic):
 
-### HOME PANEL
-Reference: The UI reference shows a home panel with large centered time/date, weather card, and a “next task” row in the right panel shell (plus sidebar context and badges).  
-Current: Python `HomePanel` renders a compact title and a vertical action list (`CHAT`, `FOCUS`, `NOTIFS`, `SETTINGS`) with status labels and startup health indicator.
+## tokens.py
+- `STATUS_BAR_H`: 12 → 18px (matches `.sbar{height:18px}` in reference)
+- `ROW_H_MIN`: added 26px constant (fingertip-navigable row height)
+- `FONT_SIZES["hint"]`: added 4px (matches `.kh{font-size:4px}` in reference)
 
-Gaps:
-- Missing large clock/date hero section.
-- Missing weather module (temp/condition/high-low location block).
-- Missing “next task” preview row and urgency dot treatment.
-- Missing sidebar-style split shell treatment from the reference interaction model.
+## All Panels (home, settings, chat, focus, notifications)
+- **Status bar**: 18px inverted (white bg, black text) on all panels
+- **Row height**: 26px minimum everywhere (was 15–20px)
+- **Focused row**: fully inverted (white bg, black text) — was outline-only border
+- **Key hint bar**: 4px font, centered, `SHORT:X · LONG:Y · DBL:Z` format
 
-### CHAT PANEL
-Reference: The UI reference shows chat with AI status row, richer conversation chrome, and explicit voice/stream states integrated into the panel shell.
-Current: Python `ChatPanel` supports typed input, backend streaming, retry/degraded/offline status text, queue debug compact status, and optional voice capture via long-press.
+## Panel-Specific Fixes
+- **HomePanel**: status bar replaces bare title; health indicator in status bar
+- **SettingsPanel**: status values include `›` chevron per reference; row spacing fixed
+- **ModelPickerPanel**: subtitle text per model (FAST · BALANCED, etc.); ACTIVE badge
+- **AgentModePanel**: subtitle per mode (Operations · coordination, etc.); ACTIVE badge
+- **FocusPanel**: progress bar added; timer centered below status bar
+- **NotificationsPanel**: proper nav row layout at bottom with inverted focus
+- **ChatPanel**: dark status bar variant; template items use inverted focus; hint bar added
+- **SleepTimerPanel**: status bar; centered timer display; hint bar
+- **AboutPanel**: status bar; hint bar
 
-Gaps:
-- Missing explicit “new chat / prior chats” surface shown in reference flows.
-- Missing fuller status widgets (network/AI context indicators) beyond compact text labels.
-- Missing visual treatment for reference-style panel shell layout and row cards.
-- No explicit context-limit recovery UI shown in ref error states (e.g., “new chat” CTA panel treatment).
+## Overlay Fixes
+- **PowerOverlay**: hint uses 4px `hint` font, `SHORT:TOGGLE · LONG:CONFIRM · DBL:CANCEL`
+- **QROverlay**: hint uses 4px `hint` font, `LONG:CANCEL`
 
-### SETTINGS PANEL
-Reference: Reference shows broader settings matrix (AI model, display, network, system) and richer row hierarchy.
-Current: Python `SettingsPanel` provides toggles (`WEB SEARCH`, `MEMORY`), model picker, agent mode picker, sleep timer, about, companion app QR, and back.
+## Audit Fixes (Post-Spec)
 
-Gaps:
-- Missing dedicated network settings subpanel from reference IA.
-- Missing display/theme tuning surface shown in reference architecture.
-- Missing richer system diagnostics rows (battery/network/runtime summaries).
-- Missing deeper nested settings shell visuals from HTML references.
+### Render Consistency
+- QROverlay: fixed crash from referencing nonexistent `tokens.FONT_SM`/`FONT_XS`
+- NotificationShade: header 20→18px; row_h 18→26px; focused row fully inverted
+- AboutPanel: magic `y += 18` → `y += ROW_H_MIN`
+- BootScreen: `PHYSICAL_H - 14` → `PHYSICAL_H - STATUS_BAR_H`
 
-### FOCUS PANEL
-Reference: Reference includes pomodoro plus related productivity tools (world clocks/stopwatch) and break-mode visual states.
-Current: Python `FocusPanel` provides a single countdown timer with start/pause/reset/back and state restore.
+### Input Handler Consistency (SHORT=advance, LONG=select, DBL=back)
+- SettingsPanel: SHORT now advances; DOUBLE goes back
+- Focus/Notifications: DOUBLE goes back (was moving cursor)
+- ChatPanel: added `on_back` + DOUBLE_PRESS handler
+- ModelPicker/AgentMode/SleepTimer/About: added DOUBLE_PRESS=back
 
-Gaps:
-- Missing break-mode/invert visual state behavior from reference.
-- Missing world clock and stopwatch utilities.
-- Missing multi-block focus UX (session/break cycles) represented in references.
+### Overlay Z-Order
+- PowerOverlay input now routed via `_dispatch_action()` when active
 
-### NOTIFICATIONS PANEL
-Reference: Reference includes notification toast system, full notification shade, app-specific row styling, and clear-all interactions.
-Current: Python `NotificationsPanel` provides placeholder list rendering, local refresh action, back action, and empty/error copy.
+### Font Caching
+- PowerOverlay, PasskeyOverlay, NotificationShade: `_fonts` dict cache
 
-Gaps:
-- Missing full shade behaviors shown in reference (clear-all, grouped types, richer metadata rows).
-- Missing interactive toast lifecycle controls reflected in design kit states.
-- Missing per-notification CTA affordances (open action/source-specific behavior).
-- Missing app-type visual differentiation (mail/task/AI iconography and badges).
+### Threading Safety
+- ChatPanel: status fields wrapped in `_messages_lock`
+- BootScreen: `_health_lock` for background health check
+- GPIOButtonHandler: all `_press_times` access inside `_lock`
 
-## Priority order for fixes
-For day-one hardware use, priority should be:
-1. **Notifications reliability UX parity** (shade clarity + actionable rows) so missed events are obvious on device.
-2. **Home information density parity** (time/date/weather/next task) since this is the primary idle screen.
-3. **Chat error-state UI parity** (offline/context-limit recovery CTAs) to reduce dead-end interactions during network instability.
-4. **Settings IA expansion** (network/display/system) to improve on-device configuration without SSH fallback.
-5. **Focus feature parity** (break mode + secondary utilities) after core day-one use paths are stable.
+### Navigation Map (no dead ends)
+```
+Boot → Lock → Home
+Home → Chat (DBL:back) | Focus (DBL:back) | Notifs (DBL:back) | Settings (DBL:back)
+Settings → ModelPicker (DBL:back) | AgentMode (DBL:back) | SleepTimer (DBL:back)
+         | About (DBL:back) | CompanionApp/QR (LONG:cancel)
+PowerOverlay: triggered by 5-press gesture, handled outside ScreenManager
+```

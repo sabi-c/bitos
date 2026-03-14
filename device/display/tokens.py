@@ -31,6 +31,7 @@ FONT_SIZES = {
     "title": 10,
     "body": 8,
     "small": 6,
+    "hint": 4,
 }
 
 # ── Borders & Padding ─────────────────────────────────────────
@@ -45,5 +46,6 @@ PAD_WIDGET = 6     # px, padding inside widgets
 SIDEBAR_W = 84     # px, left sidebar panel
 CONTENT_W = PHYSICAL_W - SIDEBAR_W  # 156px, right content panel
 
-STATUS_BAR_H = 12  # px, top status bar
+STATUS_BAR_H = 18  # px, top status bar (inverted: white bg, black text)
+ROW_H_MIN = 26     # px, minimum row height (fingertip navigable)
 NAV_HEADER_H = 16  # px, panel header with title

@@ -113,7 +113,7 @@ if __name__ == "__main__":
         print(f"[Preview] UI settings unavailable, using defaults ({exc})")
 
     def open_chat():
-        screen_mgr.replace(ChatPanel(client, ui_settings=ui_settings, repository=repository))
+        screen_mgr.replace(ChatPanel(client, ui_settings=ui_settings, repository=repository, on_back=on_home))
 
     def open_focus():
         screen_mgr.replace(FocusPanel(on_back=on_home, ui_settings=ui_settings))

@@ -9,10 +9,12 @@ import httpx
 import pygame
 
 from display.driver import create_driver
+import display.tokens as tokens
 from display.tokens import FPS
 from input.handler import ButtonHandler, ButtonEvent
 from notifications import NotificationPoller
 from overlays import NotificationQueue, NotificationToast, QROverlay
+from overlays.power import PowerOverlay
 from bluetooth import AuthManager, get_gatt_server
 from bluetooth.constants import PAIRING_MODE_TIMEOUT_SECONDS
 from bluetooth.characteristics import DeviceInfoCharacteristic, DeviceStatusCharacteristic, KeyboardInputCharacteristic, WiFiConfigCharacteristic, WiFiStatusCharacteristic
@@ -41,9 +43,6 @@ from integrations.adapters import create_runtime_adapter
 from integrations.queue import OutboundCommandQueue
 from integrations.runtime import OutboundWorkerRuntimeLoop
 from integrations.worker import OutboundCommandWorker
-
-logger = logging.getLogger(__name__)
-
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +144,7 @@ def _run_main_loop(driver, button: ButtonHandler, screen_mgr: ScreenManager, out
         for result in worker_results:
             if result.status in ("retrying", "dead_letter"):
                 reason = result.reason or "unknown"
-                print(f"[Queue] command={result.command_id} status={result.status} reason={reason}")
+                logger.warning("[Queue] command=%s status=%s reason=%s", result.command_id, result.status, reason)
 
         surface = driver.get_surface()
         screen_mgr.update(dt)
@@ -182,15 +181,18 @@ def main():
     )
 
     def on_show_passkey(code: str):
-        screen_mgr.show_passkey_overlay(code=code, timeout_s=PAIRING_MODE_TIMEOUT_SECONDS)
+        screen_mgr.show_passkey_overlay(passkey=code, timeout_seconds=30)
 
     def on_pairing_complete(success: bool):
-        screen_mgr.hide_passkey_overlay()
+        if success:
+            screen_mgr.confirm_passkey()
+        else:
+            screen_mgr.reject_passkey()
         notification_queue.push(
             NotificationToast(
                 app="BLE",
                 icon="B",
-                message="COMPANION PAIRED ✓" if success else "PAIRING FAILED ✗",
+                message="COMPANION PAIRED \u2713" if success else "PAIRING FAILED \u2717",
                 time_str=time.strftime("%H:%M"),
             )
         )
@@ -276,7 +278,7 @@ def main():
     focus_panel: FocusPanel | None = None
 
     def open_chat():
-        chat = ChatPanel(client, ui_settings=ui_settings, repository=repository, audio_pipeline=audio_pipeline)
+        chat = ChatPanel(client, ui_settings=ui_settings, repository=repository, audio_pipeline=audio_pipeline, on_back=on_home)
         screen_mgr.replace(chat)
 
     def on_home():
@@ -425,24 +427,30 @@ def main():
     gatt_server.set_discoverable(False)
     device_status_char.start_periodic_updates(_collect_device_status, interval_s=30)
 
+    def _dispatch_action(action: str):
+        if power_overlay is not None:
+            power_overlay.handle_input(action)
+            return
+        screen_mgr.handle_action(action)
+
     def on_short():
         logger.info("[Button] SHORT_PRESS")
-        screen_mgr.handle_action("SHORT_PRESS")
+        _dispatch_action("SHORT_PRESS")
 
     def on_long():
         logger.info("[Button] LONG_PRESS")
-        screen_mgr.handle_action("LONG_PRESS")
+        _dispatch_action("LONG_PRESS")
 
     def on_double():
         logger.info("[Button] DOUBLE_PRESS")
-        screen_mgr.handle_action("DOUBLE_PRESS")
+        _dispatch_action("DOUBLE_PRESS")
 
     def on_triple():
         logger.info("[Button] TRIPLE_PRESS")
-        screen_mgr.handle_action("TRIPLE_PRESS")
+        _dispatch_action("TRIPLE_PRESS")
 
     def on_power_gesture():
-        print("[Button] POWER_GESTURE")
+        logger.info("[Button] POWER_GESTURE")
         open_power_overlay()
 
     button.on(ButtonEvent.SHORT_PRESS, on_short)
@@ -481,10 +489,10 @@ def main():
             if result.status in ("retrying", "dead_letter"):
                 reason = result.reason or "unknown"
                 logger.error("[Queue] command=%s status=%s reason=%s", result.command_id, result.status, reason)
+        surface = driver.get_surface()
         screen_mgr.update(dt)
         screen_mgr.render(surface)
         if power_overlay:
-            import display.tokens as tokens
             power_overlay.render(surface, tokens)
         driver.update()
 

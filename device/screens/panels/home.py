@@ -2,7 +2,7 @@
 import pygame
 
 from screens.base import BaseScreen
-from display.tokens import BLACK, WHITE, DIM2, DIM3, HAIRLINE, PHYSICAL_W, PHYSICAL_H
+from display.tokens import BLACK, WHITE, DIM2, DIM3, HAIRLINE, PHYSICAL_W, PHYSICAL_H, STATUS_BAR_H, ROW_H_MIN
 from display.theme import merge_runtime_ui_settings, load_ui_font
 from screens.components import NavItem, VerticalNavController
 
@@ -30,6 +30,7 @@ class HomePanel(BaseScreen):
         self._font_title = load_ui_font("title", self._ui_settings)
         self._font_body = load_ui_font("body", self._ui_settings)
         self._font_small = load_ui_font("small", self._ui_settings)
+        self._font_hint = load_ui_font("hint", self._ui_settings)
         self._nav = VerticalNavController(
             [
                 NavItem(key="chat", label="CHAT", status="READY", action=self._open_chat),
@@ -62,30 +63,34 @@ class HomePanel(BaseScreen):
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
 
-        title = self._font_title.render("HOME", False, WHITE)
-        surface.blit(title, (8, 8))
-        pygame.draw.line(surface, HAIRLINE, (0, 24), (PHYSICAL_W, 24))
+        # ── Status bar: 18px, inverted (white bg, black text) ──
+        pygame.draw.rect(surface, WHITE, pygame.Rect(0, 0, PHYSICAL_W, STATUS_BAR_H))
+        title = self._font_small.render("HOME", False, BLACK)
+        surface.blit(title, (6, (STATUS_BAR_H - title.get_height()) // 2))
+        health = self._health_indicator()
+        health_surface = self._font_small.render(health, False, BLACK)
+        surface.blit(health_surface, (PHYSICAL_W - health_surface.get_width() - 6, (STATUS_BAR_H - health_surface.get_height()) // 2))
 
-        y = 38
+        # ── Rows: 26px minimum, inverted focus ──
+        y = STATUS_BAR_H + 2
         for idx, item in enumerate(self._nav.items):
-            row_color = WHITE if item.enabled else DIM3
-            status_color = DIM2 if item.enabled else DIM3
+            focused = idx == self._nav.focus_index
+            if focused:
+                pygame.draw.rect(surface, WHITE, pygame.Rect(0, y, PHYSICAL_W, ROW_H_MIN))
+            row_color = BLACK if focused else (WHITE if item.enabled else DIM3)
+            status_color = BLACK if focused else (DIM2 if item.enabled else DIM3)
             row = self._font_body.render(item.label, False, row_color)
             st = self._font_small.render(item.status, False, status_color)
-            if idx == self._nav.focus_index:
-                pygame.draw.rect(surface, WHITE, pygame.Rect(4, y - 2, PHYSICAL_W - 8, 15), width=1)
-            surface.blit(row, (8, y))
-            surface.blit(st, (PHYSICAL_W - st.get_width() - 8, y + 2))
-            pygame.draw.line(surface, HAIRLINE, (8, y + 12), (PHYSICAL_W - 8, y + 12))
-            y += 20
+            text_y = y + (ROW_H_MIN - row.get_height()) // 2
+            surface.blit(row, (8, text_y))
+            surface.blit(st, (PHYSICAL_W - st.get_width() - 8, text_y + 2))
+            if not focused:
+                pygame.draw.line(surface, HAIRLINE, (0, y + ROW_H_MIN - 1), (PHYSICAL_W, y + ROW_H_MIN - 1))
+            y += ROW_H_MIN
 
-        health = self._health_indicator()
-        health_surface = self._font_small.render(health, False, DIM2)
-        health_x = max(8, PHYSICAL_W - health_surface.get_width() - 8)
-        surface.blit(health_surface, (health_x, 8))
-
-        hint = self._font_small.render("SEL SHORT • SHADE DOUBLE", False, DIM3)
-        surface.blit(hint, (8, PHYSICAL_H - 14))
+        # ── Key hint bar: 4px font, spec format ──
+        hint = self._font_hint.render("SHORT:SEL \u00b7 LONG:NEXT \u00b7 DBL:SHADE", False, DIM3)
+        surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
 
     def _open_chat(self):
         if self._on_open_chat:

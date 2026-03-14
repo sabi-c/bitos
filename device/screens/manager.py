@@ -63,10 +63,36 @@ class ScreenManager:
         self._notification_shade = None
 
 
-    def show_passkey_overlay(self, code: str, timeout_s: int = 120) -> None:
-        self._passkey_overlay = PasskeyOverlay(code=code, timeout_s=timeout_s, on_timeout=self.hide_passkey_overlay)
+    def show_passkey_overlay(self, passkey: str, timeout_seconds: int = 30) -> None:
+        """Show BLE pairing passkey. Called from BLE thread."""
+        self._passkey_overlay = PasskeyOverlay(
+            passkey=passkey,
+            on_confirmed=self._on_pairing_confirmed,
+            on_timeout=self._on_pairing_timeout,
+            on_cancelled=self._on_pairing_cancelled,
+            timeout_seconds=timeout_seconds,
+        )
 
     def hide_passkey_overlay(self) -> None:
+        self._passkey_overlay = None
+
+    def confirm_passkey(self) -> None:
+        """Called by BLE pairing agent when companion confirms."""
+        if self._passkey_overlay:
+            self._passkey_overlay.confirm()
+
+    def reject_passkey(self) -> None:
+        """Called by BLE pairing agent on mismatch."""
+        if self._passkey_overlay:
+            self._passkey_overlay.reject()
+
+    def _on_pairing_confirmed(self) -> None:
+        self._passkey_overlay = None
+
+    def _on_pairing_timeout(self) -> None:
+        self._passkey_overlay = None
+
+    def _on_pairing_cancelled(self) -> None:
         self._passkey_overlay = None
 
     def push_overlay(self, overlay) -> None:

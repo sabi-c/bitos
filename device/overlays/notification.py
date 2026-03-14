@@ -100,6 +100,7 @@ class NotificationShade:
         self._on_open_source = on_open_source
         self._cursor_index = 0
         self._cached_records: list[NotificationRecord] = []
+        self._fonts: dict[str, pygame.font.Font] = {}
         self.on_enter()
 
     def on_enter(self) -> None:
@@ -112,44 +113,53 @@ class NotificationShade:
         records = self._cached_records
         surface.fill(tokens.BLACK)
 
-        pygame.draw.rect(surface, tokens.WHITE, pygame.Rect(0, 0, tokens.PHYSICAL_W, 20))
+        # ── Status bar: inverted, 18px (STATUS_BAR_H) ──
+        status_h = getattr(tokens, "STATUS_BAR_H", 18)
+        row_h = getattr(tokens, "ROW_H_MIN", 26)
+        pygame.draw.rect(surface, tokens.WHITE, pygame.Rect(0, 0, tokens.PHYSICAL_W, status_h))
         header_font = self._font(tokens, "small")
         body_font = self._font(tokens, "body")
         app_font = self._font(tokens, "small")
 
         unread = sum(1 for item in records if not item.read)
-        surface.blit(header_font.render("NOTIFICATIONS", False, tokens.BLACK), (4, 6))
-        surface.blit(header_font.render(str(unread), False, tokens.BLACK), (tokens.PHYSICAL_W - 14, 6))
+        title = header_font.render("NOTIFICATIONS", False, tokens.BLACK)
+        surface.blit(title, (6, (status_h - title.get_height()) // 2))
+        count_surf = header_font.render(str(unread), False, tokens.BLACK)
+        surface.blit(count_surf, (tokens.PHYSICAL_W - count_surf.get_width() - 6, (status_h - count_surf.get_height()) // 2))
 
         if not records:
             empty = body_font.render("NO NOTIFICATIONS", False, tokens.DIM3)
             surface.blit(empty, ((tokens.PHYSICAL_W - empty.get_width()) // 2, 136))
             return
 
-        row_h = 18
-        max_rows = max(1, (tokens.PHYSICAL_H - 24) // row_h)
+        max_rows = max(1, (tokens.PHYSICAL_H - status_h - 4) // row_h)
         start = 0
         if self._cursor_index >= max_rows:
             start = self._cursor_index - max_rows + 1
         visible = records[start : start + max_rows]
 
         for idx, record in enumerate(visible):
-            y = 24 + idx * row_h
+            y = status_h + 2 + idx * row_h
             actual_idx = start + idx
             selected = actual_idx == self._cursor_index
             if selected:
-                pygame.draw.rect(surface, tokens.DIM4, pygame.Rect(2, y - 1, tokens.PHYSICAL_W - 4, row_h - 1))
+                pygame.draw.rect(surface, tokens.WHITE, pygame.Rect(0, y, tokens.PHYSICAL_W, row_h))
 
             self._render_dot(surface, tokens, record, 5, y + 5)
             app_text = f"{_TYPE_ICON.get(record.type, '?')} {record.app_name}"[:12]
             msg_text = record.message[:19]
 
-            app_color = tokens.WHITE if not record.read else tokens.DIM2
-            msg_color = tokens.WHITE if not record.read else tokens.DIM3
+            if selected:
+                app_color = tokens.BLACK
+                msg_color = tokens.BLACK
+            else:
+                app_color = tokens.WHITE if not record.read else tokens.DIM2
+                msg_color = tokens.WHITE if not record.read else tokens.DIM3
 
-            surface.blit(app_font.render(app_text, False, app_color), (14, y + 1))
-            surface.blit(app_font.render(record.time_str[:5], False, tokens.DIM2), (tokens.PHYSICAL_W - 34, y + 1))
-            surface.blit(body_font.render(msg_text, False, msg_color), (14, y + 8))
+            surface.blit(app_font.render(app_text, False, app_color), (14, y + 2))
+            time_color = tokens.BLACK if selected else tokens.DIM2
+            surface.blit(app_font.render(record.time_str[:5], False, time_color), (tokens.PHYSICAL_W - 34, y + 2))
+            surface.blit(body_font.render(msg_text, False, msg_color), (14, y + 12))
 
     def handle_input(self, action: str) -> bool:
         self._refresh_cache()
@@ -178,10 +188,14 @@ class NotificationShade:
         return False
 
     def _font(self, tokens, key: str):
+        if key in self._fonts:
+            return self._fonts[key]
         try:
-            return pygame.font.Font(tokens.FONT_PATH, tokens.FONT_SIZES[key])
+            font = pygame.font.Font(tokens.FONT_PATH, tokens.FONT_SIZES[key])
         except FileNotFoundError:
-            return pygame.font.SysFont("monospace", tokens.FONT_SIZES[key])
+            font = pygame.font.SysFont("monospace", tokens.FONT_SIZES[key])
+        self._fonts[key] = font
+        return font
 
     def _render_dot(self, surface, tokens, record: NotificationRecord, x: int, y: int) -> None:
         if record.type == "TASK":

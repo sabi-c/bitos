@@ -17,6 +17,7 @@ class PowerOverlay:
         self._on_cancel = on_cancel
         self._saving = False
         self._saved = False
+        self._fonts: dict[str, pygame.font.Font] = {}
 
     def render(self, surface, tokens):
         surface.fill(tokens.BLACK)
@@ -43,10 +44,9 @@ class PowerOverlay:
         self._render_choice(surface, body_font, tokens, "SHUTDOWN", left_x, y, row_w, row_h, selected=self._choice == 0)
         self._render_choice(surface, body_font, tokens, "REBOOT", right_x, y, row_w, row_h, selected=self._choice == 1)
 
-        hint = small_font.render("SHORT: TOGGLE  LONG: CONFIRM", False, tokens.DIM2)
-        hint2 = small_font.render("DBL: CANCEL", False, tokens.DIM3)
-        surface.blit(hint, ((tokens.PHYSICAL_W - hint.get_width()) // 2, 184))
-        surface.blit(hint2, ((tokens.PHYSICAL_W - hint2.get_width()) // 2, 198))
+        hint_font = self._font(tokens, "hint")
+        hint = hint_font.render("SHORT:TOGGLE \u00b7 LONG:CONFIRM \u00b7 DBL:CANCEL", False, tokens.DIM2)
+        surface.blit(hint, ((tokens.PHYSICAL_W - hint.get_width()) // 2, tokens.PHYSICAL_H - hint.get_height() - 2))
 
     def handle_input(self, event):
         if self._saving:
@@ -75,7 +75,11 @@ class PowerOverlay:
         surface.blit(text, (x + (w - text.get_width()) // 2, y + (h - text.get_height()) // 2))
 
     def _font(self, tokens, key: str):
+        if key in self._fonts:
+            return self._fonts[key]
         try:
-            return pygame.font.Font(tokens.FONT_PATH, tokens.FONT_SIZES[key])
+            font = pygame.font.Font(tokens.FONT_PATH, tokens.FONT_SIZES[key])
         except FileNotFoundError:
-            return pygame.font.SysFont("monospace", tokens.FONT_SIZES[key])
+            font = pygame.font.SysFont("monospace", tokens.FONT_SIZES[key])
+        self._fonts[key] = font
+        return font

@@ -10,11 +10,16 @@
     .row{display:flex;gap:10px;margin-top:10px}
     .btn{padding:11px 12px;border:1px solid #555;background:#1b1b1b;color:#fff;border-radius:10px;cursor:pointer}
     .btn.wide{display:block;width:100%}
+    .btn.secondary{background:#0e0e0e;border-color:#444;color:#aaa}
     input,textarea{width:100%;background:#0e0e0e;color:#fff;border:1px solid #444;border-radius:8px;padding:10px}
     textarea{min-height:88px}
     .muted{color:#aaa;font-size:12px}
     .step{border-top:1px solid #2b2b2b;padding-top:12px;margin-top:12px}
     .ok{color:#8fd58f}
+    .err{color:#d58f8f}
+    .pin-display{font-size:32px;letter-spacing:8px;font-family:monospace;text-align:center;padding:24px;border:2px solid #fff;margin:16px 0;color:#fff}
+    .pin-status{text-align:center;color:#aaa;font-size:13px;margin-top:8px}
+    .hidden{display:none}
   </style>
 </head>
 <body>
@@ -23,54 +28,115 @@
 
     <div class="step">
       <h3>1. CONNECT</h3>
-      <button class="btn wide" onclick="connectDevice()">CONNECT →</button>
+      <button class="btn wide" onclick="connectDevice()">CONNECT &rarr;</button>
       <div id="connect-status" class="muted"></div>
     </div>
 
+    <div class="step" id="step-pairing" class="hidden">
+      <h3>2. CONFIRM PAIRING CODE</h3>
+      <div class="pin-display" id="pairing-pin">WAITING FOR DEVICE...</div>
+      <div class="pin-status" id="pairing-status">Check your BITOS screen &mdash; codes must match</div>
+      <div class="row">
+        <button class="btn wide" onclick="confirmPairing()">&check; CODES MATCH</button>
+        <button class="btn secondary wide" onclick="rejectPairing()">&cross; CANCEL</button>
+      </div>
+    </div>
+
     <div class="step">
-      <h3>2. READ DEVICE INFO</h3>
+      <h3>3. READ DEVICE INFO</h3>
       <button class="btn" onclick="readInfo()">READ</button>
       <div id="info" class="muted"></div>
     </div>
 
     <div class="step">
-      <h3>3. ENTER PIN</h3>
+      <h3>4. ENTER PIN</h3>
       <input id="pin" type="password" placeholder="Device PIN" />
       <button class="btn" onclick="authPin()">AUTHENTICATE</button>
       <div id="auth" class="muted"></div>
     </div>
 
     <div class="step">
-      <h3>4. PAIRED</h3>
+      <h3>5. PAIRED</h3>
       <div id="paired" class="muted">Authenticate to continue.</div>
       <div class="row">
         <a href="setup.html" class="btn" style="text-decoration:none;display:inline-block">CONFIGURE WI-FI</a>
         <button class="btn" onclick="disconnect()">DISCONNECT</button>
       </div>
       <h4>KEYBOARD INPUT</h4>
-      <textarea id="kb-input" placeholder="Type here → appears on device screen"></textarea>
-      <button class="btn wide" onclick="sendKeyboard()">SEND TO DEVICE →</button>
+      <textarea id="kb-input" placeholder="Type here &rarr; appears on device screen"></textarea>
+      <button class="btn wide" onclick="sendKeyboard()">SEND TO DEVICE &rarr;</button>
     </div>
   </div>
 
-  <script src="ble.js"></script>
+  <script src="js/ble.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/crypto.js"></script>
   <script>
     const companion = new BitosCompanion();
+    let pairingActive = false;
 
     async function connectDevice() {
       try {
+        document.getElementById('connect-status').textContent = 'Connecting...';
         await companion.connect();
-        document.getElementById('connect-status').textContent = 'Connected';
+        document.getElementById('connect-status').innerHTML = '<span class="ok">Connected</span>';
+        // After connect, show pairing step and read device status
+        showPairingStep();
       } catch (e) {
-        document.getElementById('connect-status').textContent = e.message;
+        document.getElementById('connect-status').innerHTML = '<span class="err">' + e.message + '</span>';
       }
+    }
+
+    function showPairingStep() {
+      const el = document.getElementById('step-pairing');
+      el.classList.remove('hidden');
+      pairingActive = true;
+      document.getElementById('pairing-pin').textContent = 'WAITING FOR DEVICE...';
+      document.getElementById('pairing-status').textContent =
+        'Check your BITOS screen \u2014 codes must match';
+      // Poll device status for pairing state
+      pollPairingStatus();
+    }
+
+    async function pollPairingStatus() {
+      if (!pairingActive) return;
+      try {
+        if (companion.chars && companion.chars.DEVICE_STATUS) {
+          const raw = await companion.chars.DEVICE_STATUS.readValue();
+          const status = JSON.parse(new TextDecoder().decode(raw));
+          if (status.pairing_passkey) {
+            const pk = String(status.pairing_passkey).padStart(6, '0');
+            document.getElementById('pairing-pin').textContent =
+              pk.slice(0, 3) + ' ' + pk.slice(3);
+            document.getElementById('pairing-status').textContent =
+              'Verify this code matches your BITOS screen';
+            return;
+          }
+        }
+      } catch (_) {}
+      // Retry in 1s
+      if (pairingActive) setTimeout(pollPairingStatus, 1000);
+    }
+
+    function confirmPairing() {
+      pairingActive = false;
+      document.getElementById('pairing-pin').textContent = 'PAIRED \u2713';
+      document.getElementById('pairing-status').innerHTML =
+        '<span class="ok">Pairing confirmed</span>';
+    }
+
+    function rejectPairing() {
+      pairingActive = false;
+      document.getElementById('pairing-pin').textContent = 'CANCELLED';
+      document.getElementById('pairing-status').innerHTML =
+        '<span class="err">Pairing rejected</span>';
     }
 
     async function readInfo() {
       try {
         const info = await companion.readDeviceInfo();
         const serial = (info.serial || 'unknown').slice(-6);
-        document.getElementById('info').innerHTML = `serial: ${serial}<br>model: ${info.model || 'BITOS'}<br>protocol: ${info.protocol || 'v1'}`;
+        document.getElementById('info').innerHTML = 'serial: ' + serial + '<br>model: ' + (info.model || 'BITOS') + '<br>protocol: ' + (info.protocol || 'v1');
       } catch (e) {
         document.getElementById('info').textContent = e.message;
       }
@@ -82,7 +148,7 @@
         await companion.authenticate(pin);
         const status = await companion.readStatus();
         document.getElementById('auth').innerHTML = '<span class="ok">Authenticated</span>';
-        document.getElementById('paired').innerHTML = `battery: ${status.battery}% · wifi: ${status.wifi} · ai: ${status.ai}`;
+        document.getElementById('paired').innerHTML = 'battery: ' + status.battery + '% &middot; wifi: ' + status.wifi + ' &middot; ai: ' + status.ai;
       } catch (e) {
         document.getElementById('auth').textContent = e.message;
       }
@@ -94,6 +160,7 @@
     }
 
     function disconnect() {
+      pairingActive = false;
       companion.disconnect();
       document.getElementById('connect-status').textContent = 'Disconnected';
       document.getElementById('auth').textContent = '';
