@@ -116,6 +116,13 @@ class BootScreen(BaseScreen):
     def _status_copy(self) -> str:
         with self._health_lock:
             backend_status = self._startup_health.get("backend")
+            has_api_key = self._startup_health.get("api_key", False)
+            has_db = self._startup_health.get("database")
+
         if backend_status is None:
             return "CONNECTING..."
-        return "CLAUDE ONLINE ✓" if backend_status else "AI OFFLINE ⚠"
+        if has_db is False:
+            return "FIRST BOOT — SETUP"
+        if not has_api_key:
+            return "NO API KEY"
+        return "CLAUDE ONLINE ✓" if backend_status else "OFFLINE MODE ⚠"

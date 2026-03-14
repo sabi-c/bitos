@@ -233,15 +233,32 @@ class ChatPanel(BaseScreen):
     def _capture_voice_input(self):
         if self._is_streaming or not self._audio_pipeline:
             return
+        self._is_streaming = True
+        with self._messages_lock:
+            self._status = self.STATUS_CONNECTED
+            self._status_detail = "recording..."
+        threading.Thread(target=self._do_voice_capture, daemon=True).start()
+
+    def _do_voice_capture(self):
+        import time as _time
         try:
             audio_path = self._audio_pipeline.record()
+            if not audio_path:
+                self._is_streaming = False
+                return
+            _time.sleep(5)
+            self._audio_pipeline.stop_recording()
             text = self._audio_pipeline.transcribe(audio_path).strip()
         except Exception as exc:
+            self._is_streaming = False
             self._mark_failed("", "unknown", False)
             self._status_detail = f"voice err: {str(exc)[:20]}"
             return
 
+        self._is_streaming = False
         if not text:
+            with self._messages_lock:
+                self._status_detail = ""
             return
         self._input_text = text
         self._send_message()
@@ -301,6 +318,12 @@ class ChatPanel(BaseScreen):
 
             if self._repository and self._session_id is not None:
                 self._repository.add_message(self._session_id, "assistant", response_text)
+
+            if self._audio_pipeline and response_text:
+                try:
+                    self._audio_pipeline.speak(response_text)
+                except Exception:
+                    pass
 
             with self._messages_lock:
                 self._status = self.STATUS_CONNECTED

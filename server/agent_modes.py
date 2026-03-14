@@ -63,6 +63,13 @@ def get_system_prompt(
     base = BASE_CONTEXT.format(date=date.today().strftime("%A, %B %d %Y"))
     mode_prompt = AGENT_MODES.get(agent_mode, AGENT_MODES["producer"])
 
+    if tasks_today is None:
+        try:
+            from integrations.vikunja_adapter import VikunjaAdapter
+            tasks_today = VikunjaAdapter().get_tasks_today()
+        except (ImportError, Exception):
+            pass
+
     context_blocks: list[str] = []
     if tasks_today:
         today_block = "TODAY'S TASKS:\n" + "\n".join(f"- {t}" for t in tasks_today[:3])

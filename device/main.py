@@ -9,10 +9,12 @@ import httpx
 import pygame
 
 from display.driver import create_driver
+import display.tokens as tokens
 from display.tokens import FPS
 from input.handler import ButtonHandler, ButtonEvent
 from notifications import NotificationPoller
 from overlays import NotificationQueue, NotificationToast, QROverlay
+from overlays.power import PowerOverlay
 from bluetooth import AuthManager, get_gatt_server
 from bluetooth.constants import PAIRING_MODE_TIMEOUT_SECONDS
 from bluetooth.characteristics import DeviceInfoCharacteristic, DeviceStatusCharacteristic, KeyboardInputCharacteristic, WiFiConfigCharacteristic, WiFiStatusCharacteristic
@@ -41,9 +43,6 @@ from integrations.adapters import create_runtime_adapter
 from integrations.queue import OutboundCommandQueue
 from integrations.runtime import OutboundWorkerRuntimeLoop
 from integrations.worker import OutboundCommandWorker
-
-logger = logging.getLogger(__name__)
-
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +144,7 @@ def _run_main_loop(driver, button: ButtonHandler, screen_mgr: ScreenManager, out
         for result in worker_results:
             if result.status in ("retrying", "dead_letter"):
                 reason = result.reason or "unknown"
-                print(f"[Queue] command={result.command_id} status={result.status} reason={reason}")
+                logger.warning("[Queue] command=%s status=%s reason=%s", result.command_id, result.status, reason)
 
         surface = driver.get_surface()
         screen_mgr.update(dt)
@@ -490,10 +489,10 @@ def main():
             if result.status in ("retrying", "dead_letter"):
                 reason = result.reason or "unknown"
                 logger.error("[Queue] command=%s status=%s reason=%s", result.command_id, result.status, reason)
+        surface = driver.get_surface()
         screen_mgr.update(dt)
         screen_mgr.render(surface)
         if power_overlay:
-            import display.tokens as tokens
             power_overlay.render(surface, tokens)
         driver.update()
 
