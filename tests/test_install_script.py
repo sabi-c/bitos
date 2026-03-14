@@ -30,7 +30,7 @@ def test_day_one_references_two_services():
 
 def test_day_one_health_wait_has_timeout():
     day_one = _read("scripts/day_one.sh")
-    assert "MAX_WAIT=30" in day_one
-    assert "WAITED=0" in day_one
-    assert "if [ $WAITED -ge $MAX_WAIT ]; then" in day_one
-    assert "ERROR: Server didn't start in ${MAX_WAIT}s" in day_one
+    assert "echo \"Waiting for server...\"" in day_one
+    assert "until curl -sf http://localhost:8000/health > /dev/null; do" in day_one
+    assert "sleep 1" in day_one
+    assert "echo -n \".\"" in day_one
