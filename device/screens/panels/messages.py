@@ -7,8 +7,28 @@ import time
 import pygame
 
 from display.theme import load_ui_font, merge_runtime_ui_settings
-from display.tokens import BLACK, DIM2, DIM3, PHYSICAL_H, PHYSICAL_W, STATUS_BAR_H, WHITE
+from display.tokens import BLACK, DIM2, DIM3, PAD_WIDGET, PHYSICAL_H, PHYSICAL_W, ROW_H_MIN, STATUS_BAR_H, WHITE
 from screens.base import BaseScreen
+
+
+LIST_ROW_H = ROW_H_MIN
+THREAD_ROW_H = ROW_H_MIN
+THREAD_VISIBLE_ROWS = 5
+HINT_MARGIN_BOTTOM = 1
+CONTENT_TOP_PAD = 4
+LIST_META_TOP_PAD = 2
+LIST_SNIPPET_TOP_PAD = 13
+LIST_UNREAD_DOT_X_PAD = 8
+LIST_UNREAD_DOT_Y_PAD = 8
+LIST_UNREAD_DOT_RADIUS = 2
+CONFIRM_BOX_H = 80
+CONFIRM_BOX_TOP_PAD = 8
+CONFIRM_HINT_START_Y = 96
+CONFIRM_BOX_BORDER = 3
+CONFIRM_MAX_LINES = 6
+CONFIRM_HINT_ROW_STEP = 13
+TEXT_LINE_STEP = 12
+THREAD_TEXT_MAX_CHARS = 36
 
 
 class MessagesPanel(BaseScreen):
@@ -142,12 +162,13 @@ class MessagesPanel(BaseScreen):
             self._render_confirm(surface)
 
     def _render_status_bar(self, surface: pygame.Surface, title: str):
-        label = self._font_small.render(f"● {title}  {self._battery_pct}%", False, WHITE)
-        surface.blit(label, (6, (STATUS_BAR_H - label.get_height()) // 2))
+        pygame.draw.rect(surface, WHITE, pygame.Rect(0, 0, PHYSICAL_W, STATUS_BAR_H))
+        label = self._font_small.render(f"● {title}  {self._battery_pct}%", False, BLACK)
+        surface.blit(label, (PAD_WIDGET, (STATUS_BAR_H - label.get_height()) // 2))
 
     def _render_list(self, surface: pygame.Surface):
         self._render_status_bar(surface, "MESSAGES")
-        content_y = STATUS_BAR_H + 4
+        content_y = STATUS_BAR_H + CONTENT_TOP_PAD
         if self._loading:
             txt = self._font_body.render("LOADING...", False, DIM2)
             surface.blit(txt, ((PHYSICAL_W - txt.get_width()) // 2, PHYSICAL_H // 2))
@@ -155,8 +176,8 @@ class MessagesPanel(BaseScreen):
             txt = self._font_body.render("NO MESSAGES", False, DIM2)
             surface.blit(txt, ((PHYSICAL_W - txt.get_width()) // 2, PHYSICAL_H // 2))
         else:
-            row_h = 26
-            visible = (PHYSICAL_H - STATUS_BAR_H - 18) // row_h
+            row_h = LIST_ROW_H
+            visible = (PHYSICAL_H - STATUS_BAR_H - STATUS_BAR_H) // row_h
             start = min(self._focused_idx, max(0, len(self._conversations) - visible))
             y = content_y
             for idx, convo in enumerate(self._conversations[start : start + visible]):
@@ -170,46 +191,42 @@ class MessagesPanel(BaseScreen):
                 color = BLACK if focused else WHITE
                 meta_color = BLACK if focused else DIM2
                 top = self._font_small.render(f"{title:<16}{ts}", False, color)
-                surface.blit(top, (6, y + 2))
+                surface.blit(top, (PAD_WIDGET, y + LIST_META_TOP_PAD))
                 if unread > 0:
                     dot_color = BLACK if focused else WHITE
-                    pygame.draw.circle(surface, dot_color, (PHYSICAL_W - 8, y + 8), 2)
+                    pygame.draw.circle(surface, dot_color, (PHYSICAL_W - LIST_UNREAD_DOT_X_PAD, y + LIST_UNREAD_DOT_Y_PAD), LIST_UNREAD_DOT_RADIUS)
                 snippet = str(convo.get("snippet", ""))[:30]
                 sub = self._font_small.render(snippet, False, meta_color)
-                surface.blit(sub, (6, y + 13))
+                surface.blit(sub, (PAD_WIDGET, y + LIST_SNIPPET_TOP_PAD))
                 y += row_h
 
         hint = self._font_hint.render("SHORT:↕  LONG:OPEN  DBL:BACK", False, DIM3)
-        surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 1))
+        surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - HINT_MARGIN_BOTTOM))
 
     def _render_thread(self, surface: pygame.Surface):
         self._render_status_bar(surface, (self._selected_title or "CONTACT").upper()[:12])
-        y = STATUS_BAR_H + 4
-        shown = self._messages[max(0, len(self._messages) - 5 - self._thread_offset) : len(self._messages) - self._thread_offset]
+        y = STATUS_BAR_H + CONTENT_TOP_PAD
+        shown = self._messages[max(0, len(self._messages) - THREAD_VISIBLE_ROWS - self._thread_offset) : len(self._messages) - self._thread_offset]
         for message in shown:
-            text = str(message.get("text", ""))[:36]
+            text = str(message.get("text", ""))[:THREAD_TEXT_MAX_CHARS]
             if bool(message.get("from_me", False)):
                 line = self._font_small.render(text, False, WHITE)
-                surface.blit(line, (PHYSICAL_W - line.get_width() - 6, y))
-                y += 14
+                surface.blit(line, (PHYSICAL_W - line.get_width() - PAD_WIDGET, y + (THREAD_ROW_H - line.get_height()) // 2))
             else:
-                lbl = self._font_small.render("THEM:", False, DIM2)
-                surface.blit(lbl, (6, y))
-                y += 10
                 line = self._font_small.render(text, False, WHITE)
-                surface.blit(line, (6, y))
-                y += 14
+                surface.blit(line, (PAD_WIDGET, y + (THREAD_ROW_H - line.get_height()) // 2))
+            y += THREAD_ROW_H
 
         if self._status_toast and time.time() < self._status_toast_until:
             toast = self._font_small.render(self._status_toast, False, DIM2)
-            surface.blit(toast, (6, PHYSICAL_H - 26))
+            surface.blit(toast, (PAD_WIDGET, PHYSICAL_H - ROW_H_MIN))
 
         hint = self._font_hint.render("SHORT:↕  LONG:REPLY  DBL:BACK", False, DIM3)
-        surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 1))
+        surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - HINT_MARGIN_BOTTOM))
 
     def _render_draft_voice(self, surface: pygame.Surface):
         self._render_status_bar(surface, "REPLYING")
-        y = PHYSICAL_H // 2 - 26
+        y = PHYSICAL_H // 2 - ROW_H_MIN
         for row, color in [
             (f"TO: {self._selected_title[:16]}", WHITE),
             ("", WHITE),
@@ -221,33 +238,36 @@ class MessagesPanel(BaseScreen):
             if row:
                 line = self._font_body.render(row, False, color)
                 surface.blit(line, ((PHYSICAL_W - line.get_width()) // 2, y))
-            y += 12
+            y += TEXT_LINE_STEP
 
         hint = self._font_hint.render("LONG:▶ SPEAK  DBL:CANCEL", False, DIM3)
-        surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 1))
+        surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - HINT_MARGIN_BOTTOM))
 
     def _render_confirm(self, surface: pygame.Surface):
         self._render_status_bar(surface, "DRAFT")
         self.render_confirm(surface)
         hint_rows = ["[SHORT]  REFINE", "[LONG ]  SEND ✓", "[DBL  ]  DISCARD"]
-        y = STATUS_BAR_H + 96
+        y = STATUS_BAR_H + CONFIRM_HINT_START_Y
         for row in hint_rows:
             line = self._font_small.render(row, False, WHITE)
             surface.blit(line, ((PHYSICAL_W - line.get_width()) // 2, y))
-            y += 13
+            y += CONFIRM_HINT_ROW_STEP
+
+        hint = self._font_hint.render("SHORT:REFINE  LONG:SEND  DBL:BACK", False, DIM3)
+        surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - HINT_MARGIN_BOTTOM))
 
     def render_confirm(self, surface: pygame.Surface):
-        x, y, w, h = 6, STATUS_BAR_H + 8, PHYSICAL_W - 12, 80
-        pygame.draw.rect(surface, WHITE, pygame.Rect(x, y, w, h), width=3)
-        lines = self._wrap_text(self._draft_text or "", w - 12)
-        if len(lines) > 6:
-            lines = lines[:6]
+        x, y, w, h = PAD_WIDGET, STATUS_BAR_H + CONFIRM_BOX_TOP_PAD, PHYSICAL_W - (PAD_WIDGET * 2), CONFIRM_BOX_H
+        pygame.draw.rect(surface, WHITE, pygame.Rect(x, y, w, h), width=CONFIRM_BOX_BORDER)
+        lines = self._wrap_text(self._draft_text or "", w - (PAD_WIDGET * 2))
+        if len(lines) > CONFIRM_MAX_LINES:
+            lines = lines[:CONFIRM_MAX_LINES]
             lines[-1] = (lines[-1][: max(0, len(lines[-1]) - 3)] + "...") if lines[-1] else "..."
-        yy = y + 6
+        yy = y + PAD_WIDGET
         for line in lines:
             s = self._font_small.render(line, False, WHITE)
-            surface.blit(s, (x + 6, yy))
-            yy += 12
+            surface.blit(s, (x + PAD_WIDGET, yy))
+            yy += TEXT_LINE_STEP
 
     def _wrap_text(self, text: str, max_width: int) -> list[str]:
         if not text:
