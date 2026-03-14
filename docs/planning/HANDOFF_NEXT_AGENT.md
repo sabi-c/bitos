@@ -25,24 +25,28 @@ This document is a practical takeover brief for the next implementation contribu
 
 ## 2) Immediate next implementation target
 
-## P3-006 — Runtime worker loop integration + adapter wiring
+## P4-004 — Notification shade + panel data-source wiring
 
-P3-005 baseline is now complete:
-- ChatPanel now renders compact queue/dead-letter status (`q:<depth> d:<count>`) on-device.
-- Latest dead-letter reason is surfaced in short tiny-screen-safe copy.
-- Added focused tests for queue status copy with/without repository wiring.
+Built this sprint: settings is now wired to local persistence (web search/memory toggles, model picker, agent mode picker, sleep timer detail, and about panel), and long-press actions persist immediately where required. Notification overlay architecture is now in place via `NotificationToast` + `NotificationQueue` and is integrated into `ScreenManager` so overlays render above active screens and can consume SHORT/LONG actions first. Adapter/runtime provenance headers were also added to clarify why those integration files exist.
 
-Deliver the next Phase 3 slice:
-1. Run `OutboundCommandWorker.process_once()` periodically from device runtime loop.
-2. Wire runtime-selected adapters into worker construction (mock/echo adapter allowed initially).
-3. Keep worker processing non-blocking and bounded per frame/tick.
-4. Emit concise logs when commands move to retrying or dead-letter states.
+Read first next iteration:
+1. `docs/planning/TASK_TRACKER.md`
+2. `device/screens/panels/settings.py` and `device/storage/repository.py`
+3. `device/overlays/notification.py` and `device/screens/manager.py`
+
+Most important thing to know: preserve overlay-first input handling and button gesture consistency while adding real notification/settings data feeds (no keyboard-only paths).
+
+Deliver the next Phase 4 slice:
+1. Implement NotificationShade (full list view) and link overlay `on_open` flows to it.
+2. Replace notifications shell placeholders with repository/provider-backed items.
+3. Wire settings values that should sync with backend UI settings where applicable.
+4. Extend tests for shade behavior, hydration, and error fallbacks.
 
 ### Suggested acceptance checks
-- Enqueued command is processed without manual trigger when runtime loop is active.
-- Retryable worker failures transition to retrying and later succeed when adapter recovers.
-- Dead-letter count increments on non-retryable failures and appears in chat debug status.
-- Existing tests remain green and new runtime-loop tests are added.
+- Overlay toasts continue rendering on top of any active screen with correct expiry and dismissal behavior.
+- NotificationShade can open from a toast long-press and render persisted entries safely.
+- Settings values survive restarts and remain consistent between detail pickers and main settings list.
+- Full suite remains green with new shade/data-path coverage.
 
 ---
 

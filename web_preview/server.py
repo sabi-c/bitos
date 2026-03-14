@@ -81,6 +81,15 @@ if __name__ == "__main__":
     from screens.lock import LockScreen
     from screens.panels.home import HomePanel
     from screens.panels.chat import ChatPanel
+    from screens.panels.focus import FocusPanel
+    from screens.panels.notifications import NotificationsPanel
+    from screens.panels.settings import (
+        AboutPanel,
+        AgentModePanel,
+        ModelPickerPanel,
+        SettingsPanel,
+        SleepTimerPanel,
+    )
     from client.api import BackendClient
     from storage.repository import DeviceRepository
 
@@ -106,8 +115,47 @@ if __name__ == "__main__":
     def open_chat():
         screen_mgr.replace(ChatPanel(client, ui_settings=ui_settings, repository=repository))
 
+    def open_focus():
+        screen_mgr.replace(FocusPanel(on_back=on_unlock, ui_settings=ui_settings))
+
+    def open_notifications():
+        screen_mgr.replace(NotificationsPanel(on_back=on_unlock, ui_settings=ui_settings))
+
+    def open_settings():
+        screen_mgr.replace(
+            SettingsPanel(
+                repository=repository,
+                on_back=on_unlock,
+                on_open_model_picker=open_model_picker,
+                on_open_agent_mode=open_agent_mode,
+                on_open_sleep_timer=open_sleep_timer,
+                on_open_about=open_about,
+                ui_settings=ui_settings,
+            )
+        )
+
+    def open_model_picker():
+        screen_mgr.replace(ModelPickerPanel(repository=repository, on_back=open_settings, ui_settings=ui_settings))
+
+    def open_agent_mode():
+        screen_mgr.replace(AgentModePanel(repository=repository, on_back=open_settings, ui_settings=ui_settings))
+
+    def open_sleep_timer():
+        screen_mgr.replace(SleepTimerPanel(repository=repository, on_back=open_settings, ui_settings=ui_settings))
+
+    def open_about():
+        screen_mgr.replace(AboutPanel(on_back=open_settings, ui_settings=ui_settings))
+
     def on_unlock():
-        screen_mgr.replace(HomePanel(on_open_chat=open_chat, ui_settings=ui_settings))
+        screen_mgr.replace(
+            HomePanel(
+                on_open_chat=open_chat,
+                on_open_focus=open_focus,
+                on_open_notifications=open_notifications,
+                on_open_settings=open_settings,
+                ui_settings=ui_settings,
+            )
+        )
 
     def on_boot_complete():
         screen_mgr.replace(LockScreen(on_unlock=on_unlock, ui_settings=ui_settings))
