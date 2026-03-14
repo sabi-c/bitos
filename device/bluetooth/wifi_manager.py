@@ -97,7 +97,7 @@ class WiFiManager:
             )
         except subprocess.TimeoutExpired:
             logging.warning("wifi_status_timeout")
-            return {"connected": False, "ssid": "", "signal": "weak", "ip": "", "last_error": "timeout"}
+            return {"connected": False, "ssid": "", "signal": "weak", "ip": "", "last_error": None}
 
         ssid = ""
         signal = "weak"

@@ -114,7 +114,11 @@ class ST7789Driver(DisplayDriver):
         try:
             import spidev
             import RPi.GPIO as GPIO  # type: ignore
+        except ModuleNotFoundError as e:
+            logger.error("st7789_init_failed", extra={"error": str(e)})
+            raise NotImplementedError("ST7789 dependencies are unavailable on this platform") from e
 
+        try:
             pygame.init()
             self._surface = pygame.Surface((self.WIDTH, self.HEIGHT))
             self._surface.fill(BLACK)

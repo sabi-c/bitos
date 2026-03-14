@@ -69,21 +69,3 @@ if __name__ == "__main__":
         sys.exit(1)
 
     print("ALL HARDWARE OK — ready to run BITOS")
-check("PiSugar 3 (I2C 0x57)", check_i2c)
-check("WM8960 audio (I2C 0x1A)", check_wm8960)
-check("SPI (ST7789 display)", check_spi)
-check("GPIO P11 (button)", check_gpio)
-check("ALSA WM8960 (speaker)", check_audio)
-
-print("HARDWARE VERIFICATION")
-print("─" * 30)
-for r in results:
-    print(r)
-
-fails = [r for r in results if "✗" in r]
-print("─" * 30)
-if fails:
-    print(f"FAILED: {len(fails)} issue(s). Fix before running BITOS.")
-    sys.exit(1)
-
-print("ALL HARDWARE OK — ready to run BITOS")
