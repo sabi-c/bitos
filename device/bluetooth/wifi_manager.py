@@ -8,6 +8,10 @@ import subprocess
 from bluetooth.network_manager import NetworkPriorityManager
 
 
+NMCLI_TIMEOUT_SECONDS = 8
+STATUS_TIMEOUT_SECONDS = 3
+
+
 class WiFiManager:
     """Wraps nmcli for WiFi operations."""
 

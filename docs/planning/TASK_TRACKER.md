@@ -163,6 +163,10 @@ For **every implementation iteration** (code or docs):
 
 ## Iteration Log
 
+| 2026-03-14 | GPT-5.2-Codex | work | `this-commit` | Completed BOOT-001 boot hardening (state restore, startup health, crash logging, service restart limits) with regression tests | `device/main.py`, `device/screens/boot.py`, `device/screens/panels/home.py`, `device/screens/panels/chat.py`, `device/screens/panels/focus.py`, `device/client/api.py`, `scripts/setup/04_bitos_service.sh`, `tests/test_boot_sequence.py`, `docs/planning/TASK_TRACKER.md` | Next: P5-012a companion PWA `setup.html` baseline |
+
+| 2026-03-14 | GPT-5.2-Codex | work | `this-commit` | Completed FIX-MERGE-001 integration verification, SD trace comment coverage, and WiFi timeout regression tests | `device/main.py`, `device/bluetooth/auth.py`, `device/bluetooth/characteristics/wifi_config.py`, `device/bluetooth/characteristics/keyboard_input.py`, `device/client/api.py`, `server/main.py`, `device/bluetooth/wifi_manager.py`, `tests/test_wifi_manager.py`, `docs/planning/TASK_TRACKER.md`, `docs/planning/HANDOFF_NEXT_AGENT.md` | Next: P5-012a companion PWA `setup.html` baseline |
+
 | Date | Contributor | Branch | Commit | Tasks completed | Docs updated | Next tasks |
 |---|---|---|---|---|---|---|
 | 2026-03-14 | GPT-5.2-Codex | work | `this-commit` | Completed TEST-HW-001 hardware-mock test coverage for input/display/crypto/smoke safety paths | `tests/test_button_handler.py`, `tests/test_display_driver.py`, `tests/test_crypto_parity.py`, `tests/test_smoke_integration.py`, `docs/planning/TASK_TRACKER.md` | Next: continue highest-priority gaps from test coverage report |

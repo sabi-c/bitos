@@ -17,6 +17,7 @@ class KeyboardInputCharacteristic:
     def WriteValue(self, value, _options):
         payload = json.loads(bytes(value).decode("utf-8"))
         session_token = str(payload.get("session_token", ""))
+        # SD-002: Protected input writes require a valid BLE auth session token.
         if not self._auth_manager.validate_session_token(session_token):
             raise AuthError("INVALID_SESSION_TOKEN")
 

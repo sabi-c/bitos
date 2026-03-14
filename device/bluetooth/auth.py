@@ -25,6 +25,7 @@ class AuthManager:
     def __init__(self, pin_hash: str, device_serial: str, ble_secret: str | None = None):
         self._pin_hash = pin_hash
         self._device_serial = device_serial
+        # SD-005: BLE HMAC secret is loaded from protected environment configuration.
         self._ble_secret_hex = ble_secret or os.environ.get("BITOS_BLE_SECRET", "")
         self._ble_secret = bytes.fromhex(self._ble_secret_hex) if self._ble_secret_hex else b""
         self._seen_nonces: dict[str, float] = {}
@@ -34,6 +35,7 @@ class AuthManager:
         self._lockouts: dict[str, float] = {}
 
     def get_challenge(self) -> dict:
+        # SD-002: Challenge nonce/timestamp pair establishes replay-resistant proof-of-possession flow.
         nonce = os.urandom(32).hex()
         now = int(time.time())
         self._seen_nonces[nonce] = time.time() + NONCE_TTL_SECONDS
@@ -71,6 +73,7 @@ class AuthManager:
             raise AuthError("BLE_SECRET_NOT_SET")
 
         msg = bytes.fromhex(nonce) + int(ts).to_bytes(8, byteorder="big", signed=False)
+        # SD-002: HMAC verification gates session-token issuance for all protected BLE writes.
         expected = hmac.new(self._ble_secret, msg, digestmod="sha256").hexdigest()
 
         if not hmac.compare_digest(expected, response_hex.lower()):

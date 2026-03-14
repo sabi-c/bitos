@@ -27,6 +27,7 @@ class BackendClient:
 
     def __init__(self, base_url: str | None = None):
         self.base_url = base_url or os.environ.get("BITOS_SERVER_URL", DEFAULT_SERVER_URL)
+        # SD-005: Device API token is loaded from environment-backed secret material.
         self.device_token = os.environ.get("BITOS_DEVICE_TOKEN", "")
         if not self.device_token:
             logging.warning("[BITOS] BITOS_DEVICE_TOKEN is not set; running in dev mode without device token auth")
@@ -34,12 +35,13 @@ class BackendClient:
     def _request_headers(self) -> dict:
         if not self.device_token:
             return {}
+        # SD-004: X-Device-Token header applies static device-token middleware auth on server routes.
         return {"X-Device-Token": self.device_token}
 
-    def health(self) -> bool:
+    def health(self, timeout: float = 3.0) -> bool:
         """Check if the server is running."""
         try:
-            r = httpx.get(f"{self.base_url}/health", timeout=3.0, headers=self._request_headers())
+            r = httpx.get(f"{self.base_url}/health", timeout=timeout, headers=self._request_headers())
             return r.status_code == 200
         except Exception:
             return False
