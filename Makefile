@@ -1,4 +1,4 @@
-.PHONY: dev-server dev-device dev-preview dev-both run-dev run-server run-both verify-hw run-pi run-pi-server install ssh-pi logs db-web vnc push deploy ship setup-offline-ai
+.PHONY: dev-server dev-device dev-preview dev-both run-dev run-server run-both verify-hw run-pi run-pi-server install ssh ssh-pi start stop restart status logs logs-device logs-server db-web vnc push deploy ship setup-offline-ai
 
 install:
 	pip install -r requirements.txt
@@ -23,7 +23,25 @@ ssh-pi:
 	ssh pi@bitos
 
 logs:
-	ssh pi@bitos "journalctl -u bitos -f --output=cat"
+	ssh pi@bitos "journalctl -u bitos-server -u bitos-device -f --no-pager -n 50"
+
+start:
+	ssh pi@bitos "sudo systemctl start bitos-server bitos-device"
+
+stop:
+	ssh pi@bitos "sudo systemctl stop bitos-device bitos-server"
+
+restart:
+	ssh pi@bitos "sudo systemctl restart bitos-server && sleep 3 && sudo systemctl restart bitos-device"
+
+status:
+	ssh pi@bitos "systemctl status bitos-server bitos-device --no-pager"
+
+logs-device:
+	ssh pi@bitos "journalctl -u bitos-device -f --no-pager"
+
+logs-server:
+	ssh pi@bitos "journalctl -u bitos-server -f --no-pager"
 
 db-web:
 	ssh pi@bitos "sqlite_web ~/bitos/server/bitos.db \
@@ -40,7 +58,7 @@ push:
 	    server/ pi@bitos:~/bitos/server/
 
 deploy: push
-	ssh pi@bitos "sudo systemctl restart bitos"
+	ssh pi@bitos "sudo systemctl restart bitos-server && sleep 3 && sudo systemctl restart bitos-device"
 
 ship: push deploy logs
 
@@ -75,3 +93,4 @@ run-pi-server:
 
 setup-offline-ai:
 	ssh pi@bitos "bash ~/bitos/scripts/setup/06_offline_ai.sh"
+ssh: ssh-pi
