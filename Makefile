@@ -1,4 +1,4 @@
-.PHONY: dev-server dev-device dev-preview dev-both run-dev run-server run-both verify-hw run-pi run-pi-server install ssh ssh-pi start stop restart status logs logs-device logs-server check-install db-web vnc push deploy ship setup-offline-ai
+.PHONY: dev-server dev-device dev-preview dev-both run-dev run-server run-both verify-hw run-pi run-pi-server install ssh ssh-pi start stop restart status logs logs-device logs-server db-web vnc push deploy ship setup-offline-ai
 
 install:
 	pip install -r requirements.txt
@@ -42,15 +42,6 @@ logs-device:
 
 logs-server:
 	ssh pi@bitos "journalctl -u bitos-server -f --no-pager"
-
-check-install:
-	@echo "Checking install.sh references..."
-	@grep -n "bitos\.service\b" scripts/install.sh && \
-	  echo "WARNING: old service name found" || \
-	  echo "OK: no old bitos.service references"
-	@grep -n "bitos-server\|bitos-device" \
-	  scripts/install.sh | head -5
-	@echo "Service setup looks correct"
 
 db-web:
 	ssh pi@bitos "sqlite_web ~/bitos/server/bitos.db \

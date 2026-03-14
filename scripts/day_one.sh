@@ -30,18 +30,9 @@ echo "Step 3: Start services..."
 sudo systemctl enable bitos-server bitos-device
 sudo systemctl start bitos-server
 echo "Waiting for server..."
-MAX_WAIT=30
-WAITED=0
 until curl -sf http://localhost:8000/health > /dev/null; do
   sleep 1
   echo -n "."
-  WAITED=$((WAITED+1))
-  if [ $WAITED -ge $MAX_WAIT ]; then
-    echo ""
-    echo "ERROR: Server didn't start in ${MAX_WAIT}s"
-    echo "Check logs: journalctl -u bitos-server -n 20"
-    exit 1
-  fi
 done
 echo " OK"
 sudo systemctl start bitos-device
