@@ -14,8 +14,14 @@ run_privileged() {
 
 run_privileged mkdir -p "$(dirname "$SECRETS")"
 run_privileged touch "$SECRETS"
-run_privileged chmod 600 "$SECRETS"
-run_privileged chown root:root "$SECRETS"
+
+# Only chown on real Pi (skip in CI/test mode)
+if [ -n "${BITOS_SUDO_BIN:-sudo}" ]; then
+  ${BITOS_SUDO_BIN:-sudo} chown root:root "$SECRETS"
+  ${BITOS_SUDO_BIN:-sudo} chmod 600 "$SECRETS"
+else
+  chmod 600 "$SECRETS" 2>/dev/null || true
+fi
 
 ensure_secret() {
   local key="$1"
