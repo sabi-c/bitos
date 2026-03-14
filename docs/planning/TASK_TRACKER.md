@@ -73,6 +73,7 @@ For **every implementation iteration** (code or docs):
 
 | ID | Phase | Workstream | Task | Owner | Status | Updated | Notes |
 |---|---|---|---|---|---|---|---|
+| MAIL-RESEARCH-001 | Phase 3 | Messaging/Email | Gmail MCP integration research report and adapter planning | GPT-5.2-Codex | done | 2026-03-14 | Added `docs/planning/EMAIL_INTEGRATION.md` with MCP call patterns, tool-use schemas, adapter design, UI mapping, permission tiers, and risks |
 | MSGS-RESEARCH-001 | Phase 3 | Messaging/iMessage | BlueBubbles iMessage integration research report and implementation plan | GPT-5.2-Codex | done | 2026-03-14 | Added `docs/planning/IMESSAGE_INTEGRATION.md` with endpoint/auth/webhook/adapter design recommendations |
 | MSGS-001 | Phase 3 | Messaging/iMessage | BlueBubbles adapter + messages panel + home unread wiring | GPT-5.2-Codex | done | 2026-03-14 | Implemented server/device message flows, UI panel states, and tests for adapter/endpoints/panel behavior |
 | POLISH-001 | Phase 2 | UX/Install | End-to-end system polish + one-command SD flash + diagnostics | GPT-5.2-Codex | done | 2026-03-14 | Added flash script, boot diagnostics, error handling polish, UI verification trail, README one-pager |
@@ -222,3 +223,4 @@ For **every implementation iteration** (code or docs):
 
 | 2026-03-14 | GPT-5.2-Codex | work | this-commit | Completed MSGS-RESEARCH-001 BlueBubbles iMessage integration research report (research-only; no implementation code) | `docs/planning/IMESSAGE_INTEGRATION.md`, `docs/planning/TASK_TRACKER.md` | Next: validate endpoint/payload details against live BlueBubbles docs from an environment with outbound access, then begin adapter implementation slice |
 
+| 2026-03-14 | GPT-5.2-Codex | work | this-commit | Completed MAIL-RESEARCH-001 Gmail MCP integration research report (research-only; no implementation code) | `docs/planning/EMAIL_INTEGRATION.md`, `docs/planning/TASK_TRACKER.md` | Next: confirm live Gmail MCP tool argument/response schemas via `tools/list` from an environment with connector access before adapter implementation |
