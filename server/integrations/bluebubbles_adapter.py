@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 
-import requests
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +67,14 @@ class BlueBubblesAdapter:
         self._pw = os.environ.get("BLUEBUBBLES_PASSWORD", "")
         self._mock = not self._pw
 
+    @property
+    def is_mock(self) -> bool:
+        return self._mock
+
+    @property
+    def base_url(self) -> str:
+        return self._base
+
     def _p(self, extra=None):
         p = {"password": self._pw}
         if extra:
@@ -76,7 +84,7 @@ class BlueBubblesAdapter:
     def get_conversations(self, limit=25) -> list[dict]:
         if self._mock:
             return self.MOCK_DATA["conversations"]
-        response = requests.get(
+        response = httpx.get(
             f"{self._base}/api/v1/chat/query",
             params=self._p({"limit": limit}),
             timeout=10,
@@ -88,7 +96,7 @@ class BlueBubblesAdapter:
     def get_messages(self, chat_id: str, limit=15) -> list[dict]:
         if self._mock:
             return self.MOCK_DATA["messages"].get(chat_id, [])
-        response = requests.get(
+        response = httpx.get(
             f"{self._base}/api/v1/chat/{chat_id}/message",
             params=self._p({"limit": limit}),
             timeout=10,
@@ -102,7 +110,7 @@ class BlueBubblesAdapter:
         if self._mock:
             logger.info("mock_send chat=%s", chat_id[:30])
             return True
-        response = requests.post(
+        response = httpx.post(
             f"{self._base}/api/v1/message/text",
             params=self._p(),
             json={"chatGuid": chat_id, "message": text},
@@ -113,6 +121,17 @@ class BlueBubblesAdapter:
     def get_unread_count(self) -> int:
         conversations = self.get_conversations()
         return sum(conversation.get("unread", 0) for conversation in conversations)
+
+    def ping(self) -> bool:
+        if self._mock:
+            return True
+        response = httpx.get(
+            f"{self._base}/api/v1/ping",
+            params=self._p(),
+            timeout=5,
+        )
+        response.raise_for_status()
+        return True
 
     def _normalize_chat(self, chat: dict) -> dict:
         return {
