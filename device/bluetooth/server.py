@@ -48,16 +48,19 @@ class BitosGATTServer:
         self._discoverable = False
         self._pairing_until = 0.0
         self._companion_connected = False
+        self._stop_event = threading.Event()
 
     def start(self) -> None:
         if self._running:
             return
         self._running = True
+        self._stop_event.clear()
         self._thread = threading.Thread(target=self._loop, name="bitos-gatt", daemon=True)
         self._thread.start()
 
     def stop(self) -> None:
         self._running = False
+        self._stop_event.set()
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=1.0)
 
@@ -84,7 +87,7 @@ class BitosGATTServer:
         while self._running:
             if self._discoverable and self._pairing_until and time.time() >= self._pairing_until:
                 self.set_discoverable(False)
-            time.sleep(0.2)
+            self._stop_event.wait(timeout=0.2)
 
 
 class MockGATTServer:
