@@ -39,10 +39,10 @@ class Phase2ShellFlowTests(unittest.TestCase):
     def test_lock_unlock_action(self):
         unlocked = {"called": False}
 
-        def on_unlock():
+        def on_home():
             unlocked["called"] = True
 
-        lock = LockScreen(on_unlock=on_unlock)
+        lock = LockScreen(on_home=on_home)
         lock.handle_action("SHORT_PRESS")
         self.assertTrue(unlocked["called"])
 
@@ -83,17 +83,17 @@ class Phase2ShellFlowTests(unittest.TestCase):
         self.assertEqual(opened["chat"], 1)
 
         # Move focus to FOCUS and activate.
-        home.handle_action("DOUBLE_PRESS")
+        home.handle_action("LONG_PRESS")
         home.handle_action("SHORT_PRESS")
         self.assertEqual(opened["focus"], 1)
 
         # Move focus to NOTIFS and activate.
-        home.handle_action("DOUBLE_PRESS")
+        home.handle_action("LONG_PRESS")
         home.handle_action("SHORT_PRESS")
         self.assertEqual(opened["notifs"], 1)
 
         # Move focus to SETTINGS and activate.
-        home.handle_action("DOUBLE_PRESS")
+        home.handle_action("LONG_PRESS")
         home.handle_action("SHORT_PRESS")
         self.assertEqual(opened["settings"], 1)
 

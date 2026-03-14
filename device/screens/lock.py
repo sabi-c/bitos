@@ -10,8 +10,8 @@ from display.theme import merge_runtime_ui_settings, load_ui_font
 class LockScreen(BaseScreen):
     """Simple lock gate before entering home flow."""
 
-    def __init__(self, on_unlock=None, ui_settings: dict | None = None):
-        self._on_unlock = on_unlock
+    def __init__(self, on_home=None, ui_settings: dict | None = None):
+        self._on_home = on_home
         self._is_unlocking = False
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
 
@@ -52,5 +52,5 @@ class LockScreen(BaseScreen):
         if self._is_unlocking:
             return
         self._is_unlocking = True
-        if self._on_unlock:
-            self._on_unlock()
+        if self._on_home:
+            self._on_home()

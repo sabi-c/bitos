@@ -8,7 +8,7 @@ from contextlib import closing
 
 
 DEFAULT_DB_PATH = "device/data/bitos.db"
-LATEST_SCHEMA_VERSION = 2
+LATEST_SCHEMA_VERSION = 4
 
 
 MIGRATIONS: dict[int, str] = {
@@ -67,6 +67,33 @@ MIGRATIONS: dict[int, str] = {
     CREATE INDEX IF NOT EXISTS idx_outbound_commands_ready
       ON outbound_commands(status, next_attempt_at, created_at);
     """,
+    3: """
+    CREATE TABLE IF NOT EXISTS tasks (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        completed INTEGER NOT NULL DEFAULT 0,
+        created_at REAL NOT NULL,
+        updated_at REAL NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_tasks_completed
+      ON tasks(completed);
+    """,
+    4: """
+    CREATE TABLE IF NOT EXISTS notifications (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL,
+        app_name TEXT NOT NULL,
+        message TEXT NOT NULL,
+        time_str TEXT NOT NULL,
+        read INTEGER NOT NULL DEFAULT 0,
+        source_id TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_notifications_created
+      ON notifications(created_at DESC);
+    """,
 }
 
 
@@ -91,6 +118,8 @@ class DeviceRepository:
             current = self.get_schema_version(conn)
             for version in range(current + 1, LATEST_SCHEMA_VERSION + 1):
                 conn.executescript(MIGRATIONS[version])
+                if version >= 3:
+                    self._ensure_tasks_due_date_column(conn)
                 conn.execute("UPDATE schema_version SET version = ?", (version,))
             conn.commit()
 
@@ -106,6 +135,18 @@ class DeviceRepository:
         if not row or row["c"] == 0:
             conn.execute("INSERT INTO schema_version(version) VALUES (0)")
         conn.commit()
+
+    def _ensure_tasks_due_date_column(self, conn: sqlite3.Connection) -> None:
+        task_table = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'"
+        ).fetchone()
+        if not task_table:
+            return
+        cols = conn.execute("PRAGMA table_info(tasks)").fetchall()
+        col_names = {str(row["name"]) for row in cols}
+        if "due_date" not in col_names:
+            conn.execute("ALTER TABLE tasks ADD COLUMN due_date TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_due_completed ON tasks(completed, due_date)")
 
     def get_schema_version(self, conn: sqlite3.Connection | None = None) -> int:
         if conn is None:
@@ -154,7 +195,6 @@ class DeviceRepository:
             return None, []
         return latest, self.list_messages(latest)
 
-
     def get_setting(self, key: str, default=None):
         with closing(self._connect()) as conn:
             row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
@@ -194,6 +234,85 @@ class DeviceRepository:
                 (key, str(stored), now),
             )
             conn.commit()
+
+    def add_notification(self, record) -> None:
+        with closing(self._connect()) as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO notifications(id, type, app_name, message, time_str, read, source_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    record.id,
+                    record.type,
+                    record.app_name,
+                    record.message,
+                    record.time_str,
+                    1 if record.read else 0,
+                    record.source_id,
+                ),
+            )
+            conn.commit()
+
+    def list_notifications(self, limit: int = 50) -> list[dict]:
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                """
+                SELECT id, type, app_name, message, time_str, read, source_id, created_at
+                FROM notifications
+                ORDER BY datetime(created_at) DESC, id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def mark_notification_read(self, notification_id: str) -> None:
+        with closing(self._connect()) as conn:
+            conn.execute("UPDATE notifications SET read = 1 WHERE id = ?", (notification_id,))
+            conn.commit()
+
+    def trim_notifications(self, max_rows: int = 50) -> None:
+        with closing(self._connect()) as conn:
+            conn.execute(
+                """
+                DELETE FROM notifications
+                WHERE id IN (
+                    SELECT id FROM notifications
+                    ORDER BY datetime(created_at) DESC, id DESC
+                    LIMIT -1 OFFSET ?
+                )
+                """,
+                (max_rows,),
+            )
+            conn.commit()
+
+    def add_task(self, task_id: str, title: str, due_date: str | None = None, completed: bool = False) -> None:
+        now = time.time()
+        with closing(self._connect()) as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO tasks(id, title, completed, due_date, created_at, updated_at)
+                VALUES (?, ?, ?, ?, COALESCE((SELECT created_at FROM tasks WHERE id = ?), ?), ?)
+                """,
+                (task_id, title, 1 if completed else 0, due_date, task_id, now, now),
+            )
+            conn.commit()
+
+    def list_overdue_tasks(self, now_iso: str) -> list[dict]:
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                """
+                SELECT id, title, due_date, completed
+                FROM tasks
+                WHERE due_date IS NOT NULL
+                  AND date(due_date) < date(?)
+                  AND completed = 0
+                ORDER BY date(due_date) ASC, id ASC
+                """,
+                (now_iso,),
+            ).fetchall()
+            return [dict(row) for row in rows]
 
     def queue_enqueue_command(self, domain: str, operation: str, payload: str, max_attempts: int = 3) -> int:
         now = time.time()

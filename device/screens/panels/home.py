@@ -16,12 +16,14 @@ class HomePanel(BaseScreen):
         on_open_focus=None,
         on_open_notifications=None,
         on_open_settings=None,
+        on_show_shade=None,
         ui_settings: dict | None = None,
     ):
         self._on_open_chat = on_open_chat
         self._on_open_focus = on_open_focus
         self._on_open_notifications = on_open_notifications
         self._on_open_settings = on_open_settings
+        self._on_show_shade = on_show_shade
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
         self._font_title = load_ui_font("title", self._ui_settings)
         self._font_body = load_ui_font("body", self._ui_settings)
@@ -38,7 +40,9 @@ class HomePanel(BaseScreen):
     def handle_action(self, action: str):
         if action == "SHORT_PRESS":
             self._nav.activate_focused()
-        elif action in {"DOUBLE_PRESS", "LONG_PRESS"}:
+        elif action == "DOUBLE_PRESS":
+            self._open_shade()
+        elif action == "LONG_PRESS":
             self._nav.move(1)
         elif action == "TRIPLE_PRESS":
             self._nav.move(-1)
@@ -73,7 +77,7 @@ class HomePanel(BaseScreen):
             pygame.draw.line(surface, HAIRLINE, (8, y + 12), (PHYSICAL_W - 8, y + 12))
             y += 20
 
-        hint = self._font_small.render("SEL SHORT • NEXT DOUBLE", False, DIM3)
+        hint = self._font_small.render("SEL SHORT • SHADE DOUBLE", False, DIM3)
         surface.blit(hint, (8, PHYSICAL_H - 14))
 
     def _open_chat(self):
@@ -91,3 +95,8 @@ class HomePanel(BaseScreen):
     def _open_settings(self):
         if self._on_open_settings:
             self._on_open_settings()
+
+
+    def _open_shade(self):
+        if self._on_show_shade:
+            self._on_show_shade()

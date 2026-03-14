@@ -1,3 +1,20 @@
+<!--
+# SPRINT: P5-007/P5-008/P5-009 — Implement BLE WiFi config, device status notify, and keyboard input routing characteristics.
+# READS: docs/planning/TASK_TRACKER.md, docs/planning/HANDOFF_NEXT_AGENT.md, device/bluetooth/constants.py, device/bluetooth/auth.py,
+#        device/bluetooth/characteristics/wifi_config.py, device/bluetooth/characteristics/device_status.py,
+#        device/screens/manager.py, device/screens/panels/chat.py, device/screens/subscreens/__init__.py,
+#        README.md, ROADMAP.md
+# WRITES: docs/planning/TASK_TRACKER.md, device/bluetooth/crypto.py, device/bluetooth/wifi_manager.py,
+#         device/bluetooth/characteristics/wifi_config.py, device/bluetooth/characteristics/device_status.py,
+#         device/bluetooth/characteristics/keyboard_input.py, device/bluetooth/characteristics/__init__.py,
+#         device/bluetooth/server.py, device/main.py, device/screens/manager.py, device/screens/panels/chat.py,
+#         device/screens/subscreens/__init__.py, device/bluetooth/COMPANION_PROTOCOL.md, docs/planning/MAC_AI_SERVICE.md,
+#         README.md, ROADMAP.md, tests/test_wifi_config.py, tests/test_device_status.py, tests/test_keyboard_input.py,
+#         tests/test_companion_protocol.py, docs/planning/HANDOFF_NEXT_AGENT.md
+# TESTS: tests/test_wifi_config.py, tests/test_device_status.py, tests/test_keyboard_input.py, tests/test_companion_protocol.py
+# DEFERRED: notification relay characteristic, settings/pin/reboot BLE characteristics, real desktop nmcli execution.
+-->
+
 # BITOS Task Tracker
 
 This file is the canonical task management surface for the repository.
@@ -28,6 +45,9 @@ For **every implementation iteration** (code or docs):
 
 | ID | Phase | Workstream | Task | Owner | Status | Updated | Notes |
 |---|---|---|---|---|---|---|---|
+| 2026-03-14 | GPT-5.2-Codex | work | `33848ad` | Completed P5-007/P5-008/P5-009 BLE characteristics: WiFi config+status, device status notify, keyboard input routing, companion protocol doc, and Phase 10 planning docs/tasks | `docs/planning/TASK_TRACKER.md`, `docs/planning/HANDOFF_NEXT_AGENT.md`, `docs/planning/MAC_AI_SERVICE.md`, `README.md`, `ROADMAP.md` | Next: P5-010 NetworkManager priority tuning + BT PAN baseline |
+| 2026-03-14 | GPT-5.2-Codex | work | `34cb423` | Completed P5-004/P5-005/P5-006 BLE foundation: UUID/constants, mockable GATT server shell, pairing agent, passkey overlay, BLE secret setup update, and test coverage | `docs/planning/TASK_TRACKER.md`, `docs/planning/HANDOFF_NEXT_AGENT.md`, `scripts/setup/02b_secrets.sh` | Next: P5-007/P5-008/P5-009 characteristic handlers (wifi config/device status/keyboard input) |
+| 2026-03-14 | GPT-5.2-Codex | work | `6bdf05f` | Completed P5-001/P5-002/P5-003 infra foundation: setup scripts, remote Makefile workflows, static device-token auth middleware, and validation tests | `docs/planning/TASK_TRACKER.md`, `docs/planning/HANDOFF_NEXT_AGENT.md`, `scripts/setup/README.md` | Next: P5-004 BLE GATT server + transport security follow-through |
 | P2-001 | Phase 2 | WS-A App Shell | Add lock screen + route from boot | GPT-5.2-Codex | done | 2026-03-14 | Implemented boot -> lock -> home flow in device runtime; added shell flow tests |
 | P0-002 | Phase 0 | Planning | Publish explicit handoff brief for next contributor with immediate next slice | GPT-5.2-Codex | done | 2026-03-14 | Added `docs/planning/HANDOFF_NEXT_AGENT.md` and linked it from key docs |
 | P2-002 | Phase 2 | WS-A App Shell | Implement sidebar navigation for button-only controls | GPT-5.2-Codex | done | 2026-03-14 | Added focusable home nav items + button/keyboard navigation tests |
@@ -45,12 +65,30 @@ For **every implementation iteration** (code or docs):
 | P4-001 | Phase 4 | WS-E Core Screens | Build focus timer screen using shared primitives | GPT-5.2-Codex | done | 2026-03-14 | Added FocusPanel timer controls, home routing, and focused tests for transitions/countdown/back action |
 | P4-002 | Phase 4 | WS-E Core Screens | Build notifications and settings screens | GPT-5.2-Codex | done | 2026-03-14 | Added Notifications/Settings shells with empty-state-safe copy, Home routing, and focused panel tests |
 | P4-003 | Phase 4 | WS-E Core Screens | Settings panel real wiring + notifications overlay architecture | GPT-5.2-Codex | done | 2026-03-14 | Added persisted settings toggles/pickers/detail panels and NotificationToast/Queue overlay integration with focused tests |
-| P4-004 | Phase 4 | WS-E Core Screens | Notification shade + panel data-source wiring | unassigned | todo | 2026-03-14 | Implement full notification list shade and connect notifications/settings shells to real data sources |
+| P4-004 | Phase 4 | WS-E Core Screens | Notification shade + panel data-source wiring | GPT-5.2-Codex | done | 2026-03-14 | Shipped shade overlay, notification persistence, and pull-based health/overdue poller wiring |
+| P5-001 | Phase 5 | WS-F Infra & Security | Tailscale + remote access bootstrap | GPT-5.2-Codex | done | 2026-03-14 | Added idempotent setup script and remote Makefile ops shortcuts |
+| P5-002 | Phase 5 | WS-F Infra & Security | Firewall + SSH hardening + secrets bootstrap | GPT-5.2-Codex | done | 2026-03-14 | Added security setup scripts and static device-token auth middleware baseline |
+| P5-003 | Phase 5 | WS-F Infra & Security | System resilience + boot service setup | GPT-5.2-Codex | done | 2026-03-14 | Added resilience hardening script and systemd BITOS boot service installer |
+| P5-004 | Phase 5 | WS-G Bluetooth Foundation | BLE GATT server skeleton + constants | GPT-5.2-Codex | done | 2026-03-14 | Added bluetooth module layout, UUID constants, and mockable server shell |
+| P5-005 | Phase 5 | WS-G Bluetooth Foundation | LESC pairing agent baseline | GPT-5.2-Codex | done | 2026-03-14 | Added pairing agent with DisplayPasskey/RequestConfirmation and desktop mock path |
+| P5-006 | Phase 5 | WS-G Bluetooth Foundation | BLE HMAC auth challenge/response | GPT-5.2-Codex | done | 2026-03-14 | Added AuthManager challenge-response, passkey overlay, setup secret generation, and runtime BLE wiring |
+| P5-007 | Phase 5 | WS-G Bluetooth Foundation | WiFi config + status characteristics | GPT-5.2-Codex | done | 2026-03-14 | Implemented protected WiFi write, status characteristic, and nmcli/mock manager plumbing |
+| P5-008 | Phase 5 | WS-G Bluetooth Foundation | Device status read/notify characteristic | GPT-5.2-Codex | done | 2026-03-14 | Implemented periodic updates, state-change updates on screen transitions, and notify payload serialization |
+| P5-009 | Phase 5 | WS-G Bluetooth Foundation | Keyboard input routing characteristic | GPT-5.2-Codex | done | 2026-03-14 | Implemented protected keyboard writes and ScreenManager compose routing hooks |
+| P10-001 | Phase 10 | WS-M MacService | Code Agent service (port 8001) + file tools | unassigned | todo | 2026-03-14 | Planned multi-agent Mac service foundation |
+| P10-002 | Phase 10 | WS-M MacService | Ops Agent service (port 8003) separate process | unassigned | todo | 2026-03-14 | Planned multi-agent Mac service foundation |
+| P10-003 | Phase 10 | WS-M MacService | Research Agent service (port 8002) + web tools | unassigned | todo | 2026-03-14 | Planned multi-agent Mac service foundation |
+| P10-004 | Phase 10 | WS-M MacService | Creative Agent service (port 8004) | unassigned | todo | 2026-03-14 | Planned multi-agent Mac service foundation |
+| P10-005 | Phase 10 | WS-M MacService | Background task queue + device notification | unassigned | todo | 2026-03-14 | Planned multi-agent Mac service foundation |
+| P10-006 | Phase 10 | WS-M MacService | Background tasks screen on device | unassigned | todo | 2026-03-14 | Planned multi-agent Mac service foundation |
+| P10-007 | Phase 10 | WS-M MacService | Orchestrator multi-agent routing | unassigned | todo | 2026-03-14 | Planned multi-agent Mac service foundation |
+| P10-008 | Phase 10 | WS-M MacService | Electron monitor app (optional) | unassigned | todo | 2026-03-14 | Planned multi-agent Mac service foundation |
 
 ## Iteration Log
 
 | Date | Contributor | Branch | Commit | Tasks completed | Docs updated | Next tasks |
 |---|---|---|---|---|---|---|
+| 2026-03-14 | GPT-5.2-Codex | work | `dd2fd73` | Completed P4-004 notification shade + live notification sources (health state + overdue tasks), schema migration to v4, and runtime poller wiring | `docs/planning/TASK_TRACKER.md`, `docs/planning/HANDOFF_NEXT_AGENT.md` | P5 notification sources (Gmail/SMS), global shade gesture, notification settings |
 | 2026-03-14 | GPT-5.2-Codex | work | `b07c5ae` | Added in-repo roadmap and detailed implementation plan docs | `README.md`, `ROADMAP.md`, `docs/planning/IMPLEMENTATION_PLAN_NEXT.md` | Establish explicit task tracking policy and seed backlog |
 | 2026-03-14 | GPT-5.2-Codex | work | `d4fd9cc` | Established canonical task tracker + contributor iteration protocol | `docs/planning/TASK_TRACKER.md`, roadmap/plan/readme updates | Start P2-001 and P2-003 in next implementation PR |
 | 2026-03-14 | GPT-5.2-Codex | work | `5e21327` | Repository-wide artifact audit for missing UI references; added asset-recovery backlog item P0-001 | `docs/planning/TASK_TRACKER.md` | Locate source of HTML prototypes and commit them under `docs/reference-ui/` |

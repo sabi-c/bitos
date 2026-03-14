@@ -10,3 +10,6 @@ httpx>=0.28.0
 
 # Web Preview
 flask>=3.1.0
+
+# BLE crypto
+cryptography>=42.0.0
