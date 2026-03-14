@@ -13,6 +13,7 @@ class PasskeyOverlay:
         self._code = str(code).zfill(6)
         self._remaining_ms = max(1, int(timeout_s * 1000))
         self._on_timeout = on_timeout
+        self._fonts: dict[str, pygame.font.Font] = {}
 
     def render(self, surface, tokens) -> None:
         surface.fill(tokens.BLACK)
@@ -45,7 +46,11 @@ class PasskeyOverlay:
         return True
 
     def _font(self, tokens, key: str):
+        if key in self._fonts:
+            return self._fonts[key]
         try:
-            return pygame.font.Font(tokens.FONT_PATH, tokens.FONT_SIZES[key])
+            font = pygame.font.Font(tokens.FONT_PATH, tokens.FONT_SIZES[key])
         except FileNotFoundError:
-            return pygame.font.SysFont("monospace", tokens.FONT_SIZES[key])
+            font = pygame.font.SysFont("monospace", tokens.FONT_SIZES[key])
+        self._fonts[key] = font
+        return font

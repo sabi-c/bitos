@@ -17,6 +17,7 @@ class PowerOverlay:
         self._on_cancel = on_cancel
         self._saving = False
         self._saved = False
+        self._fonts: dict[str, pygame.font.Font] = {}
 
     def render(self, surface, tokens):
         surface.fill(tokens.BLACK)
@@ -74,7 +75,11 @@ class PowerOverlay:
         surface.blit(text, (x + (w - text.get_width()) // 2, y + (h - text.get_height()) // 2))
 
     def _font(self, tokens, key: str):
+        if key in self._fonts:
+            return self._fonts[key]
         try:
-            return pygame.font.Font(tokens.FONT_PATH, tokens.FONT_SIZES[key])
+            font = pygame.font.Font(tokens.FONT_PATH, tokens.FONT_SIZES[key])
         except FileNotFoundError:
-            return pygame.font.SysFont("monospace", tokens.FONT_SIZES[key])
+            font = pygame.font.SysFont("monospace", tokens.FONT_SIZES[key])
+        self._fonts[key] = font
+        return font

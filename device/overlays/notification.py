@@ -100,6 +100,7 @@ class NotificationShade:
         self._on_open_source = on_open_source
         self._cursor_index = 0
         self._cached_records: list[NotificationRecord] = []
+        self._fonts: dict[str, pygame.font.Font] = {}
         self.on_enter()
 
     def on_enter(self) -> None:
@@ -187,10 +188,14 @@ class NotificationShade:
         return False
 
     def _font(self, tokens, key: str):
+        if key in self._fonts:
+            return self._fonts[key]
         try:
-            return pygame.font.Font(tokens.FONT_PATH, tokens.FONT_SIZES[key])
+            font = pygame.font.Font(tokens.FONT_PATH, tokens.FONT_SIZES[key])
         except FileNotFoundError:
-            return pygame.font.SysFont("monospace", tokens.FONT_SIZES[key])
+            font = pygame.font.SysFont("monospace", tokens.FONT_SIZES[key])
+        self._fonts[key] = font
+        return font
 
     def _render_dot(self, surface, tokens, record: NotificationRecord, x: int, y: int) -> None:
         if record.type == "TASK":
