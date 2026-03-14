@@ -83,11 +83,15 @@ For **every implementation iteration** (code or docs):
 | P10-006 | Phase 10 | WS-M MacService | Background tasks screen on device | unassigned | todo | 2026-03-14 | Planned multi-agent Mac service foundation |
 | P10-007 | Phase 10 | WS-M MacService | Orchestrator multi-agent routing | unassigned | todo | 2026-03-14 | Planned multi-agent Mac service foundation |
 | P10-008 | Phase 10 | WS-M MacService | Electron monitor app (optional) | unassigned | todo | 2026-03-14 | Planned multi-agent Mac service foundation |
+| P0-AUDIT-003 | Phase 0 | Security | Run dependency audit report for device/server requirement sets and document results | GPT-5.2-Codex | done | 2026-03-14 | Added `docs/reports/DEPENDENCY_AUDIT.md`; audit commands executed with environment limitations noted |
+| FIX-SERVER-001 | Phase 0 | Code Quality | Logging cleanup, dead-import removal, and audio pipeline env-gate + tests | GPT-5.2-Codex | done | 2026-03-14 | Replaced print logging in device/server mains, removed dead imports, added BITOS_AUDIO mock/hw behavior and tests |
 
 ## Iteration Log
 
 | Date | Contributor | Branch | Commit | Tasks completed | Docs updated | Next tasks |
 |---|---|---|---|---|---|---|
+| 2026-03-14 | GPT-5.2-Codex | work | `6f2e5de` | Completed FIX-SERVER-001 quality pass (main logging cleanup, dead imports, BITOS_AUDIO env gate, and new audio pipeline tests) | `device/main.py`, `server/main.py`, `device/audio/pipeline.py`, `device/bluetooth/crypto.py`, `device/bluetooth/characteristics/device_status.py`, `device/display/driver.py`, `device/display/animator.py`, `tests/test_audio_pipeline.py`, `docs/planning/TASK_TRACKER.md` | Next: resolve remaining code quality and coverage items from report backlog |
+| 2026-03-14 | GPT-5.2-Codex | work | `72741f6` | Refined P0-AUDIT-003 dependency audit report with explicit file-lookup findings and connectivity failure modes | `docs/reports/DEPENDENCY_AUDIT.md`, `docs/planning/TASK_TRACKER.md` | Re-run pip-audit once requirements-device/server files and index access are available |
 | 2026-03-14 | GPT-5.2-Codex | work | `dd2fd73` | Completed P4-004 notification shade + live notification sources (health state + overdue tasks), schema migration to v4, and runtime poller wiring | `docs/planning/TASK_TRACKER.md`, `docs/planning/HANDOFF_NEXT_AGENT.md` | P5 notification sources (Gmail/SMS), global shade gesture, notification settings |
 | 2026-03-14 | GPT-5.2-Codex | work | `b07c5ae` | Added in-repo roadmap and detailed implementation plan docs | `README.md`, `ROADMAP.md`, `docs/planning/IMPLEMENTATION_PLAN_NEXT.md` | Establish explicit task tracking policy and seed backlog |
 | 2026-03-14 | GPT-5.2-Codex | work | `d4fd9cc` | Established canonical task tracker + contributor iteration protocol | `docs/planning/TASK_TRACKER.md`, roadmap/plan/readme updates | Start P2-001 and P2-003 in next implementation PR |
