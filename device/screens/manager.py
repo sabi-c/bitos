@@ -16,6 +16,7 @@ class ScreenManager:
         self.notification_queue = notification_queue or NotificationQueue()
         self._notification_shade: NotificationShade | None = None
         self._passkey_overlay: PasskeyOverlay | None = None
+        self._active_overlay = None
         self._device_status_char = None
 
     def push(self, screen: BaseScreen):
@@ -63,6 +64,13 @@ class ScreenManager:
     def hide_passkey_overlay(self) -> None:
         self._passkey_overlay = None
 
+    def push_overlay(self, overlay) -> None:
+        self._active_overlay = overlay
+
+    def dismiss_overlay(self, overlay=None) -> None:
+        if overlay is None or self._active_overlay is overlay:
+            self._active_overlay = None
+
     def attach_device_status_characteristic(self, device_status_char) -> None:
         self._device_status_char = device_status_char
         self._emit_active_screen_status()
@@ -101,6 +109,8 @@ class ScreenManager:
             self.current.handle_input(event)
 
     def handle_action(self, action: str):
+        if self._active_overlay and self._active_overlay.handle_input(action):
+            return
         if self._passkey_overlay and self._passkey_overlay.handle_input(action):
             return
         if self.notification_queue.handle_input(action):
@@ -113,6 +123,8 @@ class ScreenManager:
     def update(self, dt: float):
         dt_ms = int(max(0.0, dt) * 1000)
         self.notification_queue.tick(dt_ms)
+        if self._active_overlay and not self._active_overlay.tick(dt_ms):
+            self._active_overlay = None
         if self._passkey_overlay and not self._passkey_overlay.tick(dt_ms):
             self._passkey_overlay = None
         if self.current:
@@ -123,6 +135,8 @@ class ScreenManager:
             self._notification_shade.render(surface, tokens)
         if self._passkey_overlay:
             self._passkey_overlay.render(surface, tokens)
+        if self._active_overlay:
+            self._active_overlay.render(surface, tokens)
         self.notification_queue.render(surface, tokens)
 
     def render(self, surface: pygame.Surface):

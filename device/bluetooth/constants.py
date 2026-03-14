@@ -1,3 +1,5 @@
+import os
+
 """BITOS BLE UUIDs and authentication/pairing constants."""
 
 # BITOS BLE Service UUIDs
@@ -10,6 +12,7 @@ WIFI_CONFIG_UUID = "b1705000-0010-4000-8000-000000000001"
 WIFI_STATUS_UUID = "b1705000-0011-4000-8000-000000000001"
 KEYBOARD_INPUT_UUID = "b1705000-0020-4000-8000-000000000001"
 DEVICE_STATUS_UUID = "b1705000-0030-4000-8000-000000000001"
+DEVICE_INFO_UUID = "b1705000-0099-4000-8000-000000000001"
 NOTIFICATION_RELAY_UUID = "b1705000-0031-4000-8000-000000000001"
 SETTINGS_READ_UUID = "b1705000-0040-4000-8000-000000000001"
 SETTINGS_WRITE_UUID = "b1705000-0041-4000-8000-000000000001"
@@ -34,3 +37,24 @@ PROTECTED_CHARACTERISTICS = {
     PIN_CHANGE_UUID,
     REBOOT_CMD_UUID,
 }
+
+
+# Connectivity symbols
+CONN_WIFI = "▣"
+CONN_BT_PAN = "◈"
+CONN_HOTSPOT = "▦"
+CONN_OFFLINE = "✕"
+
+
+COMPANION_BASE_URL = os.environ.get(
+    "BITOS_COMPANION_URL",
+    "https://bitos-companion.onrender.com",
+)
+
+
+def build_setup_url(ble_address: str) -> str:
+    return f"{COMPANION_BASE_URL}/setup.html?ble={ble_address}&v=1"
+
+
+def build_pair_url(ble_address: str) -> str:
+    return f"{COMPANION_BASE_URL}/pair.html?ble={ble_address}&v=1"

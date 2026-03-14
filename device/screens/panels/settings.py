@@ -14,6 +14,8 @@ from __future__ import annotations
 import pygame
 
 from display.theme import load_ui_font, merge_runtime_ui_settings
+from overlays import QROverlay
+from bluetooth.constants import build_pair_url
 from display.tokens import BLACK, DIM2, DIM3, HAIRLINE, PHYSICAL_H, PHYSICAL_W, WHITE
 from screens.base import BaseScreen
 from screens.components import NavItem, VerticalNavController
@@ -31,6 +33,11 @@ class SettingsPanel(BaseScreen):
         on_open_agent_mode=None,
         on_open_sleep_timer=None,
         on_open_about=None,
+        on_open_companion_app=None,
+        get_ble_address=None,
+        on_set_discoverable=None,
+        on_push_overlay=None,
+        on_dismiss_overlay=None,
         ui_settings: dict | None = None,
     ):
         self._repo = repository
@@ -39,6 +46,11 @@ class SettingsPanel(BaseScreen):
         self._on_open_agent_mode = on_open_agent_mode
         self._on_open_sleep_timer = on_open_sleep_timer
         self._on_open_about = on_open_about
+        self._on_open_companion_app = on_open_companion_app
+        self._get_ble_address = get_ble_address or (lambda: "mock-BT-addr")
+        self._on_set_discoverable = on_set_discoverable or (lambda _enabled, _timeout: None)
+        self._on_push_overlay = on_push_overlay
+        self._on_dismiss_overlay = on_dismiss_overlay
 
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
         self._font_title = load_ui_font("title", self._ui_settings)
@@ -56,6 +68,7 @@ class SettingsPanel(BaseScreen):
                 NavItem(key="agent_mode", label="AGENT MODE", status="", action=self._open_agent_mode),
                 NavItem(key="sleep", label="SLEEP TIMER", status="", action=self._open_sleep_timer),
                 NavItem(key="about", label="ABOUT", status="", action=self._open_about),
+                NavItem(key="companion", label="COMPANION APP", status="", action=self._open_companion_app),
                 NavItem(key="back", label="BACK", status="HOME", action=self._go_back),
             ]
         )
@@ -98,6 +111,7 @@ class SettingsPanel(BaseScreen):
             "agent_mode": agent_mode[:10].upper(),
             "sleep": f"{sleep_sec}s",
             "about": "INFO",
+            "companion": "PAIR",
             "back": "HOME",
         }
 
@@ -139,6 +153,22 @@ class SettingsPanel(BaseScreen):
     def _open_about(self):
         if self._on_open_about:
             self._on_open_about()
+
+    def _open_companion_app(self):
+        if self._on_open_companion_app:
+            self._on_open_companion_app()
+            return
+        ble_addr = self._get_ble_address()
+        if not self._on_push_overlay:
+            return
+        qr = QROverlay(
+            url=build_pair_url(ble_addr),
+            title="PAIR COMPANION APP",
+            subtitle="SCAN WITH YOUR PHONE",
+            on_dismiss=lambda: self._on_dismiss_overlay(qr) if self._on_dismiss_overlay else None,
+        )
+        self._on_push_overlay(qr)
+        self._on_set_discoverable(True, 120)
 
     def _go_back(self):
         if self._on_back:
