@@ -1,4 +1,5 @@
 """BITOS Device main entry point."""
+import json
 import logging
 import os
 import subprocess
