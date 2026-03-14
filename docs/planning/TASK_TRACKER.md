@@ -158,6 +158,7 @@ For **every implementation iteration** (code or docs):
 | P0-AUDIT-003 | Phase 0 | Security | Run dependency audit report for device/server requirement sets and document results | GPT-5.2-Codex | done | 2026-03-14 | Added `docs/reports/DEPENDENCY_AUDIT.md`; audit commands executed with environment limitations noted |
 | FIX-SERVER-001 | Phase 0 | Code Quality | Logging cleanup, dead-import removal, and audio pipeline env-gate + tests | GPT-5.2-Codex | done | 2026-03-14 | Replaced print logging in device/server mains, removed dead imports, added BITOS_AUDIO mock/hw behavior and tests |
 | TEST-HW-001 | Phase 0 | Quality | Add hardware-mock safety-path tests for input/display/crypto/smoke surfaces | GPT-5.2-Codex | done | 2026-03-14 | Added focused tests for button handler, display driver, crypto parity vectors, and smoke-script coverage gates |
+| CI-GREEN-001 | Phase 0 | Quality | Make CI pass under mock env, add crypto known vector parity checks, and validate tracker | GPT-5.2-Codex | done | 2026-03-14 | Fixed keyboard gesture handling + wifi timeout test isolation, added PBKDF2 known vectors and companion HTML smoke page, validated tracker + pytest |
 
 ## Iteration Log
 
