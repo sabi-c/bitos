@@ -52,6 +52,24 @@
   </div>
 
   <div class="card">
+    <h2>DEVICE UPDATE</h2>
+    <div id="version-info" class="status">Checking...</div>
+    <div id="update-available" style="display:none">
+      <div class="status" id="update-msg" style="color:#4f4"></div>
+      <button id="update-button" onclick="startUpdate('both')">
+        UPDATE DEVICE + SERVER
+      </button>
+      <div class="status" id="update-status"></div>
+    </div>
+    <div id="up-to-date" style="display:none">
+      <div class="status" style="color:#4f4">✓ UP TO DATE</div>
+      <button class="secondary" onclick="checkVersion()">
+        CHECK AGAIN
+      </button>
+    </div>
+  </div>
+
+  <div class="card">
     <h2>DEVICE INFO</h2>
     <div id="device-info" class="status">Loading...</div>
   </div>
@@ -120,16 +138,63 @@
       }
     }
 
+    async function checkVersion() {
+      document.getElementById('version-info').textContent = 'Checking...';
+      try {
+        const r = await fetch(`${SERVER}/device/version`);
+        const d = await r.json();
+        document.getElementById('version-info').textContent = `Version: ${d.version} (${d.commit})`;
+
+        if (d.update_available) {
+          document.getElementById('update-available').style.display = 'block';
+          document.getElementById('up-to-date').style.display = 'none';
+          document.getElementById('update-msg').textContent = `${d.behind} update(s) available`;
+        } else {
+          document.getElementById('update-available').style.display = 'none';
+          document.getElementById('up-to-date').style.display = 'block';
+        }
+      } catch (e) {
+        document.getElementById('version-info').textContent = '✗ Cannot reach device';
+      }
+    }
+
+    async function startUpdate(target) {
+      document.getElementById('update-status').textContent = 'Updating... (30-60 seconds)';
+      const updateButton = document.getElementById('update-button');
+      updateButton.disabled = true;
+      try {
+        const r = await fetch(`${SERVER}/device/update`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({target, confirmed: true})
+        });
+        const d = await r.json();
+        if (d.ok) {
+          document.getElementById('update-status').textContent = `✓ Updated to ${d.new_commit}`;
+          setTimeout(checkVersion, 5000);
+        } else {
+          document.getElementById('update-status').textContent = '✗ Update failed — check logs';
+        }
+      } catch (e) {
+        document.getElementById('update-status').textContent = '✗ Connection lost during update (normal — wait 30s)';
+        setTimeout(checkVersion, 30000);
+      } finally {
+        updateButton.disabled = false;
+      }
+    }
+
     async function loadDeviceInfo() {
       try {
-        await fetch(`${SERVER}/health`);
-        document.getElementById('device-info').textContent = `Model: BITOS Pi Zero 2W\nServer: ${SERVER}`;
+        const resp = await fetch(`${SERVER}/health`);
+        const health = await resp.json();
+        document.getElementById('device-info').textContent = `Model: BITOS Pi Zero 2W\nServer: ${SERVER}\nVersion: ${health.version || 'unknown'} (${health.commit || 'unknown'})`;
       } catch (e) {
         document.getElementById('device-info').textContent = 'Device offline';
       }
     }
 
     refreshStatus();
+    checkVersion();
     loadDeviceInfo();
   </script>
 </body>
