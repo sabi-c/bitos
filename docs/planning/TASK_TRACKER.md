@@ -84,6 +84,7 @@ For **every implementation iteration** (code or docs):
 | P10-006 | Phase 10 | WS-M MacService | Background tasks screen on device | unassigned | todo | 2026-03-14 | Planned multi-agent Mac service foundation |
 | P10-007 | Phase 10 | WS-M MacService | Orchestrator multi-agent routing | unassigned | todo | 2026-03-14 | Planned multi-agent Mac service foundation |
 | P10-008 | Phase 10 | WS-M MacService | Electron monitor app (optional) | unassigned | todo | 2026-03-14 | Planned multi-agent Mac service foundation |
+| P0-AUDIT-003 | Phase 0 | Security | Run dependency audit report for device/server requirement sets and document results | GPT-5.2-Codex | done | 2026-03-14 | Added `docs/reports/DEPENDENCY_AUDIT.md`; audit commands executed with environment limitations noted |
 
 ## Iteration Log
 
