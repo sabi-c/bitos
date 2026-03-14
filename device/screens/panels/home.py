@@ -1,4 +1,6 @@
 """BITOS Home panel with button-first sidebar navigation."""
+import threading
+
 import pygame
 
 from screens.base import BaseScreen
@@ -17,21 +19,27 @@ class HomePanel(BaseScreen):
         on_open_tasks=None,
         on_open_captures=None,
         on_open_notifications=None,
+        on_open_messages=None,
         on_open_settings=None,
         on_show_shade=None,
         ui_settings: dict | None = None,
         startup_health: dict | None = None,
         repository=None,
+        client=None,
     ):
         self._on_open_chat = on_open_chat
         self._on_open_focus = on_open_focus
         self._on_open_tasks = on_open_tasks
         self._on_open_captures = on_open_captures
         self._on_open_notifications = on_open_notifications
+        self._on_open_messages = on_open_messages
         self._on_open_settings = on_open_settings
         self._on_show_shade = on_show_shade
         self._repository = repository
+        self._client = None
+        self._msgs_unread = 0
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
+        self._client = client
         self._startup_health = startup_health if startup_health is not None else {}
         self._font_title = load_ui_font("title", self._ui_settings)
         self._font_body = load_ui_font("body", self._ui_settings)
@@ -44,9 +52,13 @@ class HomePanel(BaseScreen):
                 NavItem(key="notifs", label="NOTIFS", status="READY", action=self._open_notifications),
                 NavItem(key="settings", label="SETTINGS", status="READY", action=self._open_settings),
                 NavItem(key="tasks", label="TASKS", status="SYNC", action=self._open_tasks),
+                NavItem(key="msgs", label="MSGS", status="SYNC", action=self._open_messages),
                 NavItem(key="captures", label="CAPTURES", status="", action=self._open_captures),
             ]
         )
+
+        if self._client:
+            threading.Thread(target=self._refresh_unread, daemon=True).start()
 
     def handle_action(self, action: str):
         if action == "SHORT_PRESS":
@@ -54,7 +66,11 @@ class HomePanel(BaseScreen):
         elif action == "DOUBLE_PRESS":
             self._open_shade()
         elif action == "LONG_PRESS":
-            self._nav.move(1)
+            focused = self._nav.focused_item
+            if focused and focused.key == "msgs":
+                self._open_messages()
+            else:
+                self._nav.move(1)
         elif action == "TRIPLE_PRESS":
             self._nav.move(-1)
 
@@ -89,6 +105,8 @@ class HomePanel(BaseScreen):
             label = item.label
             if item.key == "captures":
                 label = f"CAPTURES ({capture_count})"
+            elif item.key == "msgs":
+                label = f"MSGS ({self._msgs_unread})" if self._msgs_unread > 0 else "MSGS"
             row = self._font_body.render(label, False, row_color)
             st = self._font_small.render(item.status, False, status_color)
             text_y = y + (ROW_H_MIN - row.get_height()) // 2
@@ -121,6 +139,10 @@ class HomePanel(BaseScreen):
         if self._on_open_captures:
             self._on_open_captures()
 
+    def _open_messages(self):
+        if self._on_open_messages:
+            self._on_open_messages()
+
     def _open_notifications(self):
         # VERIFIED: HOME NOTIFS nav opens NotificationsPanel.
         if self._on_open_notifications:
@@ -140,3 +162,10 @@ class HomePanel(BaseScreen):
         if backend is None:
             return "AI ?"
         return "AI ✓" if backend else "AI ⚠"
+
+    def _refresh_unread(self):
+        try:
+            conversations = self._client.get_conversations() if self._client else []
+            self._msgs_unread = sum(int(c.get("unread", 0)) for c in conversations)
+        except Exception:
+            self._msgs_unread = 0

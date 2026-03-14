@@ -21,6 +21,17 @@ class ChatRequest(BaseModel):
     battery_pct: int | None = None
 
 
+class MessageSendRequest(BaseModel):
+    chat_id: str
+    text: str
+    confirmed: bool = False
+
+
+class MessageDraftRequest(BaseModel):
+    chat_id: str
+    voice_transcript: str
+
+
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="BITOS Server", version="0.3.0")
@@ -105,6 +116,95 @@ async def get_today_tasks():
     adapter = VikunjaAdapter()
     tasks = adapter.get_today_tasks()
     return {"tasks": tasks, "count": len(tasks)}
+
+
+@app.get("/messages")
+async def get_messages_conversations():
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "integrations"))
+    from bluebubbles_adapter import BlueBubblesAdapter
+
+    adapter = BlueBubblesAdapter()
+    return {
+        "conversations": adapter.get_conversations(),
+        "unread_total": adapter.get_unread_count(),
+    }
+
+
+@app.get("/messages/{chat_id:path}")
+async def get_messages_for_chat(chat_id: str):
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "integrations"))
+    from bluebubbles_adapter import BlueBubblesAdapter
+
+    adapter = BlueBubblesAdapter()
+    return {
+        "messages": adapter.get_messages(chat_id),
+        "chat_id": chat_id,
+    }
+
+
+@app.post("/messages/send")
+async def send_message(payload: MessageSendRequest):
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "integrations"))
+    from bluebubbles_adapter import BlueBubblesAdapter
+
+    if not payload.confirmed:
+        raise HTTPException(status_code=403, detail="requires confirmed=true")
+
+    adapter = BlueBubblesAdapter()
+    ok = adapter.send_message(payload.chat_id, payload.text)
+    return {"sent": ok}
+
+
+@app.post("/messages/draft")
+async def draft_message(payload: MessageDraftRequest):
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "integrations"))
+    from bluebubbles_adapter import BlueBubblesAdapter
+
+    adapter = BlueBubblesAdapter()
+    messages = adapter.get_messages(payload.chat_id, limit=3)
+    context = "\n".join(
+        f"{'You' if message['from_me'] else 'Them'}: {message['text']}"
+        for message in messages
+    )
+    prompt = f"""Draft a reply to this iMessage conversation.
+
+Context:
+{context}
+
+The person wants to say:
+{payload.voice_transcript}
+
+Write ONLY the reply message text.
+Match the conversational tone. Be concise and natural."""
+    complete_text = getattr(llm_bridge, "complete_text", None)
+    if callable(complete_text):
+        draft = complete_text(prompt)
+    else:
+        draft = "".join(llm_bridge.stream_text(prompt))
+    return {"draft": draft}
+
+
+@app.post("/webhooks/imessage")
+async def imessage_webhook(request: Request):
+    body = await request.json()
+    event = body.get("event", "")
+    if event != "new-message":
+        return {"ok": True}
+    data = body.get("data", {})
+    logger.info("imessage_webhook sender=%s", data.get("handle", {}).get("address", ""))
+    return {"ok": True}
 
 @app.post("/shutdown")
 async def shutdown():

@@ -31,6 +31,7 @@ from screens.panels.chat import ChatPanel
 from screens.panels.focus import FocusPanel
 from screens.panels.notifications import NotificationsPanel
 from screens.panels.tasks import TasksPanel
+from screens.panels.messages import MessagesPanel
 from screens.panels.captures import CapturesPanel
 from screens.panels.settings import (
     AboutPanel,
@@ -288,6 +289,7 @@ def main():
             on_open_chat=open_chat,
             on_open_focus=open_focus,
             on_open_notifications=open_notifications,
+            on_open_messages=open_messages,
             on_open_tasks=open_tasks,
             on_open_captures=open_captures,
             on_open_settings=open_settings,
@@ -295,6 +297,7 @@ def main():
             ui_settings=ui_settings,
             startup_health=startup_health,
             repository=repository,
+            client=client,
         )
         screen_mgr.replace(home)
 
@@ -317,6 +320,11 @@ def main():
         focus_panel = focus
         screen_mgr.replace(focus)
 
+
+    def open_messages():
+        messages = MessagesPanel(client=client, battery_pct=battery_monitor.get_status().get("pct", 84), audio_pipeline=audio_pipeline, on_back=on_home, ui_settings=ui_settings)
+        screen_mgr.replace(messages)
+
     def open_notifications():
         notifications = NotificationsPanel(on_back=on_home, ui_settings=ui_settings)
         screen_mgr.replace(notifications)
@@ -332,6 +340,7 @@ def main():
     def open_settings():
         settings = SettingsPanel(
             repository=repository,
+            client=client,
             on_back=on_home,
             on_open_model_picker=open_model_picker,
             on_open_agent_mode=open_agent_mode,
@@ -471,6 +480,7 @@ def main():
 
             overlay = QuickCaptureOverlay(
                 repository=repository,
+            client=client,
                 audio_pipeline=audio_pipeline,
                 context=screen_mgr.current.__class__.__name__.replace("Panel", "").upper() if screen_mgr.current else "",
                 on_saved=_saved,
