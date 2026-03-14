@@ -4,7 +4,6 @@ Abstract display interface + Pygame implementation for desktop development.
 ST7789 hardware driver is a stub — will be ported from whisplay.py in Phase 5.
 """
 import os
-import sys
 from abc import ABC, abstractmethod
 
 import pygame

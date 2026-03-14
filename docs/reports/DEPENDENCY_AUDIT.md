@@ -1,17 +1,44 @@
-# BITOS Dependency Audit
+# Dependency Audit Report
 
-Scope: Python runtime dependencies used by `device/` and `server/` plus toolchain assumptions from docs.
+Date: 2026-03-14  
+Repository: `bitos`
 
-## Findings
+Audit commands requested and executed:
 
-| Dependency/Area | Severity | Risk | Recommendation |
+```bash
+pip install pip-audit --break-system-packages
+pip-audit -r requirements-device.txt 2>&1
+pip-audit -r requirements-server.txt 2>&1
+pip list --outdated 2>&1
+```
+
+Environment constraints observed:
+- `requirements-device.txt` and `requirements-server.txt` are not present in this repository tree.
+- `pip-audit` installation failed due to blocked package index/proxy access (`403 Forbidden`), so CVE scanning could not be executed.
+- `pip list --outdated` could not complete due the same network/proxy limitation (repeated retries against package index).
+
+## CVEs found
+
+| Package | CVE ID | Severity | Fix version | Action needed |
+|---|---|---|---|---|
+| N/A | N/A | Unknown | N/A | `pip-audit` unavailable in this environment; rerun once package index access is available. |
+
+## Outdated packages
+
+| Package | Current version | Latest version | Safe to upgrade? |
 |---|---|---|---|
-| `httpx` outbound requests | HIGH | Blocking network calls without strict timeout policy can stall user-facing flows if future callsites omit timeouts. | Enforce shared timeout constants and wrapper helpers for all outbound HTTP usage. |
-| `subprocess` usage for `nmcli` (`device/bluetooth/wifi_manager.py`) | HIGH | Shell-command execution without mandatory timeout/retry policy risks indefinite process hangs on hardware. | Standardize subprocess timeout, retry, and error classification helpers for networking commands. |
-| `pygame` font/resource loading | MED | Font construction in render loops can degrade frame performance and increase allocation churn. | Cache font objects once per screen/overlay lifecycle and reuse across frames. |
-| Crypto optionality (`cryptography`) | MED | Partial/optional crypto availability can cause behavior differences between CI/dev/hardware. | Define explicit install/runtime checks and fail-fast messaging when crypto features are required. |
-| Audit tooling continuity | LOW | Reproducible dependency/security audit output is not yet published as a recurring artifact. | Add periodic dependency/audit report generation into CI or a repeatable script. |
+| N/A | N/A | N/A | Unknown: `pip list --outdated` could not fetch latest metadata due proxy/network restriction. |
 
-## Summary
-- Highest dependency risk is operational: timeouts and failure-handling policy consistency across network and subprocess boundaries.
-- Centralizing timeout/retry conventions will reduce drift and production-only failures.
+## Recommendations
+
+- **Upgrade immediately (HIGH CVE):**
+  - None identified in this run because CVE scan could not be executed.
+- **Upgrade next sprint (MED CVE or significantly outdated):**
+  - Re-run this audit in CI or a network-enabled environment with:
+    - `pip install pip-audit --break-system-packages`
+    - `pip-audit -r requirements-device.txt`
+    - `pip-audit -r requirements-server.txt`
+    - `pip list --outdated`
+  - Ensure `requirements-device.txt` and `requirements-server.txt` are added to the repo (or update audit scripts to use actual requirement file paths).
+- **Packages fine (LOW or no issues):**
+  - No package-level determination could be made in this run due audit tooling/network constraints.

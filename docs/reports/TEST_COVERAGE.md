@@ -1,17 +1,38 @@
-# BITOS Test Coverage Audit
-
-Scope: `tests/` mapped against current risk areas in `device/`, `server/`, and `companion/` references.
-
-## Findings
-
-| Area | Severity | Gap | Recommendation |
-|---|---|---|---|
-| WiFi command timeout handling (`device/bluetooth/wifi_manager.py`) | HIGH | No focused tests validate timeout handling or command hang recovery for real-mode subprocess calls. | Add unit tests that mock `subprocess.run` timeout and non-zero exits for all WiFi manager command paths. |
-| Render-path I/O contract (`device/overlays/notification.py`, `device/screens/panels/settings.py`) | HIGH | No regression tests enforce that render loops avoid repository reads. | Add tests that instrument repository access and assert zero storage reads during `render()`. |
-| Runtime logging behavior (`device/main.py`, `device/input/handler.py`) | MED | Existing tests do not verify logging pathways for error and queue-status output. | Add tests asserting logging calls for button callback errors and queue retry/dead-letter events. |
-| BLE pairing responsiveness (`device/bluetooth/server.py`) | MED | No test covers thread stop responsiveness for pairing timer loops. | Add timing-safe tests for stop/shutdown behavior when the pairing thread is active. |
-| Companion PWA coverage | MED | No JS/HTML test report is available for `companion/`. | Add baseline lint/unit checks for companion scripts and include report artifact in `docs/reports/`. |
-
 ## Summary
-- Highest-risk missing tests are concentrated in BLE timeout/recovery and UI render-path performance contracts.
-- Priority should be to add deterministic unit tests for timeout and no-I/O-in-render behaviors.
+Overall coverage: 69.2%
+
+_Source: fallback `trace`-based run over the full test suite (`109 passed, 2 skipped`) because `pytest-cov` could not be installed in this environment._
+
+## Untested modules (0% coverage)
+- `device/audio/pipeline.py`
+- `device/bluetooth/pairing_agent.py`
+- `device/input/handler.py`
+- `device/main.py`
+- `device/screens/subscreens/__init__.py`
+- `device/__init__.py`
+- `device/audio/__init__.py`
+- `device/input/__init__.py`
+- `server/__init__.py`
+
+## Low coverage modules (<50%)
+- `device/bluetooth/crypto.py` — **25%** — most important untested function: `_hkdf_sha256`.
+- `device/bluetooth/wifi_manager.py` — **18%** — most important untested function: `WiFiManager.add_or_update_network`.
+- `device/client/api.py` — **44%** — most important untested function: `BackendClient.chat` error-path handling (timeouts/auth/rate limit).
+- `device/display/driver.py` — **44%** — most important untested function: `PygameDriver` render/display lifecycle methods.
+- `device/screens/panels/chat.py` — **47%** — most important untested function: `ChatPanel` submit/retry/status flow.
+- `device/screens/panels/notifications.py` — **47%** — most important untested function: `NotificationsPanel` action/input transitions.
+- `device/screens/panels/settings.py` — **47%** — most important untested function: `SettingsPanel` model/agent/sleep/about routing + persistence interactions.
+
+## Priority test targets
+Top 10 functions/classes to test next (ordered by safety-critical impact, frequency of execution, and current coverage gaps):
+
+1. `device/main.py::main` (0%) — runtime bootstrap + loop wiring, service startup/shutdown paths.
+2. `device/input/handler.py::ButtonHandler` (0%) — core input gesture decoding used every frame.
+3. `device/bluetooth/pairing_agent.py::MockPairingAgent` and DBus agent callbacks (0%) — pairing/auth handshake path.
+4. `device/bluetooth/wifi_manager.py::WiFiManager.add_or_update_network` (18%) — writes network credentials and connection priority.
+5. `device/client/api.py::BackendClient.chat` (44%) — auth/permission/network failure handling for user-visible chat writes.
+6. `device/screens/panels/settings.py::SettingsPanel` interaction handlers (47%) — settings writes and navigation logic.
+7. `device/screens/panels/chat.py::ChatPanel` send/retry handlers (47%) — primary high-frequency user path.
+8. `device/bluetooth/crypto.py::decrypt_wifi_password` + `_hkdf_sha256` (25%) — credential decryption and key derivation correctness.
+9. `device/display/driver.py::PygameDriver` frame/update methods (44%) — render loop stability and frame presentation.
+10. `device/audio/pipeline.py::AudioPipeline` stubs/error contracts (0%) — currently unexercised API boundary.
