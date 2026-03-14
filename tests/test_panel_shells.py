@@ -52,7 +52,7 @@ class PanelShellTests(unittest.TestCase):
             repo = DeviceRepository(db_path=str(Path(tmpdir) / "bitos.db"))
             repo.initialize()
             panel = SettingsPanel(repository=repo, on_back=on_back)
-            for _ in range(6):
+            for _ in range(7):
                 panel.handle_action("DOUBLE_PRESS")
             panel.handle_action("SHORT_PRESS")
             self.assertEqual(calls["count"], 1)

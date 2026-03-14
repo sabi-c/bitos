@@ -24,6 +24,8 @@ Environment constraints observed:
 - `requirements-device.txt` and `requirements-server.txt` are not present in this repository tree.
 - `pip-audit` installation failed both via configured proxy (`403 Forbidden`) and direct egress (`[Errno 101] Network is unreachable`), so CVE scanning could not be executed.
 - `pip list --outdated` could not complete due the same package-index connectivity limitation (repeated retries against package index).
+- `pip-audit` installation failed due to blocked package index/proxy access (`403 Forbidden`), so CVE scanning could not be executed.
+- `pip list --outdated` could not complete due the same network/proxy limitation (repeated retries against package index).
 
 ## CVEs found
 
@@ -48,5 +50,6 @@ Environment constraints observed:
     - `pip-audit -r requirements-server.txt`
     - `pip list --outdated`
   - Ensure `requirements-device.txt` and `requirements-server.txt` are added to the repo (or update audit scripts to use actual requirement file paths such as `requirements.txt` / `web_preview/requirements.txt`).
+  - Ensure `requirements-device.txt` and `requirements-server.txt` are added to the repo (or update audit scripts to use actual requirement file paths).
 - **Packages fine (LOW or no issues):**
   - No package-level determination could be made in this run due audit tooling/network constraints.

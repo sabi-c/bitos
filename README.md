@@ -7,22 +7,32 @@ Hold the button, ask Claude something, hear it answer.
 ## Quick Start
 
 ```bash
-# 1. Clone and setup
+# 1. git clone + cd
 git clone git@github.com:sabi-c/bitos.git
 cd bitos
-cp .env.template .env
-# Edit .env with your ANTHROPIC_API_KEY
 
-# 2. Install deps
+# 2. cp .env.template .env, then edit ANTHROPIC_API_KEY
+cp .env.template .env
+
+# 3. install dependencies
 pip install -r requirements.txt
 
-# 3. Run
-make dev-server   # Terminal 1: FastAPI backend on :8000
-make dev-device   # Terminal 2: Pygame device simulator
-make dev-preview  # Terminal 3: Mobile web preview on :5001
+# 4. terminal 1
+make run-server
+
+# 5. terminal 2
+make run-dev
 ```
 
+That's it — Pygame window opens, SPACE/ENTER/BACKSPACE to navigate.
+
 ## Architecture
+
+## Current Delivery Status
+
+- Phase 4 shell set is complete (lock/home/chat/settings/focus/notifications overlay).
+- BLE foundation slices `P5-007`, `P5-008`, and `P5-009` are done (WiFi config/status, device status notify, keyboard routing).
+- Next up: `P5-010` NetworkManager priority + BT PAN baseline and `P5-011` QR companion pairing flow.
 
 ```
 Device (Pygame/ST7789) ──HTTP──▶ Server (FastAPI) ──▶ Claude API
@@ -118,6 +128,10 @@ If handing implementation to a new contributor/agent, start here:
 |---|---|
 | docs/planning/MAC_AI_SERVICE.md | Multi-agent Mac service + collab-electron pattern |
 | companion/README.md | Companion PWA setup, local dev, and deployment notes |
+| docs/planning/COMPANION_APP.md | Companion app scope, security expectations, and MVP acceptance criteria |
+| docs/planning/FIRST_BOOT.md | First-boot provisioning flow, state machine, and failure handling |
+| docs/BLUETOOTH_NETWORK_SPEC.md | BLE provisioning/status contract and network behavior expectations |
+| docs/BACKEND_SPEC.md | Backend endpoint, auth, provider, and error contract specification |
 
 - [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) — Phase 1 build plan
 - [ROADMAP.md](ROADMAP.md) — Full project roadmap
