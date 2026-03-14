@@ -1,0 +1,333 @@
+Here it is — save this as GETTING_STARTED.md in the repo root:
+
+# GETTING STARTED — BITOS
+
+> Pocket AI companion device. Pi Zero 2W + Whisplay HAT + PiSugar 3.
+> Hold the button. Speak. Claude answers through the speaker.
+
+---
+
+## What You Need
+
+### Hardware
+| Part | Notes |
+|---|---|
+| Raspberry Pi Zero 2W | 512MB RAM, ARM Cortex-A53 |
+| Whisplay HAT | 240×280 LCD + WM8960 audio codec |
+| PiSugar 3 | Battery + pogo-pin power connector |
+| microSD card | 32GB+, Class 10/A2 |
+| USB-C cable | For charging via PiSugar |
+
+### Accounts & Keys
+- Anthropic API key — [console.anthropic.com](https://console.anthropic.com)
+- GitHub account with SSH key configured
+
+### Mac (for flashing)
+- Pi Imager — [raspberrypi.com/software](https://www.raspberrypi.com/software/)
+- Git + SSH key (`~/.ssh/id_rsa.pub`)
+
+---
+
+## Physical Assembly
+
+Stack order (bottom to top):
+
+
+
+[ PiSugar 3      ]  ← battery, USB-C charge port
+[ Pi Zero 2W     ]  ← pogo pins connect to PiSugar
+[ Whisplay HAT   ]  ← seats on GPIO header (all 40 pins)
+
+
+**Important:**
+- PiSugar connects via 6 pogo pins on the underside — press firmly until flush
+- Whisplay HAT pins must be fully seated — check orientation before pressing
+- Power button is on PiSugar, not Pi
+- Charge via USB-C on PiSugar only
+
+**Expected I2C addresses (verify after boot):**
+
+
+0x57 — PiSugar 3 battery
+0x1A — WM8960 audio codec
+
+
+---
+
+## One-Time Mac Setup
+
+### 1. Clone the repo
+```bash
+git clone git@github.com:sabi-c/bitos.git
+cd bitos
+
+
+2. Add your SSH key to cloud-init
+
+cat ~/.ssh/id_rsa.pub  # copy this output
+
+nano scripts/cloud-init/user-data
+# → Replace YOUR_SSH_PUBLIC_KEY_HERE with your key
+# → Replace YOUR_GITHUB_USERNAME with your GitHub username
+
+
+3. That’s it — you’re ready to flash
+
+Flash the SD Card
+Step 1 — Flash with Pi Imager
+Open Pi Imager → choose:
+	∙	OS: Raspberry Pi OS Lite (64-bit, Bookworm)
+	∙	Storage: your SD card
+	∙	Gear icon (Advanced):
+	∙	Hostname: bitos
+	∙	Enable SSH: yes
+	∙	WiFi SSID + password: your network
+	∙	Locale: your timezone
+Click Write and wait.
+Step 2 — Copy cloud-init (do this before ejecting)
+
+make flash
+
+
+This copies the auto-install config to the SD card and ejects it safely. The script will warn you if your SSH key hasn’t been added yet.
+Step 3 — Insert SD and power on
+	∙	Insert SD card into Pi Zero 2W
+	∙	Press the PiSugar power button (hold 1-2 seconds)
+	∙	Wait 15 minutes — auto-install runs on first boot
+The boot screen will appear on the Whisplay HAT display showing install progress.
+
+First Boot Setup
+SSH in after 15 minutes:
+
+ssh pi@bitos
+# or: ssh pi@bitos.local
+
+
+Run the first-boot script — it handles everything:
+
+bash ~/bitos/scripts/day_one.sh
+
+
+This script:
+	1.	Verifies all hardware (display, button, audio, I2C)
+	2.	Checks secrets configuration
+	3.	Prompts you to add your Anthropic API key if missing
+	4.	Starts both services (bitos-server + bitos-device)
+	5.	Runs smoke test to confirm end-to-end connectivity
+Adding your API key when prompted:
+
+sudo nano /etc/bitos/secrets
+# Add this line:
+ANTHROPIC_API_KEY=sk-ant-...
+# Save: Ctrl+X → Y → Enter
+
+
+After day_one.sh completes:
+	∙	Display shows boot diagnostics (all green)
+	∙	Lock screen appears
+	∙	Default PIN: 0000
+
+First Voice Interaction
+	1.	Unlock: Enter PIN 0000 using button gestures
+	2.	Navigate to Chat: SHORT press to scroll, LONG press to select
+	3.	Speak: Hold button (LONG press) → speak → release
+	4.	Listen: Claude responds through the speaker
+
+Button Gestures
+
+
+
+|Gesture               |Action                          |
+|----------------------|--------------------------------|
+|SHORT press (<600ms)  |Scroll / advance                |
+|LONG press (≥600ms)   |Select / confirm / hold to speak|
+|DOUBLE press          |Go back                         |
+|TRIPLE press          |Quick capture (save a note)     |
+|5× press (within 1.2s)|Power menu (shutdown / reboot)  |
+
+Daily Mac Commands
+
+make status       # check if services running on Pi
+make logs         # live log stream (Ctrl+C to stop)
+make logs-device  # device-only logs
+make logs-server  # server-only logs
+make restart      # restart everything cleanly
+make deploy       # push code changes to Pi
+make ship         # deploy + restart + show logs
+make ssh          # open SSH session
+
+
+Desktop Simulator (no hardware needed)
+Test on Mac without any Pi hardware:
+
+cp .env.template .env
+# Edit .env → add ANTHROPIC_API_KEY
+
+pip install -r requirements.txt
+
+make run-server   # Terminal 1: FastAPI backend on :8000
+make run-dev      # Terminal 2: Pygame simulator window
+
+
+Keyboard shortcuts in simulator:
+
+SPACE        → SHORT press
+ENTER        → LONG press (hold to speak)
+BACKSPACE    → DOUBLE press (back)
+TAB          → TRIPLE press (quick capture)
+
+
+Type your message when prompted for voice input.
+
+Agent Modes
+BITOS adapts Claude’s personality based on what you’re doing:
+
+
+
+|Mode       |Claude acts as                                            |
+|-----------|----------------------------------------------------------|
+|PRODUCER   |Operations partner — knows your active projects (SSS, etc)|
+|HACKER     |Technical co-pilot — focused on BITOS and code            |
+|CLOWN      |Creative partner for physical performance work            |
+|MONK       |Companion for reflection and focus                        |
+|STORYTELLER|Narrative partner for Tender Fest and creative projects   |
+|DIRECTOR   |Strategic thinking partner for big-picture decisions      |
+
+Change mode: Settings → Agent Mode
+
+Companion App
+The companion app runs in Safari (iPhone) or Chrome (Mac/Android) and lets you:
+	∙	Provision WiFi credentials to the device via BLE
+	∙	Type keyboard input to the device
+	∙	View device status (battery, connectivity, AI online)
+URL: https://bitos-p8xw.onrender.com
+First-time WiFi setup:
+	1.	Device shows QR code on boot if no WiFi configured
+	2.	Scan QR → companion app opens
+	3.	Connect → authenticate with PIN → send WiFi credentials
+	4.	Device connects and confirms
+
+Troubleshooting
+See docs/TROUBLESHOOTING.md for the full decision tree.
+Quick fixes:
+
+
+
+|Symptom              |Fix                                               |
+|---------------------|--------------------------------------------------|
+|Screen blank         |`sudo raspi-config nonint do_spi 0 && sudo reboot`|
+|No audio             |`cd ~/whisplay && sudo bash install.sh`           |
+|Button unresponsive  |Check GPIO Board pin 11 reads 0 when pressed      |
+|Claude offline       |`bash scripts/setup/check_secrets.sh`             |
+|Services not starting|`make logs` to see error                          |
+|Wrong I2C addresses  |`sudo i2cdetect -y 1` — expect 0x57 and 0x1A      |
+
+Hardware verify (run on Pi):
+
+python scripts/verify_hardware.py
+
+
+Full smoke test:
+
+python scripts/smoke_test.py
+
+
+Architecture
+
+Pi Zero 2W (device)
+  └── Pygame/ST7789 display
+  └── WM8960 audio (record + playback)
+  └── GPIO button (single button, gesture detection)
+  └── BLE GATT server (companion pairing)
+  └── HTTP client → FastAPI server
+  
+Mac mini (server)
+  └── FastAPI server (:8000)
+  └── LLM bridge (Anthropic / OpenClaw / any OpenAI-compatible)
+  └── Vikunja adapter (task management)
+  └── Morning brief worker (8am daily context)
+
+
+The Pi handles display, input, and audio. All intelligence runs on the Mac mini. Swap LLM providers with one .env change.
+
+Environment Variables
+Copy .env.template to .env and configure:
+
+# Required
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Server (Mac mini)
+SERVER_URL=http://localhost:8000
+LLM_PROVIDER=anthropic        # anthropic / openclaw / echo
+
+# Device hardware
+BITOS_DISPLAY=pygame          # pygame (desktop) / st7789 (Pi)
+BITOS_AUDIO=mock              # mock (desktop) / hw:0 (Pi)
+BITOS_BUTTON=keyboard         # keyboard (desktop) / gpio (Pi)
+
+# Optional integrations
+VIKUNJA_URL=http://localhost:3456/api/v1
+VIKUNJA_API_TOKEN=            # leave empty for demo tasks
+OBSIDIAN_VAULT_PATH=          # path to your Obsidian vault
+
+
+On the Pi, secrets live in /etc/bitos/secrets (root-owned, not in git).
+
+After First Boot — What’s Next
+Once the device is working:
+	1.	UI tuning — see docs/reports/UI_SPEC_GAPS.md for known gaps between reference designs and current implementation. Use Claude Code for surgical screen-by-screen fixes.
+	2.	Vikunja — install on Mac mini for real task management:
+
+# On Mac mini:
+mkdir ~/vikunja && cd ~/vikunja
+curl -L https://vikunja.io/install.sh | bash
+# Add VIKUNJA_API_TOKEN to .env
+
+
+	3.	Offline AI — enable Piper TTS and whisper.cpp for voice that works without internet:
+
+make setup-offline-ai  # ~10 min, ~500MB
+
+
+	4.	OpenClaw — connect to your Mac mini OpenClaw gateway for full tool access (Things 3, Obsidian, email, calendar):
+
+LLM_PROVIDER=openclaw
+OPENCLAW_BASE_URL=http://localhost:18789
+
+
+Security
+All security decisions documented in docs/planning/SECURITY_DECISIONS.md.
+Key points:
+	∙	BLE uses LESC passkey pairing (not Just Works)
+	∙	WiFi credentials double-encrypted (BLE link + AES-128-GCM)
+	∙	Secrets stored in /etc/bitos/secrets (root-owned, mode 600)
+	∙	Default PIN is 0000 — change via Settings → PIN after first boot
+
+Development
+
+pytest -q                    # run all 236 tests
+make check-install           # verify service naming is consistent
+python scripts/validate_tracker.py  # validate task tracker
+
+
+CI runs on every push to main and work branches.
+See docs/planning/TASK_TRACKER.md for full backlog.
+See docs/planning/HANDOFF_NEXT_AGENT.md for contributor brief.
+
+Built with Claude Code and a lot of patience.
+
+
+---
+
+Save as `GETTING_STARTED.md` in the repo root, add a link to it from README:
+
+```bash
+# Add to README.md Quick Start section:
+# → [Full setup guide](GETTING_STARTED.md)
+
+git add GETTING_STARTED.md
+git commit -m "docs: add comprehensive getting started guide"
+git push
+
+
+That’s the doc someone (or future you at 2am) can open and go from zero to working device without needing to remember anything.​​​​​​​​​​​​​​​​
