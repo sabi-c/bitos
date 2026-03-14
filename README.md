@@ -117,6 +117,7 @@ If handing implementation to a new contributor/agent, start here:
 | Document | Purpose |
 |---|---|
 | docs/planning/MAC_AI_SERVICE.md | Multi-agent Mac service + collab-electron pattern |
+| companion/README.md | Companion PWA setup, local dev, and deployment notes |
 
 - [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) — Phase 1 build plan
 - [ROADMAP.md](ROADMAP.md) — Full project roadmap
@@ -124,6 +125,7 @@ If handing implementation to a new contributor/agent, start here:
 - [docs/planning/TASK_TRACKER.md](docs/planning/TASK_TRACKER.md) — Canonical backlog + per-iteration log for all contributors/agents
 - [docs/planning/HANDOFF_NEXT_AGENT.md](docs/planning/HANDOFF_NEXT_AGENT.md) — Practical takeover brief and next-slice implementation notes
 - [docs/reference-ui/README.md](docs/reference-ui/README.md) — Canonical location and naming conventions for imported HTML UI reference files
+- [companion/README.md](companion/README.md) — Companion PWA workflow for BLE Wi-Fi provisioning
 
 ## License
 

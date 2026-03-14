@@ -1,4 +1,5 @@
 """BITOS Device main entry point."""
+import logging
 import os
 import time
 
@@ -35,6 +36,9 @@ from integrations.runtime import OutboundWorkerRuntimeLoop
 from integrations.worker import OutboundCommandWorker
 
 
+logger = logging.getLogger(__name__)
+
+
 def _read_device_serial() -> str:
     try:
         with open("/proc/cpuinfo", "r", encoding="utf-8") as f:
@@ -49,7 +53,7 @@ def _read_device_serial() -> str:
 
 
 def main():
-    print("[BITOS] Starting device...")
+    logger.info("[BITOS] Starting device...")
     start_time = time.time()
 
     driver = create_driver()
@@ -134,16 +138,20 @@ def main():
 
     server_ok = client.health()
     if server_ok:
-        print("[BITOS] Backend connected ✓")
+        logger.info("[BITOS] Backend connected ✓")
     else:
-        print("[BITOS] Backend not reachable — chat will not work until server starts")
+        logger.warning("[BITOS] Backend not reachable — chat will not work until server starts")
 
     ui_settings = None
     try:
         ui_settings = client.get_ui_settings()
-        print(f"[BITOS] UI settings loaded (font={ui_settings.get('font_family')}, scale={ui_settings.get('font_scale')})")
+        logger.info(
+            "[BITOS] UI settings loaded (font=%s, scale=%s)",
+            ui_settings.get("font_family"),
+            ui_settings.get("font_scale"),
+        )
     except Exception as exc:
-        print(f"[BITOS] UI settings unavailable, using defaults ({exc})")
+        logger.warning("[BITOS] UI settings unavailable, using defaults (%s)", exc)
 
     def open_chat():
         chat = ChatPanel(client, ui_settings=ui_settings, repository=repository)
@@ -207,19 +215,19 @@ def main():
     device_status_char.start_periodic_updates(_collect_device_status, interval_s=30)
 
     def on_short():
-        print("[Button] SHORT_PRESS")
+        logger.info("[Button] SHORT_PRESS")
         screen_mgr.handle_action("SHORT_PRESS")
 
     def on_long():
-        print("[Button] LONG_PRESS")
+        logger.info("[Button] LONG_PRESS")
         screen_mgr.handle_action("LONG_PRESS")
 
     def on_double():
-        print("[Button] DOUBLE_PRESS")
+        logger.info("[Button] DOUBLE_PRESS")
         screen_mgr.handle_action("DOUBLE_PRESS")
 
     def on_triple():
-        print("[Button] TRIPLE_PRESS")
+        logger.info("[Button] TRIPLE_PRESS")
         screen_mgr.handle_action("TRIPLE_PRESS")
 
     button.on(ButtonEvent.SHORT_PRESS, on_short)
@@ -255,7 +263,7 @@ def main():
         for result in worker_results:
             if result.status in ("retrying", "dead_letter"):
                 reason = result.reason or "unknown"
-                print(f"[Queue] command={result.command_id} status={result.status} reason={reason}")
+                logger.error("[Queue] command=%s status=%s reason=%s", result.command_id, result.status, reason)
         screen_mgr.update(dt)
         screen_mgr.render(surface)
         driver.update()
@@ -266,7 +274,7 @@ def main():
     device_status_char.stop_periodic_updates()
     gatt_server.stop()
     driver.quit()
-    print("[BITOS] Shut down.")
+    logger.info("[BITOS] Shut down.")
 
 
 if __name__ == "__main__":
