@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "device"))
 
 from screens.panels.messages import MessagesPanel
+from display.tokens import STATUS_BAR_H, WHITE, BLACK
 
 
 class _Client:
@@ -55,6 +56,31 @@ class MessagesPanelTests(unittest.TestCase):
         panel.render(surface)
         self.assertEqual(panel._state, panel.STATE_LIST)
         self.assertEqual(len(panel._conversations), 2)
+
+    def test_status_bar_is_inverted_in_all_states(self):
+        panel = self._panel()
+        surface = pygame.Surface((240, 280))
+        states = [panel.STATE_LIST, panel.STATE_THREAD, panel.STATE_DRAFT_VOICE, panel.STATE_CONFIRM_SEND]
+        for state in states:
+            panel._state = state
+            panel.render(surface)
+            self.assertEqual(surface.get_at((1, 1))[:3], WHITE)
+            self.assertEqual(surface.get_at((1, STATUS_BAR_H + 1))[:3], BLACK)
+
+    def test_confirm_state_has_key_hint_bar(self):
+        panel = self._panel()
+        panel._state = panel.STATE_CONFIRM_SEND
+        surface = pygame.Surface((240, 280))
+        panel.render(surface)
+        bottom_band_has_text = False
+        for y in range(270, 280):
+            for x in range(240):
+                if surface.get_at((x, y))[:3] != BLACK:
+                    bottom_band_has_text = True
+                    break
+            if bottom_band_has_text:
+                break
+        self.assertTrue(bottom_band_has_text)
 
     def test_short_press_advances_focus(self):
         panel = self._panel()

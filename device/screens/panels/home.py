@@ -1,5 +1,4 @@
 """BITOS Home panel with button-first sidebar navigation."""
-import threading
 
 import pygame
 
@@ -27,6 +26,7 @@ class HomePanel(BaseScreen):
         startup_health: dict | None = None,
         repository=None,
         client=None,
+        status_state=None,
     ):
         self._on_open_chat = on_open_chat
         self._on_open_focus = on_open_focus
@@ -39,8 +39,7 @@ class HomePanel(BaseScreen):
         self._on_show_shade = on_show_shade
         self._repository = repository
         self._client = None
-        self._msgs_unread = 0
-        self._mail_unread = 0
+        self._status_state = status_state
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
         self._client = client
         self._startup_health = startup_health if startup_health is not None else {}
@@ -61,8 +60,6 @@ class HomePanel(BaseScreen):
             ]
         )
 
-        if self._client:
-            threading.Thread(target=self._refresh_unread, daemon=True).start()
 
     def handle_action(self, action: str):
         if action == "SHORT_PRESS":
@@ -110,9 +107,8 @@ class HomePanel(BaseScreen):
             if item.key == "captures":
                 label = f"CAPTURES ({capture_count})"
             elif item.key == "msgs":
-                label = f"MSGS ({self._msgs_unread})" if self._msgs_unread > 0 else "MSGS"
-            elif item.key == "mail":
-                label = f"MAIL ({self._mail_unread})" if self._mail_unread > 0 else "MAIL"
+                unread = int(getattr(self._status_state, "imessage_unread", 0)) if self._status_state else 0
+                label = f"MSGS ({unread})" if unread > 0 else "MSGS"
             row = self._font_body.render(label, False, row_color)
             st = self._font_small.render(item.status, False, status_color)
             text_y = y + (ROW_H_MIN - row.get_height()) // 2
@@ -173,12 +169,3 @@ class HomePanel(BaseScreen):
             return "AI ?"
         return "AI ✓" if backend else "AI ⚠"
 
-    def _refresh_unread(self):
-        try:
-            conversations = self._client.get_conversations() if self._client else []
-            mail_threads = self._client.get_mail_inbox() if self._client and hasattr(self._client, "get_mail_inbox") else []
-            self._msgs_unread = sum(int(c.get("unread", 0)) for c in conversations)
-            self._mail_unread = sum(1 for t in mail_threads if bool(t.get("unread")))
-        except Exception:
-            self._msgs_unread = 0
-            self._mail_unread = 0

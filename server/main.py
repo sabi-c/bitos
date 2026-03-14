@@ -8,6 +8,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
+from integrations.bluebubbles_adapter import BlueBubblesAdapter
+from integrations.vikunja_adapter import VikunjaAdapter
+
 from agent_modes import get_system_prompt
 from config import UI_SETTINGS_FILE
 from llm_bridge import create_llm_bridge, to_sse_data
@@ -33,16 +36,133 @@ class MessageDraftRequest(BaseModel):
     voice_transcript: str
 
 
-class MailDraftRequest(BaseModel):
-    thread_id: str
-    voice_transcript: str
+class IntegrationSettingsRequest(BaseModel):
+    integration: str
+    config: dict = Field(default_factory=dict)
 
 
-class MailCreateDraftRequest(BaseModel):
-    thread_id: str
-    body: str
-    confirmed: bool = False
+def _is_real_anthropic_key(value: str) -> bool:
+    key = value.strip()
+    return key.startswith("sk-ant-")
 
+
+def _integration_status_payload() -> dict:
+    imessage = BlueBubblesAdapter()
+    vikunja = VikunjaAdapter()
+
+    imessage_status = "mock" if imessage.is_mock else "offline"
+    if not imessage.is_mock:
+        try:
+            imessage.ping()
+            imessage_status = "online"
+        except Exception:
+            imessage_status = "offline"
+
+    vikunja_status = "mock" if vikunja.is_mock else "offline"
+    task_count = 0
+    if not vikunja.is_mock:
+        try:
+            task_count = len(vikunja.get_today_tasks())
+            vikunja_status = "online"
+        except Exception:
+            vikunja_status = "offline"
+
+    anthropic = os.environ.get("ANTHROPIC_API_KEY", "")
+    ai_status = "online" if _is_real_anthropic_key(anthropic) else "offline"
+
+    return {
+        "imessage": {
+            "status": imessage_status,
+            "unread": imessage.get_unread_count() if imessage_status in {"online", "mock"} else 0,
+            "server_url": imessage.base_url,
+            "last_checked": "just now",
+        },
+        "vikunja": {
+            "status": vikunja_status,
+            "task_count": task_count,
+            "last_checked": "just now" if vikunja_status in {"online", "mock"} else "never",
+        },
+        "ai": {
+            "status": ai_status,
+            "provider": "anthropic",
+            "model": llm_bridge.model,
+        },
+    }
+
+
+def _write_dev_env(updates: dict[str, str]) -> None:
+    env_path = os.path.join(os.getcwd(), ".env")
+    existing: dict[str, str] = {}
+    if os.path.exists(env_path):
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                if "=" not in line or line.strip().startswith("#"):
+                    continue
+                k, v = line.strip().split("=", 1)
+                existing[k] = v
+    existing.update(updates)
+    with open(env_path, "w", encoding="utf-8") as f:
+        for key in sorted(existing.keys()):
+            f.write(f"{key}={existing[key]}\n")
+
+
+def _write_pi_secrets(updates: dict[str, str]) -> None:
+    secrets_path = "/etc/bitos/secrets"
+    existing: dict[str, str] = {}
+    if os.path.exists(secrets_path):
+        with open(secrets_path, "r", encoding="utf-8") as f:
+            for line in f:
+                if "=" not in line or line.strip().startswith("#"):
+                    continue
+                k, v = line.strip().split("=", 1)
+                existing[k] = v
+    existing.update(updates)
+    os.makedirs(os.path.dirname(secrets_path), exist_ok=True)
+    with open(secrets_path, "w", encoding="utf-8") as f:
+        for key in sorted(existing.keys()):
+            f.write(f"{key}={existing[key]}\n")
+
+
+def _persist_integration_settings(updates: dict[str, str]) -> str:
+    for key, value in updates.items():
+        os.environ[key] = value
+    if os.path.exists("/etc/bitos"):
+        _write_pi_secrets(updates)
+        return "pi"
+    _write_dev_env(updates)
+    return "dev"
+
+
+def _test_integration_connection(integration: str, config: dict) -> tuple[bool, str]:
+    if integration == "imessage":
+        adapter = BlueBubblesAdapter()
+        if not config.get("password", "").strip():
+            return False, "BlueBubbles password required"
+        try:
+            adapter.ping()
+            return True, ""
+        except Exception as exc:
+            return False, str(exc)
+
+    if integration == "vikunja":
+        token = str(config.get("token", "")).strip()
+        if not token:
+            return False, "Vikunja token required"
+        base_url = str(config.get("url", "")).rstrip("/")
+        import httpx
+
+        try:
+            resp = httpx.get(
+                f"{base_url}/user",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            return True, ""
+        except Exception as exc:
+            return False, str(exc)
+
+    return False, "Unknown integration"
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +212,37 @@ async def health():
     }
 
 
+@app.get("/status/integrations")
+async def get_integrations_status():
+    return _integration_status_payload()
+
+
+@app.post("/settings/integrations")
+async def update_integrations_settings(payload: IntegrationSettingsRequest):
+    integration = payload.integration.strip().lower()
+    config = payload.config or {}
+
+    updates: dict[str, str]
+    if integration == "imessage":
+        updates = {
+            "BLUEBUBBLES_BASE_URL": str(config.get("url", "")).strip(),
+            "BLUEBUBBLES_PASSWORD": str(config.get("password", "")).strip(),
+        }
+    elif integration == "vikunja":
+        updates = {
+            "VIKUNJA_BASE_URL": str(config.get("url", "")).strip(),
+            "VIKUNJA_API_TOKEN": str(config.get("token", "")).strip(),
+        }
+    else:
+        raise HTTPException(status_code=400, detail="Unknown integration")
+
+    _persist_integration_settings(updates)
+    ok, error = _test_integration_connection(integration, config)
+    if not ok:
+        return {"ok": False, "error": error}
+    return {"ok": True}
+
+
 @app.get("/settings/catalog")
 async def settings_catalog():
     """Return catalog metadata for editable UI settings."""
@@ -121,10 +272,6 @@ async def update_ui_settings(request: Request):
 
 @app.get("/tasks/today")
 async def get_today_tasks():
-    import sys
-    from pathlib import Path
-    sys.path.insert(0, str(Path(__file__).resolve().parent / "integrations"))
-    from vikunja_adapter import VikunjaAdapter
     adapter = VikunjaAdapter()
     tasks = adapter.get_today_tasks()
     return {"tasks": tasks, "count": len(tasks)}
@@ -132,12 +279,6 @@ async def get_today_tasks():
 
 @app.get("/messages")
 async def get_messages_conversations():
-    import sys
-    from pathlib import Path
-
-    sys.path.insert(0, str(Path(__file__).resolve().parent / "integrations"))
-    from bluebubbles_adapter import BlueBubblesAdapter
-
     adapter = BlueBubblesAdapter()
     return {
         "conversations": adapter.get_conversations(),
@@ -206,12 +347,6 @@ async def create_mail_draft(payload: MailCreateDraftRequest):
 
 @app.get("/messages/{chat_id:path}")
 async def get_messages_for_chat(chat_id: str):
-    import sys
-    from pathlib import Path
-
-    sys.path.insert(0, str(Path(__file__).resolve().parent / "integrations"))
-    from bluebubbles_adapter import BlueBubblesAdapter
-
     adapter = BlueBubblesAdapter()
     return {
         "messages": adapter.get_messages(chat_id),
@@ -221,12 +356,6 @@ async def get_messages_for_chat(chat_id: str):
 
 @app.post("/messages/send")
 async def send_message(payload: MessageSendRequest):
-    import sys
-    from pathlib import Path
-
-    sys.path.insert(0, str(Path(__file__).resolve().parent / "integrations"))
-    from bluebubbles_adapter import BlueBubblesAdapter
-
     if not payload.confirmed:
         raise HTTPException(status_code=403, detail="requires confirmed=true")
 
@@ -237,12 +366,6 @@ async def send_message(payload: MessageSendRequest):
 
 @app.post("/messages/draft")
 async def draft_message(payload: MessageDraftRequest):
-    import sys
-    from pathlib import Path
-
-    sys.path.insert(0, str(Path(__file__).resolve().parent / "integrations"))
-    from bluebubbles_adapter import BlueBubblesAdapter
-
     adapter = BlueBubblesAdapter()
     messages = adapter.get_messages(payload.chat_id, limit=3)
     context = "\n".join(

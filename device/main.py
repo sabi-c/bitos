@@ -41,6 +41,7 @@ from screens.panels.settings import (
     SettingsPanel,
     SleepTimerPanel,
 )
+from screens.subscreens.integration_detail import IntegrationDetailPanel
 from client.api import BackendClient
 from storage.repository import DeviceRepository
 from integrations.adapters import create_runtime_adapter
@@ -300,6 +301,7 @@ def main():
             startup_health=startup_health,
             repository=repository,
             client=client,
+            status_state=status_state,
         )
         screen_mgr.replace(home)
 
@@ -359,6 +361,7 @@ def main():
             on_push_overlay=screen_mgr.push_overlay,
             on_dismiss_overlay=screen_mgr.dismiss_overlay,
             ui_settings=ui_settings,
+            on_open_integration_detail=open_integration_detail,
         )
         screen_mgr.replace(settings)
 
@@ -374,6 +377,8 @@ def main():
     def open_about():
         screen_mgr.replace(AboutPanel(on_back=open_settings, ui_settings=ui_settings))
 
+    def open_integration_detail(integration_name: str, status_data: dict):
+        screen_mgr.replace(IntegrationDetailPanel(integration_name=integration_name, status_data=status_data, on_back=open_settings, ui_settings=ui_settings))
 
     def open_companion_app():
         ble_addr = gatt_server.get_device_address()

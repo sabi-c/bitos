@@ -143,6 +143,16 @@ class BackendClient:
             return {"error": message_copy, "kind": kind, "retryable": retryable}
 
 
+    def get_integration_status(self) -> dict:
+        """GET /status/integrations."""
+        try:
+            resp = httpx.get(f"{self.base_url}/status/integrations", timeout=5, headers=self._request_headers())
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as exc:
+            logging.warning("integration_status_failed error=%s", exc)
+            return {}
+
     def get_conversations(self) -> list[dict]:
         """GET /messages and return conversations list."""
         try:

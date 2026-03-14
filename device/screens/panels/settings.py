@@ -39,6 +39,8 @@ class SettingsPanel(BaseScreen):
         on_push_overlay=None,
         on_dismiss_overlay=None,
         ui_settings: dict | None = None,
+        client=None,
+        on_open_integration_detail=None,
     ):
         self._repo = repository
         self._on_back = on_back
@@ -51,6 +53,12 @@ class SettingsPanel(BaseScreen):
         self._on_set_discoverable = on_set_discoverable or (lambda _enabled, _timeout: None)
         self._on_push_overlay = on_push_overlay
         self._on_dismiss_overlay = on_dismiss_overlay
+
+        self._client = client
+        self._on_open_integration_detail = on_open_integration_detail
+        self._integration_status = {}
+        self._blink_phase = False
+
 
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
         self._font_title = load_ui_font("title", self._ui_settings)
@@ -69,6 +77,11 @@ class SettingsPanel(BaseScreen):
                 NavItem(key="web_search", label="WEB SEARCH", status="", action=self._toggle_web_search),
                 NavItem(key="memory", label="MEMORY", status="", action=self._toggle_memory),
                 NavItem(key="ai_model", label="AI MODEL", status="", action=self._open_model_picker),
+                NavItem(key="integrations_header", label="INTEGRATIONS", status="", enabled=False),
+                NavItem(key="imessage", label="iMESSAGE", status="", action=lambda: None),
+                NavItem(key="vikunja", label="VIKUNJA", status="", action=lambda: None),
+                NavItem(key="ai", label="AI", status="", action=self._open_model_picker),
+                NavItem(key="bluebubbles", label="BLUEBUBBLES", status="", action=lambda: None),
                 NavItem(key="agent_mode", label="AGENT MODE", status="", action=self._open_agent_mode),
                 NavItem(key="sleep", label="SLEEP TIMER", status="", action=self._open_sleep_timer),
                 NavItem(key="about", label="ABOUT", status="", action=self._open_about),
@@ -83,10 +96,15 @@ class SettingsPanel(BaseScreen):
         self._ai_model = str(self._repo.get_setting("ai_model", default="claude-sonnet-4-6"))
         self._agent_mode = str(self._repo.get_setting("agent_mode", default="producer"))
         self._sleep_sec = int(self._repo.get_setting("sleep_timeout_seconds", default=60))
+        self._refresh_integration_status()
 
     def handle_action(self, action: str):
         if action == "LONG_PRESS":
-            self._nav.activate_focused()
+            focused = self._nav.focused_item
+            if focused and focused.key in {"imessage", "vikunja"}:
+                self._open_integration_detail(focused.key)
+            else:
+                self._nav.activate_focused()
         elif action == "SHORT_PRESS":
             self._nav.move(1)
         elif action == "DOUBLE_PRESS":
@@ -112,6 +130,8 @@ class SettingsPanel(BaseScreen):
         title = self._font_small.render("SETTINGS", False, BLACK)
         surface.blit(title, (6, (STATUS_BAR_H - title.get_height()) // 2))
 
+        self._blink_phase = not self._blink_phase
+
         statuses = {
             "web_search": "ON" if self._web_search else "OFF",
             "memory": "ON" if self._memory else "OFF",
@@ -120,6 +140,10 @@ class SettingsPanel(BaseScreen):
             "sleep": f"{self._sleep_sec}s \u203a",
             "about": "v1.0 \u203a",
             "companion": "PAIR \u203a",
+            "imessage": self._format_integration_status("imessage", arrow=True),
+            "vikunja": self._format_integration_status("vikunja", arrow=True),
+            "ai": self._format_integration_status("ai", arrow=True),
+            "bluebubbles": self._format_integration_status("imessage", config=True, arrow=True),
             "back": "HOME",
         }
 
@@ -127,6 +151,13 @@ class SettingsPanel(BaseScreen):
         y = STATUS_BAR_H
         for idx, item in enumerate(self._nav.items):
             focused = idx == self._nav.focus_index
+            if item.key == "integrations_header":
+                row = self._font_body.render(item.label, False, DIM2)
+                surface.blit(row, (8, y + (ROW_H_MIN - row.get_height()) // 2))
+                pygame.draw.line(surface, HAIRLINE, (0, y + ROW_H_MIN - 1), (PHYSICAL_W, y + ROW_H_MIN - 1))
+                y += ROW_H_MIN
+                continue
+
             if focused:
                 pygame.draw.rect(surface, WHITE, pygame.Rect(0, y, PHYSICAL_W, ROW_H_MIN))
             status_copy = statuses.get(item.key, item.status)
@@ -188,6 +219,38 @@ class SettingsPanel(BaseScreen):
         )
         self._on_push_overlay(qr)
         self._on_set_discoverable(True, 120)
+
+
+    def _refresh_integration_status(self):
+        if not self._client:
+            self._integration_status = {}
+            return
+        try:
+            self._integration_status = self._client.get_integration_status()
+        except Exception:
+            self._integration_status = {}
+
+    def _format_integration_status(self, key: str, config: bool = False, arrow: bool = False) -> str:
+        info = self._integration_status.get(key, {})
+        status = str(info.get("status", "offline")).lower()
+        if config:
+            status = "config"
+        if status == "online":
+            label = "[ONLINE]"
+        elif status == "offline":
+            label = "[OFFLINE]"
+        elif status == "config":
+            label = "[CONFIG]" if self._blink_phase else "[      ]"
+        elif status == "mock":
+            label = "MOCK"
+        else:
+            label = "[OFFLINE]"
+        return f"{label} ›" if arrow else label
+
+    def _open_integration_detail(self, integration_name: str):
+        if self._on_open_integration_detail:
+            status_data = self._integration_status.get(integration_name, {})
+            self._on_open_integration_detail(integration_name, status_data)
 
     def _go_back(self):
         if self._on_back:
@@ -303,6 +366,7 @@ class AgentModePanel(BaseScreen):
     def __init__(self, repository: DeviceRepository, on_back=None, ui_settings: dict | None = None):
         self._repo = repository
         self._on_back = on_back
+
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
         self._font_title = load_ui_font("title", self._ui_settings)
         self._font_body = load_ui_font("body", self._ui_settings)
@@ -380,6 +444,7 @@ class SleepTimerPanel(BaseScreen):
     def __init__(self, repository: DeviceRepository, on_back=None, ui_settings: dict | None = None):
         self._repo = repository
         self._on_back = on_back
+
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
         self._font_title = load_ui_font("title", self._ui_settings)
         self._font_body = load_ui_font("body", self._ui_settings)
@@ -418,6 +483,7 @@ class SleepTimerPanel(BaseScreen):
 class AboutPanel(BaseScreen):
     def __init__(self, on_back=None, ui_settings: dict | None = None):
         self._on_back = on_back
+
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
         self._font_title = load_ui_font("title", self._ui_settings)
         self._font_body = load_ui_font("body", self._ui_settings)

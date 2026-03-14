@@ -44,3 +44,12 @@ class StatusPoller:
             )
         except Exception as e:
             logger.warning("status_poll_failed error=%s", e)
+
+        try:
+            integrations = self._api.get_integration_status()
+            self._state.update(
+                imessage_status=integrations.get("imessage", {}).get("status", "unknown"),
+                imessage_unread=integrations.get("imessage", {}).get("unread", 0),
+            )
+        except Exception:
+            pass
