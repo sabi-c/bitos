@@ -114,6 +114,10 @@ If handing implementation to a new contributor/agent, start here:
 
 ## Docs
 
+| Document | Purpose |
+|---|---|
+| docs/planning/MAC_AI_SERVICE.md | Multi-agent Mac service + collab-electron pattern |
+
 - [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) — Phase 1 build plan
 - [ROADMAP.md](ROADMAP.md) — Full project roadmap
 - [docs/planning/IMPLEMENTATION_PLAN_NEXT.md](docs/planning/IMPLEMENTATION_PLAN_NEXT.md) — Detailed implementation sequencing for Phases 2–4

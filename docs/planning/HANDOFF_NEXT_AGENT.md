@@ -25,28 +25,28 @@ This document is a practical takeover brief for the next implementation contribu
 
 ## 2) Immediate next implementation target
 
-## P4-004 — Notification shade + panel data-source wiring
+## P5-010 — NetworkManager priority tuning + BT PAN baseline
 
-Built this sprint: settings is now wired to local persistence (web search/memory toggles, model picker, agent mode picker, sleep timer detail, and about panel), and long-press actions persist immediately where required. Notification overlay architecture is now in place via `NotificationToast` + `NotificationQueue` and is integrated into `ScreenManager` so overlays render above active screens and can consume SHORT/LONG actions first. Adapter/runtime provenance headers were also added to clarify why those integration files exist.
+Built this sprint: P5-007/008/009 filled BLE characteristic behavior for protected WiFi provisioning writes, unprotected WiFi status reads, device status read/notify updates, and protected keyboard input routing into compose targets. `ScreenManager` now exposes compose-routing helpers and pushes active-screen status updates into the device status characteristic on screen transitions. Runtime wiring in `device/main.py` now instantiates WiFi/device-status/keyboard characteristics, starts periodic device status updates, and keeps BLE paths mock-safe.
 
 Read first next iteration:
 1. `docs/planning/TASK_TRACKER.md`
-2. `device/screens/panels/settings.py` and `device/storage/repository.py`
-3. `device/overlays/notification.py` and `device/screens/manager.py`
+2. `device/bluetooth/characteristics/wifi_config.py` and `device/bluetooth/wifi_manager.py`
+3. `device/bluetooth/characteristics/device_status.py`, `device/screens/manager.py`, and `device/main.py`
 
-Most important thing to know: preserve overlay-first input handling and button gesture consistency while adding real notification/settings data feeds (no keyboard-only paths).
+Most important thing to know: preserve strict auth boundaries — `WIFI_CONFIG` and `KEYBOARD_INPUT` must continue rejecting invalid session tokens and never call their side-effect callbacks when auth fails.
 
-Deliver the next Phase 4 slice:
-1. Implement NotificationShade (full list view) and link overlay `on_open` flows to it.
-2. Replace notifications shell placeholders with repository/provider-backed items.
-3. Wire settings values that should sync with backend UI settings where applicable.
-4. Extend tests for shade behavior, hydration, and error fallbacks.
+Deliver the next Phase 5 slice:
+1. P5-010: tune NetworkManager connection priority/fallback behavior and add BT PAN baseline.
+2. Keep `BITOS_BLUETOOTH=mock` and `BITOS_WIFI=mock` paths deterministic for desktop tests.
+3. Implement NOTIFICATION_RELAY characteristic only in its dedicated sprint (P5-008b), not opportunistically.
+4. Keep companion protocol doc aligned with characteristic payload/schema changes.
 
 ### Suggested acceptance checks
-- Overlay toasts continue rendering on top of any active screen with correct expiry and dismissal behavior.
-- NotificationShade can open from a toast long-press and render persisted entries safely.
-- Settings values survive restarts and remain consistent between detail pickers and main settings list.
-- Full suite remains green with new shade/data-path coverage.
+- Protected characteristic writes fail fast on invalid session token.
+- Device status notify loop starts/stops cleanly and does not block shutdown.
+- Keyboard routing updates active compose field on chat and safely no-ops otherwise.
+- Full `pytest -q` remains green.
 
 ---
 

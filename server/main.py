@@ -1,6 +1,9 @@
 """BITOS Server backend: health, chat, and UI settings catalog endpoints."""
+import logging
+import os
+
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import UI_SETTINGS_FILE
@@ -10,6 +13,7 @@ from llm_bridge import create_llm_bridge, to_sse_data
 app = FastAPI(title="BITOS Server", version="0.3.0")
 settings_store = UISettingsStore(UI_SETTINGS_FILE)
 llm_bridge = create_llm_bridge()
+_token_warning_logged = False
 
 app.add_middleware(
     CORSMiddleware,
@@ -17,6 +21,28 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def require_device_token(request: Request, call_next):
+    global _token_warning_logged
+
+    if request.method == "GET" and request.url.path == "/health":
+        return await call_next(request)
+
+    expected = os.environ.get("BITOS_DEVICE_TOKEN", "")
+    provided = request.headers.get("X-Device-Token", "")
+
+    if not expected:
+        if not _token_warning_logged:
+            logging.warning("[BITOS] BITOS_DEVICE_TOKEN is not set; allowing all requests (dev mode)")
+            _token_warning_logged = True
+        return await call_next(request)
+
+    if provided != expected:
+        return JSONResponse(status_code=401, content={"detail": "Unauthorized device"})
+
+    return await call_next(request)
 
 
 @app.get("/health")

@@ -2,6 +2,7 @@
 BITOS Backend Client
 HTTP client for communicating with the FastAPI server.
 """
+import logging
 import os
 import json
 from typing import Generator
@@ -26,31 +27,38 @@ class BackendClient:
 
     def __init__(self, base_url: str | None = None):
         self.base_url = base_url or os.environ.get("BITOS_SERVER_URL", DEFAULT_SERVER_URL)
+        self.device_token = os.environ.get("BITOS_DEVICE_TOKEN", "")
+        if not self.device_token:
+            logging.warning("[BITOS] BITOS_DEVICE_TOKEN is not set; running in dev mode without device token auth")
+
+    def _request_headers(self) -> dict:
+        if not self.device_token:
+            return {}
+        return {"X-Device-Token": self.device_token}
 
     def health(self) -> bool:
         """Check if the server is running."""
         try:
-            r = httpx.get(f"{self.base_url}/health", timeout=3.0)
+            r = httpx.get(f"{self.base_url}/health", timeout=3.0, headers=self._request_headers())
             return r.status_code == 200
         except Exception:
             return False
 
-
     def get_ui_settings(self) -> dict:
         """Fetch persisted UI settings from backend."""
-        r = httpx.get(f"{self.base_url}/settings/ui", timeout=3.0)
+        r = httpx.get(f"{self.base_url}/settings/ui", timeout=3.0, headers=self._request_headers())
         r.raise_for_status()
         return r.json()
 
     def get_settings_catalog(self) -> dict:
         """Fetch editable settings catalog metadata."""
-        r = httpx.get(f"{self.base_url}/settings/catalog", timeout=3.0)
+        r = httpx.get(f"{self.base_url}/settings/catalog", timeout=3.0, headers=self._request_headers())
         r.raise_for_status()
         return r.json()
 
     def update_ui_settings(self, patch: dict) -> dict:
         """Persist a partial UI settings patch."""
-        r = httpx.put(f"{self.base_url}/settings/ui", json=patch, timeout=3.0)
+        r = httpx.put(f"{self.base_url}/settings/ui", json=patch, timeout=3.0, headers=self._request_headers())
         r.raise_for_status()
         return r.json()
 
@@ -62,6 +70,7 @@ class BackendClient:
                 f"{self.base_url}/chat",
                 json={"message": message},
                 timeout=60.0,
+                headers=self._request_headers(),
             ) as response:
                 response.raise_for_status()
                 for line in response.iter_lines():

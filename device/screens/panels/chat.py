@@ -282,6 +282,17 @@ class ChatPanel(BaseScreen):
             lines.append(current)
         return lines or [""]
 
+
+    def get_active_compose_target(self) -> str | None:
+        return "compose_body"
+
+    def receive_keyboard_input(self, target: str, text: str, cursor: int) -> bool:
+        if target not in {"any", "compose_body", "search"}:
+            return False
+        self._input_text = text
+        _ = cursor
+        return True
+
     def _queue_status_copy(self) -> str:
         """Compact queue/dead-letter debug status for tiny-screen visibility."""
         if not self._repository:

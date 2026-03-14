@@ -117,3 +117,14 @@ Ship a dependable pocket AI companion where voice interaction, navigation, and c
 - Fallback UX exists for network/API outages
 - Feature flags for unfinished capabilities on default branch
 - Every phase ships with a manual QA checklist and at least one automated smoke test path
+
+
+## Phase 10 — Multi-Agent Mac Service
+
+Code/Ops/Research/Creative agent services running as separate
+processes on Mac mini. Background task queue with device
+notification on completion. Optional Electron monitor.
+Reference: docs/planning/MAC_AI_SERVICE.md
+Dependency: Phase 8 (Global Workspace) must complete first.
+Tasks: P10-001 through P10-008
+
