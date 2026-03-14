@@ -12,6 +12,15 @@ import httpx
 DEFAULT_SERVER_URL = "http://localhost:8000"
 
 
+class BackendChatError(RuntimeError):
+    """Normalized chat error surfaced to UI for tiny-screen friendly messaging."""
+
+    def __init__(self, kind: str, message: str, retryable: bool = True):
+        super().__init__(message)
+        self.kind = kind
+        self.retryable = retryable
+
+
 class BackendClient:
     """HTTP client to the Bitos backend."""
 
@@ -67,6 +76,17 @@ class BackendClient:
                         except json.JSONDecodeError:
                             yield data
         except httpx.HTTPStatusError as e:
-            raise RuntimeError(f"Server error: {e.response.status_code}") from e
-        except httpx.ConnectError:
-            raise RuntimeError(f"Cannot connect to server at {self.base_url}")
+            status = e.response.status_code
+            if status in (401, 403):
+                raise BackendChatError("auth", "Authentication failed", retryable=False) from e
+            if status == 429:
+                raise BackendChatError("rate_limit", "Rate limited", retryable=True) from e
+            if status >= 500:
+                raise BackendChatError("upstream", f"Server error {status}", retryable=True) from e
+            raise BackendChatError("request", f"Request failed {status}", retryable=False) from e
+        except httpx.TimeoutException as e:
+            raise BackendChatError("timeout", "Request timed out", retryable=True) from e
+        except httpx.ConnectError as e:
+            raise BackendChatError("offline", f"Cannot connect to server at {self.base_url}", retryable=True) from e
+        except httpx.HTTPError as e:
+            raise BackendChatError("network", "Network error", retryable=True) from e

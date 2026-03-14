@@ -34,7 +34,7 @@ For **every implementation iteration** (code or docs):
 | P2-002b | Phase 2 | WS-A App Shell | Extract reusable nav controller/item model for future pages | GPT-5.2-Codex | done | 2026-03-14 | Added `VerticalNavController` + `NavItem` and coverage tests for wrap/activation behavior |
 | P2-003 | Phase 2 | WS-B Persistence | Add SQLite schema + migration runner (`sessions/messages/settings/events`) | GPT-5.2-Codex | done | 2026-03-14 | Added `DeviceRepository` with schema versioning + startup migration initialization and tests |
 | P2-004 | Phase 2 | WS-B Persistence | Persist and hydrate chat sessions at startup | GPT-5.2-Codex | done | 2026-03-14 | ChatPanel now restores latest session and persists user/assistant turns to SQLite |
-| P2-005 | Phase 2 | WS-C Reliability | Add backend connectivity banner + retry UX in chat | GPT-5.2-Codex | in_progress | 2026-03-14 | Still next implementation slice after LLM bridge docs+backend abstraction |
+| P2-005 | Phase 2 | WS-C Reliability | Add backend connectivity banner + retry UX in chat | GPT-5.2-Codex | done | 2026-03-14 | Added status banner states, normalized client errors, and retry affordances with tests |
 | P2-006 | Phase 2 | WS-B Persistence | Add backend-driven UI settings catalog + persisted theme/layout controls | GPT-5.2-Codex | done | 2026-03-14 | Added `/settings/catalog`, `/settings/ui` GET/PUT, device consumption, and tests |
 | P3-001 | Phase 3 | WS-D Integrations | Define task provider adapter contract | unassigned | todo | 2026-03-14 | Keep UI/provider decoupled |
 | P3-003 | Phase 3 | WS-D Integrations | Add provider-agnostic LLM bridge for Anthropic/OpenAI/OpenClaw/NanoClaw | GPT-5.2-Codex | done | 2026-03-14 | Added bridge abstraction + config-driven provider selection and API tests |
@@ -62,3 +62,5 @@ For **every implementation iteration** (code or docs):
 | 2026-03-14 | GPT-5.2-Codex | work | `b4768ee` | Published handoff packet for next agent with prioritized next steps (P2-005) and integration guidance | `docs/planning/HANDOFF_NEXT_AGENT.md`, `README.md`, `ROADMAP.md`, `docs/planning/IMPLEMENTATION_PLAN_NEXT.md`, `docs/planning/TASK_TRACKER.md` | Next contributor implements P2-005 reliability UX slice |
 
 | 2026-03-14 | GPT-5.2-Codex | work | `0232e1a` | Linked handoff brief in README docs index for discoverability | `README.md` | Next contributor starts from handoff brief and executes P2-005 |
+
+| 2026-03-14 | GPT-5.2-Codex | work | `this-commit` | Implemented P2-005 reliability UX in chat (status banner, normalized errors, retry controls, outage-safe behavior) | `device/client/api.py`, `device/screens/panels/chat.py`, `tests/test_chat_reliability.py`, `docs/planning/TASK_TRACKER.md`, `docs/planning/HANDOFF_NEXT_AGENT.md` | Start P3-001 adapter interfaces and P3-002 outbound queue baseline |

@@ -25,19 +25,21 @@ This document is a practical takeover brief for the next implementation contribu
 
 ## 2) Immediate next implementation target
 
-## P2-005 — Reliability UX for degraded backend/provider states
+## P3-001/P3-002 — Adapter contracts + outbound queue baseline
 
-Deliver a user-visible reliability slice in chat:
-1. Connectivity/status banner in `ChatPanel` (connected, degraded, offline, retrying).
-2. Explicit retry affordance for failed message attempts.
-3. Normalized error mapping from bridge/client exceptions to concise tiny-screen copy.
-4. Non-crashing behavior during outages and reconnects.
+P2-005 reliability UX is now complete in chat (status banner, normalized errors, retry affordance).
+
+Deliver the Phase 3 integration foundation:
+1. Introduce domain adapter interfaces for task/message/email/calendar operations.
+2. Add a local outbound command queue with retry policy and dead-letter visibility.
+3. Keep screen/UI code adapter-driven (no provider-specific calls in panels).
+4. Add minimal observability hooks (queue depth, retry attempts, failed command reasons).
 
 ### Suggested acceptance checks
-- Start device without backend and verify UI does not crash.
-- Trigger failed chat request and verify retry action is visible.
-- Recover backend and verify retry succeeds without app restart.
-- Keep existing test suite green.
+- Queue accepts and persists commands while provider implementation is mocked/offline.
+- Retryable failures are retried and eventually succeed when provider recovers.
+- Non-retryable failures become visible dead-letter items with a concise reason.
+- Existing tests remain green and new queue/adapter tests are added.
 
 ---
 
