@@ -1,4 +1,28 @@
 # BITOS
+
+Pocket AI companion. Hold button → speak → Claude answers.
+Pi Zero 2W + Whisplay HAT + PiSugar 3.
+
+## Flash & Boot (30 min)
+1. Edit `scripts/cloud-init/user-data`
+   → add SSH key (`cat ~/.ssh/id_rsa.pub`)
+   → add GitHub username
+2. Flash SD: Pi Imager → Pi OS Lite 64-bit
+3. `make flash`  ← copies cloud-init to SD
+4. Insert SD, power on, wait 15 min
+5. `ssh pi@bitos`
+6. `bash ~/bitos/scripts/day_one.sh`  ← does everything
+
+## Desktop Dev
+```bash
+cp .env.template .env  # add ANTHROPIC_API_KEY
+make run-server        # terminal 1
+make run-dev           # terminal 2
+# SPACE=scroll ENTER=select BACKSPACE=back TAB=capture
+```
+
+## Troubleshooting
+See `docs/TROUBLESHOOTING.md`.
 Pocket AI device for daily planning and voice interaction, built for Raspberry Pi Zero 2W + Whisplay HAT + PiSugar 3.
 
 ## What it does

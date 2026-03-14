@@ -52,7 +52,7 @@ class ChatReliabilityTests(unittest.TestCase):
         panel._stream_response("hello")
 
         self.assertEqual(panel._status, panel.STATUS_OFFLINE)
-        self.assertEqual(panel._status_detail, "Claude offline — check connection")
+        self.assertEqual(panel._status_detail, "Server offline")
         self.assertTrue(panel._can_retry())
 
     def test_retry_succeeds_without_restart(self):

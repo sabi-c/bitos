@@ -94,6 +94,18 @@ async def update_ui_settings(request: Request):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+
+
+@app.get("/tasks/today")
+async def get_today_tasks():
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "integrations"))
+    from vikunja_adapter import VikunjaAdapter
+    adapter = VikunjaAdapter()
+    tasks = adapter.get_today_tasks()
+    return {"tasks": tasks, "count": len(tasks)}
+
 @app.post("/shutdown")
 async def shutdown():
     """Graceful shutdown hook for device power gesture flow."""

@@ -124,7 +124,7 @@ class VoiceHardeningTests(unittest.TestCase):
                 break
             pygame.time.wait(5)
 
-        self.assertEqual(panel._status_detail, "Claude offline — check connection")
+        self.assertEqual(panel._status_detail, "Server offline")
         self.assertEqual(panel._input_text, "retry me")
 
 
