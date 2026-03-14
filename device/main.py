@@ -9,10 +9,12 @@ from display.driver import create_driver
 from display.tokens import FPS
 from input.handler import ButtonHandler, ButtonEvent
 from notifications import NotificationPoller
-from overlays import NotificationQueue, NotificationToast
+from overlays import NotificationQueue, NotificationToast, QROverlay
 from bluetooth import AuthManager, get_gatt_server
 from bluetooth.constants import PAIRING_MODE_TIMEOUT_SECONDS
-from bluetooth.characteristics import DeviceStatusCharacteristic, KeyboardInputCharacteristic, WiFiConfigCharacteristic, WiFiStatusCharacteristic
+from bluetooth.characteristics import DeviceInfoCharacteristic, DeviceStatusCharacteristic, KeyboardInputCharacteristic, WiFiConfigCharacteristic, WiFiStatusCharacteristic
+from bluetooth.constants import build_pair_url, build_setup_url
+from bluetooth.network_manager import NetworkPriorityManager
 from bluetooth.wifi_manager import WiFiManager
 from screens.manager import ScreenManager
 from screens.boot import BootScreen
@@ -88,6 +90,7 @@ def main():
         )
 
     wifi_manager = WiFiManager()
+    network_manager = NetworkPriorityManager()
     wifi_status_char = WiFiStatusCharacteristic()
 
     def on_wifi_config(ssid: str, password: str, security: str, priority: int) -> bool:
@@ -103,7 +106,8 @@ def main():
     wifi_config_char = WiFiConfigCharacteristic(auth_manager=auth_manager, on_wifi_config=on_wifi_config, wifi_status=wifi_status_char)
     keyboard_input_char = KeyboardInputCharacteristic(auth_manager=auth_manager, on_keyboard_input=on_keyboard_input)
     device_status_char = DeviceStatusCharacteristic()
-    _ = (wifi_config_char, keyboard_input_char)
+    device_info_char = DeviceInfoCharacteristic()
+    _ = (wifi_config_char, keyboard_input_char, device_info_char)
 
     def _collect_device_status() -> dict:
         current = screen_mgr.current
@@ -124,6 +128,7 @@ def main():
         auth_manager=auth_manager,
         on_show_passkey=on_show_passkey,
         on_pairing_complete=on_pairing_complete,
+        device_info_characteristic=device_info_char,
     )
     outbound_queue = OutboundCommandQueue(repository)
     runtime_adapter = create_runtime_adapter()
@@ -184,6 +189,11 @@ def main():
             on_open_agent_mode=open_agent_mode,
             on_open_sleep_timer=open_sleep_timer,
             on_open_about=open_about,
+            on_open_companion_app=open_companion_app,
+            get_ble_address=gatt_server.get_device_address,
+            on_set_discoverable=lambda enabled, timeout: gatt_server.set_discoverable(enabled, timeout),
+            on_push_overlay=screen_mgr.push_overlay,
+            on_dismiss_overlay=screen_mgr.dismiss_overlay,
             ui_settings=ui_settings,
         )
         screen_mgr.replace(settings)
@@ -200,9 +210,45 @@ def main():
     def open_about():
         screen_mgr.replace(AboutPanel(on_back=open_settings, ui_settings=ui_settings))
 
+
+    def open_companion_app():
+        ble_addr = gatt_server.get_device_address()
+        qr = QROverlay(
+            url=build_pair_url(ble_addr),
+            title="PAIR COMPANION APP",
+            subtitle="SCAN WITH YOUR PHONE",
+            on_dismiss=lambda: screen_mgr.dismiss_overlay(qr),
+        )
+        screen_mgr.push_overlay(qr)
+        gatt_server.set_discoverable(True, 120)
+
+
+    def _enter_offline_mode():
+        screen_mgr.dismiss_overlay()
+        lock = LockScreen(on_home=on_home, ui_settings=ui_settings)
+        screen_mgr.replace(lock)
+
+    def _show_setup_qr_if_needed():
+        active = network_manager.get_active_connection()
+        if active:
+            return
+        ble_addr = gatt_server.get_device_address()
+        qr = QROverlay(
+            url=build_setup_url(ble_addr),
+            title="NO NETWORK FOUND",
+            subtitle="SCAN TO CONFIGURE WI-FI",
+            timeout_s=120,
+            on_connected=lambda: screen_mgr.dismiss_overlay(qr),
+            on_timeout=lambda: _enter_offline_mode(),
+            on_dismiss=lambda: _enter_offline_mode(),
+        )
+        screen_mgr.push_overlay(qr)
+        gatt_server.set_discoverable(True, timeout_s=120)
+
     def on_boot_complete():
         lock = LockScreen(on_home=on_home, ui_settings=ui_settings)
         screen_mgr.replace(lock)
+        _show_setup_qr_if_needed()
 
     boot = BootScreen(on_complete=on_boot_complete)
     screen_mgr.push(boot)
