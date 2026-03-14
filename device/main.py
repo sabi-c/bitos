@@ -182,15 +182,18 @@ def main():
     )
 
     def on_show_passkey(code: str):
-        screen_mgr.show_passkey_overlay(code=code, timeout_s=PAIRING_MODE_TIMEOUT_SECONDS)
+        screen_mgr.show_passkey_overlay(passkey=code, timeout_seconds=30)
 
     def on_pairing_complete(success: bool):
-        screen_mgr.hide_passkey_overlay()
+        if success:
+            screen_mgr.confirm_passkey()
+        else:
+            screen_mgr.reject_passkey()
         notification_queue.push(
             NotificationToast(
                 app="BLE",
                 icon="B",
-                message="COMPANION PAIRED ✓" if success else "PAIRING FAILED ✗",
+                message="COMPANION PAIRED \u2713" if success else "PAIRING FAILED \u2717",
                 time_str=time.strftime("%H:%M"),
             )
         )
