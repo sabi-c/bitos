@@ -168,6 +168,14 @@ class ChatPanel(BaseScreen):
             cursor_x = 4 + input_surface.get_width() + 1
             pygame.draw.rect(surface, WHITE, (cursor_x, input_y, 6, self._font.get_height()))
 
+    def restore_session_id(self, session_id: int | None):
+        if session_id is None:
+            return
+        try:
+            self._session_id = int(session_id)
+        except (TypeError, ValueError):
+            return
+
     def _send_message(self):
         text = self._input_text.strip()
         if not text:

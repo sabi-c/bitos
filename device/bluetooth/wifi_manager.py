@@ -7,6 +7,10 @@ import os
 import subprocess
 
 
+NMCLI_TIMEOUT_SECONDS = 8
+STATUS_TIMEOUT_SECONDS = 3
+
+
 class WiFiManager:
     """Wraps nmcli for WiFi operations."""
 
@@ -49,12 +53,25 @@ class WiFiManager:
                 "yes",
             ]
 
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=NMCLI_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            logging.warning("wifi_add_timeout ssid=%s", ssid)
+            return False
         if result.returncode != 0:
             logging.warning("wifi_add_failed stderr=%s", result.stderr.strip())
             return False
 
-        up = subprocess.run(["nmcli", "connection", "up", ssid], capture_output=True, text=True)
+        try:
+            up = subprocess.run(
+                ["nmcli", "connection", "up", ssid],
+                capture_output=True,
+                text=True,
+                timeout=NMCLI_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired:
+            logging.warning("wifi_up_timeout ssid=%s", ssid)
+            return False
         return up.returncode == 0
 
     def get_status(self) -> dict:
@@ -67,9 +84,16 @@ class WiFiManager:
                 "last_error": None,
             }
 
-        active = subprocess.run(
-            ["nmcli", "-t", "-f", "ACTIVE,SSID,SIGNAL", "dev", "wifi"], capture_output=True, text=True
-        )
+        try:
+            active = subprocess.run(
+                ["nmcli", "-t", "-f", "ACTIVE,SSID,SIGNAL", "dev", "wifi"],
+                capture_output=True,
+                text=True,
+                timeout=STATUS_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired:
+            logging.warning("wifi_status_timeout")
+            return {"connected": False, "ssid": "", "signal": "weak", "ip": "", "last_error": None}
         ssid = ""
         signal = "weak"
         if active.returncode == 0:
@@ -81,6 +105,10 @@ class WiFiManager:
                     signal = "excellent" if sig >= 80 else "good" if sig >= 60 else "ok" if sig >= 40 else "weak"
                     break
 
-        ip_cmd = subprocess.run(["hostname", "-I"], capture_output=True, text=True)
+        try:
+            ip_cmd = subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=STATUS_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            logging.warning("wifi_ip_timeout")
+            ip_cmd = subprocess.CompletedProcess(args=["hostname", "-I"], returncode=1, stdout="", stderr="")
         ip = ip_cmd.stdout.strip().split()[0] if ip_cmd.returncode == 0 and ip_cmd.stdout.strip() else ""
         return {"connected": bool(ssid), "ssid": ssid, "signal": signal, "ip": ip, "last_error": None}

@@ -30,6 +30,7 @@ async def require_device_token(request: Request, call_next):
     if request.method == "GET" and request.url.path == "/health":
         return await call_next(request)
 
+    # SD-004: Static device-token middleware enforces device identity on non-health endpoints.
     expected = os.environ.get("BITOS_DEVICE_TOKEN", "")
     provided = request.headers.get("X-Device-Token", "")
 

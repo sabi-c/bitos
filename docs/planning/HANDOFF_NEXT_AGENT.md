@@ -25,22 +25,22 @@ This document is a practical takeover brief for the next implementation contribu
 
 ## 2) Immediate next implementation target
 
-## P5-010 — NetworkManager priority tuning + BT PAN baseline
+## P5-012a — Companion PWA `setup.html` baseline
 
-Built this sprint: P5-007/008/009 filled BLE characteristic behavior for protected WiFi provisioning writes, unprotected WiFi status reads, device status read/notify updates, and protected keyboard input routing into compose targets. `ScreenManager` now exposes compose-routing helpers and pushes active-screen status updates into the device status characteristic on screen transitions. Runtime wiring in `device/main.py` now instantiates WiFi/device-status/keyboard characteristics, starts periodic device status updates, and keeps BLE paths mock-safe.
+Built this sprint: all audit follow-up fixes are complete, including UI render-path cache cleanup, SD trace-comment coverage across security boundaries, and WiFi timeout hardening + regression tests for timeout paths.
 
 Read first next iteration:
 1. `docs/planning/TASK_TRACKER.md`
-2. `device/bluetooth/characteristics/wifi_config.py` and `device/bluetooth/wifi_manager.py`
-3. `device/bluetooth/characteristics/device_status.py`, `device/screens/manager.py`, and `device/main.py`
+2. `companion/setup.html`
+3. `companion/` assets + scripts referenced by setup flow
 
-Most important thing to know: preserve strict auth boundaries — `WIFI_CONFIG` and `KEYBOARD_INPUT` must continue rejecting invalid session tokens and never call their side-effect callbacks when auth fails.
+Most important thing to know: audit remediations are now complete; preserve those invariants while starting companion onboarding UI work.
 
 Deliver the next Phase 5 slice:
-1. P5-010: tune NetworkManager connection priority/fallback behavior and add BT PAN baseline.
-2. Keep `BITOS_BLUETOOTH=mock` and `BITOS_WIFI=mock` paths deterministic for desktop tests.
-3. Implement NOTIFICATION_RELAY characteristic only in its dedicated sprint (P5-008b), not opportunistically.
-4. Keep companion protocol doc aligned with characteristic payload/schema changes.
+1. P5-012a: scaffold companion PWA `setup.html` baseline flow.
+2. Keep companion work isolated to `companion/` assets with no device/server regressions.
+3. Preserve existing BLE protocol contracts and docs while adding setup UX.
+4. Add focused companion tests/checks where available.
 
 ### Suggested acceptance checks
 - Protected characteristic writes fail fast on invalid session token.

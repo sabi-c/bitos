@@ -1,4 +1,6 @@
 """BITOS Device main entry point."""
+import json
+import logging
 import os
 import time
 
@@ -34,6 +36,8 @@ from integrations.queue import OutboundCommandQueue
 from integrations.runtime import OutboundWorkerRuntimeLoop
 from integrations.worker import OutboundCommandWorker
 
+logger = logging.getLogger(__name__)
+
 
 def _read_device_serial() -> str:
     try:
@@ -48,13 +52,88 @@ def _read_device_serial() -> str:
     return "desktop-sim"
 
 
+def _restore_state() -> dict | None:
+    path = "/tmp/bitos_state.json"
+    try:
+        if not os.path.exists(path):
+            return None
+        with open(path, "r", encoding="utf-8") as f:
+            state = json.load(f)
+        age = time.time() - state.get("timestamp", 0)
+        if age > 300:
+            return None
+        os.remove(path)
+        return state
+    except Exception:
+        return None
+
+
+def _run_startup_health_check(client: BackendClient, repository: DeviceRepository, startup_health: dict) -> dict:
+    startup_health["backend"] = client.health(timeout=2.0)
+    try:
+        repository.get_setting("agent_mode", "normal")
+        startup_health["database"] = True
+    except Exception:
+        startup_health["database"] = False
+    startup_health["api_key"] = bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY"))
+    return startup_health
+
+
+def _handle_main_loop_crash(error: Exception, crash_path: str = "/tmp/bitos_crash.json"):
+    logger.critical(
+        "main_loop_crash",
+        extra={"error": str(error), "type": type(error).__name__},
+        exc_info=True,
+    )
+    with open(crash_path, "w", encoding="utf-8") as f:
+        json.dump({"error": str(error), "timestamp": time.time()}, f)
+
+
+def _run_main_loop(driver, button: ButtonHandler, screen_mgr: ScreenManager, outbound_loop: OutboundWorkerRuntimeLoop):
+    clock = pygame.time.Clock()
+    running = True
+    last_time = time.time()
+
+    while running:
+        now = time.time()
+        dt = now - last_time
+        last_time = now
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+                break
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                running = False
+                break
+
+            button.handle_pygame_event(event)
+            screen_mgr.handle_input(event)
+
+        if not running:
+            break
+
+        button.update()
+        worker_results = outbound_loop.tick(now=now)
+        for result in worker_results:
+            if result.status in ("retrying", "dead_letter"):
+                reason = result.reason or "unknown"
+                print(f"[Queue] command={result.command_id} status={result.status} reason={reason}")
+
+        surface = driver.get_surface()
+        screen_mgr.update(dt)
+        screen_mgr.render(surface)
+        driver.update()
+
+        clock.tick(FPS)
+
+
 def main():
     print("[BITOS] Starting device...")
     start_time = time.time()
 
     driver = create_driver()
     driver.init()
-    surface = driver.get_surface()
 
     button = ButtonHandler()
     client = BackendClient()
@@ -63,7 +142,10 @@ def main():
     notification_queue = NotificationQueue(repository=repository)
     screen_mgr = ScreenManager(notification_queue=notification_queue)
     notification_poller = NotificationPoller(queue=notification_queue, api_client=client, repository=repository)
+
+    # SD-002: BLE auth bootstrap binds device identity + shared secret before any protected characteristic writes.
     auth_manager = AuthManager(
+        # SD-005: PIN hash and BLE secret are sourced from env-backed device secrets.
         pin_hash=os.environ.get("BITOS_PIN_HASH", ""),
         device_serial=_read_device_serial(),
         ble_secret=os.environ.get("BITOS_BLE_SECRET", ""),
@@ -101,6 +183,8 @@ def main():
     device_status_char = DeviceStatusCharacteristic()
     _ = (wifi_config_char, keyboard_input_char)
 
+    startup_health = {"backend": None, "database": None, "api_key": bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY"))}
+
     def _collect_device_status() -> dict:
         current = screen_mgr.current
         active_screen = current.__class__.__name__.replace("Panel", "").replace("Screen", "").lower() if current else "none"
@@ -109,7 +193,7 @@ def main():
             "charging": bool(repository.get_setting("charging", False)),
             "wifi_connected": bool(wifi_status_char._status.get("connected", False)),
             "wifi_ssid": str(wifi_status_char._status.get("ssid", "")),
-            "ai_online": bool(client.health()),
+            "ai_online": bool(startup_health.get("backend")) if startup_health.get("backend") is not None else bool(client.health(timeout=2.0)),
             "active_screen": active_screen,
             "agent_mode": str(repository.get_setting("agent_mode", "normal")),
             "bitos_version": "1.0.0",
@@ -132,21 +216,20 @@ def main():
     )
     outbound_loop = OutboundWorkerRuntimeLoop(outbound_worker, interval_seconds=0.2, max_per_tick=1)
 
-    server_ok = client.health()
-    if server_ok:
-        print("[BITOS] Backend connected ✓")
-    else:
-        print("[BITOS] Backend not reachable — chat will not work until server starts")
-
-    ui_settings = None
     try:
         ui_settings = client.get_ui_settings()
         print(f"[BITOS] UI settings loaded (font={ui_settings.get('font_family')}, scale={ui_settings.get('font_scale')})")
     except Exception as exc:
+        ui_settings = None
         print(f"[BITOS] UI settings unavailable, using defaults ({exc})")
+
+    restored_state = _restore_state()
+    restored_session_id = restored_state.get("session_id") if restored_state else None
+    restored_pomodoro = restored_state.get("pomodoro") if restored_state else None
 
     def open_chat():
         chat = ChatPanel(client, ui_settings=ui_settings, repository=repository)
+        chat.restore_session_id(restored_session_id)
         screen_mgr.replace(chat)
 
     def on_home():
@@ -157,11 +240,17 @@ def main():
             on_open_settings=open_settings,
             on_show_shade=screen_mgr.show_shade,
             ui_settings=ui_settings,
+            startup_health=startup_health,
         )
         screen_mgr.replace(home)
 
     def open_focus():
         focus = FocusPanel(on_back=on_home, ui_settings=ui_settings)
+        if restored_pomodoro and restored_pomodoro.get("is_running"):
+            started_at = float(restored_pomodoro.get("started_at", restored_state.get("timestamp", time.time()))) if restored_state else time.time()
+            elapsed = max(0, int(time.time() - started_at))
+            remaining = max(0, int(restored_pomodoro.get("remaining_seconds", focus.remaining_seconds)) - elapsed)
+            focus.restore_state(remaining_seconds=remaining, is_running=remaining > 0)
         screen_mgr.replace(focus)
 
     def open_notifications():
@@ -196,8 +285,12 @@ def main():
         lock = LockScreen(on_home=on_home, ui_settings=ui_settings)
         screen_mgr.replace(lock)
 
-    boot = BootScreen(on_complete=on_boot_complete)
-    screen_mgr.push(boot)
+    boot = BootScreen(on_complete=on_boot_complete, startup_health=startup_health, health_check=lambda: _run_startup_health_check(client, repository, startup_health))
+
+    if restored_state:
+        on_boot_complete()
+    else:
+        screen_mgr.push(boot)
 
     screen_mgr.attach_device_status_characteristic(device_status_char)
 
@@ -227,46 +320,17 @@ def main():
     button.on(ButtonEvent.DOUBLE_PRESS, on_double)
     button.on(ButtonEvent.TRIPLE_PRESS, on_triple)
 
-    clock = pygame.time.Clock()
-    running = True
-    last_time = time.time()
-
-    while running:
-        now = time.time()
-        dt = now - last_time
-        last_time = now
-
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-                break
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                running = False
-                break
-
-            button.handle_pygame_event(event)
-            screen_mgr.handle_input(event)
-
-        if not running:
-            break
-
-        button.update()
-        worker_results = outbound_loop.tick(now=now)
-        for result in worker_results:
-            if result.status in ("retrying", "dead_letter"):
-                reason = result.reason or "unknown"
-                print(f"[Queue] command={result.command_id} status={result.status} reason={reason}")
-        screen_mgr.update(dt)
-        screen_mgr.render(surface)
-        driver.update()
-
-        clock.tick(FPS)
-
-    notification_poller.stop()
-    device_status_char.stop_periodic_updates()
-    gatt_server.stop()
-    driver.quit()
-    print("[BITOS] Shut down.")
+    try:
+        _run_main_loop(driver=driver, button=button, screen_mgr=screen_mgr, outbound_loop=outbound_loop)
+    except Exception as exc:
+        _handle_main_loop_crash(exc)
+        raise
+    finally:
+        notification_poller.stop()
+        device_status_char.stop_periodic_updates()
+        gatt_server.stop()
+        driver.quit()
+        print("[BITOS] Shut down.")
 
 
 if __name__ == "__main__":
