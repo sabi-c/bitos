@@ -1,0 +1,13 @@
+"""
+BITOS Server Config
+Loads environment variables.
+"""
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+MODEL_NAME = os.environ.get("MODEL_NAME", "claude-sonnet-4-6")
+SERVER_HOST = os.environ.get("SERVER_HOST", "0.0.0.0")
+SERVER_PORT = int(os.environ.get("SERVER_PORT", "8000"))
