@@ -116,16 +116,16 @@ if __name__ == "__main__":
         screen_mgr.replace(ChatPanel(client, ui_settings=ui_settings, repository=repository))
 
     def open_focus():
-        screen_mgr.replace(FocusPanel(on_back=on_unlock, ui_settings=ui_settings))
+        screen_mgr.replace(FocusPanel(on_back=on_home, ui_settings=ui_settings))
 
     def open_notifications():
-        screen_mgr.replace(NotificationsPanel(on_back=on_unlock, ui_settings=ui_settings))
+        screen_mgr.replace(NotificationsPanel(on_back=on_home, ui_settings=ui_settings))
 
     def open_settings():
         screen_mgr.replace(
             SettingsPanel(
                 repository=repository,
-                on_back=on_unlock,
+                on_back=on_home,
                 on_open_model_picker=open_model_picker,
                 on_open_agent_mode=open_agent_mode,
                 on_open_sleep_timer=open_sleep_timer,
@@ -146,7 +146,7 @@ if __name__ == "__main__":
     def open_about():
         screen_mgr.replace(AboutPanel(on_back=open_settings, ui_settings=ui_settings))
 
-    def on_unlock():
+    def on_home():
         screen_mgr.replace(
             HomePanel(
                 on_open_chat=open_chat,
@@ -158,7 +158,7 @@ if __name__ == "__main__":
         )
 
     def on_boot_complete():
-        screen_mgr.replace(LockScreen(on_unlock=on_unlock, ui_settings=ui_settings))
+        screen_mgr.replace(LockScreen(on_home, ui_settings=ui_settings))
 
     screen_mgr.push(BootScreen(on_complete=on_boot_complete))
 

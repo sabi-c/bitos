@@ -43,3 +43,9 @@ deploy: push
 	ssh pi@bitos "sudo systemctl restart bitos"
 
 ship: push deploy logs
+
+shutdown-pi:
+	ssh pi@bitos "sudo systemctl stop bitos"
+
+reboot-pi:
+	ssh pi@bitos "sudo reboot"

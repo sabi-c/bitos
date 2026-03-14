@@ -1,14 +1,17 @@
 """BITOS Device main entry point."""
+import json
 import os
+import subprocess
 import time
 
+import httpx
 import pygame
 
 from display.driver import create_driver
 from display.tokens import FPS
 from input.handler import ButtonHandler, ButtonEvent
 from notifications import NotificationPoller
-from overlays import NotificationQueue, NotificationToast
+from overlays import NotificationQueue, NotificationToast, PowerOverlay
 from bluetooth import AuthManager, get_gatt_server
 from bluetooth.constants import PAIRING_MODE_TIMEOUT_SECONDS
 from bluetooth.characteristics import DeviceStatusCharacteristic, KeyboardInputCharacteristic, WiFiConfigCharacteristic, WiFiStatusCharacteristic
@@ -46,6 +49,61 @@ def _read_device_serial() -> str:
     except FileNotFoundError:
         pass
     return "desktop-sim"
+
+
+def _cancel_inflight_voice_recording(screen_mgr) -> None:
+    current = screen_mgr.current
+    if not current:
+        return
+    stopper = getattr(current, "cancel_recording", None)
+    if callable(stopper):
+        try:
+            stopper()
+        except Exception:
+            pass
+
+
+def _save_runtime_state(screen_mgr, timestamp: float) -> None:
+    current = screen_mgr.current
+    current_name = current.__class__.__name__ if current else "none"
+    session_id = getattr(current, "_session_id", None) if current else None
+
+    pomodoro = None
+    if current and hasattr(current, "is_running") and hasattr(current, "remaining_seconds"):
+        if bool(getattr(current, "is_running", False)):
+            pomodoro = {"running": True, "remaining_seconds": int(getattr(current, "remaining_seconds", 0))}
+
+    payload = {
+        "session_id": session_id,
+        "screen": current_name,
+        "pomodoro": pomodoro,
+        "timestamp": int(timestamp),
+    }
+
+    with open("/tmp/bitos_state.json", "w", encoding="utf-8") as f:
+        json.dump(payload, f)
+
+
+def _request_backend_shutdown(client: BackendClient) -> None:
+    try:
+        httpx.post(
+            f"{client.base_url}/shutdown",
+            timeout=3.0,
+            headers=client._request_headers(),
+        )
+    except Exception:
+        pass
+
+
+def _execute_power_action(action: str) -> None:
+    live = os.environ.get("BITOS_POWER_EXEC", "mock").lower() == "live"
+    if not live:
+        print(f"[Power] mock execute {action}")
+        return
+    if action == "shutdown":
+        subprocess.run(["sudo", "systemctl", "stop", "bitos"], check=False)
+    elif action == "reboot":
+        subprocess.run(["sudo", "reboot"], check=False)
 
 
 def main():
@@ -199,6 +257,31 @@ def main():
     boot = BootScreen(on_complete=on_boot_complete)
     screen_mgr.push(boot)
 
+    power_overlay: PowerOverlay | None = None
+
+    def close_power_overlay():
+        nonlocal power_overlay
+        power_overlay = None
+
+    def run_power_action(action: str):
+        nonlocal running
+        _cancel_inflight_voice_recording(screen_mgr)
+        _request_backend_shutdown(client)
+        _save_runtime_state(screen_mgr, time.time())
+        _execute_power_action(action)
+        running = False
+
+    def open_power_overlay():
+        nonlocal power_overlay
+        if power_overlay is not None:
+            return
+        _cancel_inflight_voice_recording(screen_mgr)
+        power_overlay = PowerOverlay(
+            on_shutdown=lambda: run_power_action("shutdown"),
+            on_reboot=lambda: run_power_action("reboot"),
+            on_cancel=close_power_overlay,
+        )
+
     screen_mgr.attach_device_status_characteristic(device_status_char)
 
     notification_poller.start()
@@ -208,24 +291,37 @@ def main():
 
     def on_short():
         print("[Button] SHORT_PRESS")
+        if power_overlay and power_overlay.handle_input("SHORT_PRESS"):
+            return
         screen_mgr.handle_action("SHORT_PRESS")
 
     def on_long():
         print("[Button] LONG_PRESS")
+        if power_overlay and power_overlay.handle_input("LONG_PRESS"):
+            return
         screen_mgr.handle_action("LONG_PRESS")
 
     def on_double():
         print("[Button] DOUBLE_PRESS")
+        if power_overlay and power_overlay.handle_input("DOUBLE_PRESS"):
+            return
         screen_mgr.handle_action("DOUBLE_PRESS")
 
     def on_triple():
         print("[Button] TRIPLE_PRESS")
+        if power_overlay and power_overlay.handle_input("TRIPLE_PRESS"):
+            return
         screen_mgr.handle_action("TRIPLE_PRESS")
+
+    def on_power_gesture():
+        print("[Button] POWER_GESTURE")
+        open_power_overlay()
 
     button.on(ButtonEvent.SHORT_PRESS, on_short)
     button.on(ButtonEvent.LONG_PRESS, on_long)
     button.on(ButtonEvent.DOUBLE_PRESS, on_double)
     button.on(ButtonEvent.TRIPLE_PRESS, on_triple)
+    button.on(ButtonEvent.POWER_GESTURE, on_power_gesture)
 
     clock = pygame.time.Clock()
     running = True
@@ -245,7 +341,8 @@ def main():
                 break
 
             button.handle_pygame_event(event)
-            screen_mgr.handle_input(event)
+            if power_overlay is None:
+                screen_mgr.handle_input(event)
 
         if not running:
             break
@@ -258,6 +355,9 @@ def main():
                 print(f"[Queue] command={result.command_id} status={result.status} reason={reason}")
         screen_mgr.update(dt)
         screen_mgr.render(surface)
+        if power_overlay:
+            import display.tokens as tokens
+            power_overlay.render(surface, tokens)
         driver.update()
 
         clock.tick(FPS)
