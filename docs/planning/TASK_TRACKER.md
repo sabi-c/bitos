@@ -73,6 +73,7 @@ For **every implementation iteration** (code or docs):
 
 | ID | Phase | Workstream | Task | Owner | Status | Updated | Notes |
 |---|---|---|---|---|---|---|---|
+| AUDIT-002 | Phase 6 | Stability/Audit | Post-integration comprehensive audit and fixes | GPT-5.2-Codex | done | 2026-03-14 | Completed 8-check audit, fixed import/nav/endpoints/env/client/back-nav issues, and published `docs/reports/POST_INTEGRATION_AUDIT.md` |
 | MAIL-RESEARCH-001 | Phase 3 | Messaging/Email | Gmail MCP integration research report and adapter planning | GPT-5.2-Codex | done | 2026-03-14 | Added `docs/planning/EMAIL_INTEGRATION.md` with MCP call patterns, tool-use schemas, adapter design, UI mapping, permission tiers, and risks |
 | MSGS-RESEARCH-001 | Phase 3 | Messaging/iMessage | BlueBubbles iMessage integration research report and implementation plan | GPT-5.2-Codex | done | 2026-03-14 | Added `docs/planning/IMESSAGE_INTEGRATION.md` with endpoint/auth/webhook/adapter design recommendations |
 | MSGS-001 | Phase 3 | Messaging/iMessage | BlueBubbles adapter + messages panel + home unread wiring | GPT-5.2-Codex | done | 2026-03-14 | Implemented server/device message flows, UI panel states, and tests for adapter/endpoints/panel behavior |

@@ -53,6 +53,17 @@ class MessageDraftRequest(BaseModel):
     voice_transcript: str
 
 
+class MailDraftRequest(BaseModel):
+    thread_id: str
+    voice_transcript: str
+
+
+class MailCreateDraftRequest(BaseModel):
+    thread_id: str
+    body: str
+    confirmed: bool = False
+
+
 class IntegrationSettingsRequest(BaseModel):
     integration: str
     config: dict = Field(default_factory=dict)
@@ -435,12 +446,6 @@ async def get_messages_conversations():
 
 @app.get("/mail")
 async def get_mail_threads():
-    import sys
-    from pathlib import Path
-
-    sys.path.insert(0, str(Path(__file__).resolve().parent / "integrations"))
-    from gmail_adapter import GmailAdapter
-
     adapter = GmailAdapter()
     return {
         "threads": adapter.get_inbox(limit=10),
@@ -450,12 +455,6 @@ async def get_mail_threads():
 
 @app.get("/mail/{thread_id:path}")
 async def get_mail_thread(thread_id: str):
-    import sys
-    from pathlib import Path
-
-    sys.path.insert(0, str(Path(__file__).resolve().parent / "integrations"))
-    from gmail_adapter import GmailAdapter
-
     adapter = GmailAdapter()
     return {
         "messages": adapter.get_thread(thread_id),
@@ -465,12 +464,6 @@ async def get_mail_thread(thread_id: str):
 
 @app.post("/mail/draft")
 async def draft_mail(payload: MailDraftRequest):
-    import sys
-    from pathlib import Path
-
-    sys.path.insert(0, str(Path(__file__).resolve().parent / "integrations"))
-    from gmail_adapter import GmailAdapter
-
     adapter = GmailAdapter()
     draft = adapter.draft_reply(payload.thread_id, payload.voice_transcript)
     return {"draft": draft}
@@ -478,12 +471,6 @@ async def draft_mail(payload: MailDraftRequest):
 
 @app.post("/mail/create-draft")
 async def create_mail_draft(payload: MailCreateDraftRequest):
-    import sys
-    from pathlib import Path
-
-    sys.path.insert(0, str(Path(__file__).resolve().parent / "integrations"))
-    from gmail_adapter import GmailAdapter
-
     if not payload.confirmed:
         raise HTTPException(status_code=403, detail="requires confirmed=true")
 
@@ -550,29 +537,56 @@ async def imessage_webhook(request: Request):
 
 @app.get("/status/integrations")
 async def integrations_status():
-    import sys
-    from pathlib import Path
-
-    sys.path.insert(0, str(Path(__file__).resolve().parent / "integrations"))
-    from bluebubbles_adapter import BlueBubblesAdapter
-    from gmail_adapter import GmailAdapter
-
     now = datetime.now(timezone.utc).isoformat()
     msg_adapter = BlueBubblesAdapter()
     gmail_adapter = GmailAdapter()
 
-    return {
-        "bluebubbles": {
-            "status": "mock" if msg_adapter._mock else "online",
-            "unread": msg_adapter.get_unread_count(),
-            "last_checked": now,
-        },
-        "gmail": {
-            "status": gmail_adapter.integration_status(),
-            "unread": gmail_adapter.get_unread_count(),
-            "last_checked": now,
-        },
-    }
+    payload = _integration_status_payload()
+    payload.update(
+        {
+            "bluebubbles": {
+                "status": "mock" if msg_adapter.is_mock else "online",
+                "unread": msg_adapter.get_unread_count(),
+                "last_checked": now,
+            },
+            "gmail": {
+                "status": gmail_adapter.integration_status(),
+                "unread": gmail_adapter.get_unread_count(),
+                "last_checked": now,
+            },
+        }
+    )
+    return payload
+
+
+@app.get("/device/version")
+async def get_device_version():
+    return {"status": "not_implemented"}
+
+
+@app.post("/device/update")
+async def post_device_update():
+    return {"status": "not_implemented"}
+
+
+@app.post("/device/heartbeat")
+async def post_device_heartbeat():
+    return {"status": "not_implemented"}
+
+
+@app.get("/device/status")
+async def get_device_status():
+    return {"status": "not_implemented"}
+
+
+@app.get("/dashboard")
+async def get_dashboard():
+    return {"status": "not_implemented"}
+
+
+@app.get("/brief")
+async def get_brief():
+    return {"status": "not_implemented"}
 
 @app.post("/shutdown")
 async def shutdown():
