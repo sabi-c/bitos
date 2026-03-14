@@ -28,6 +28,12 @@ That's it — Pygame window opens, SPACE/ENTER/BACKSPACE to navigate.
 
 ## Architecture
 
+## Current Delivery Status
+
+- Phase 4 shell set is complete (lock/home/chat/settings/focus/notifications overlay).
+- BLE foundation slices `P5-007`, `P5-008`, and `P5-009` are done (WiFi config/status, device status notify, keyboard routing).
+- Next up: `P5-010` NetworkManager priority + BT PAN baseline and `P5-011` QR companion pairing flow.
+
 ```
 Device (Pygame/ST7789) ──HTTP──▶ Server (FastAPI) ──▶ Claude API
 ```
@@ -121,6 +127,11 @@ If handing implementation to a new contributor/agent, start here:
 | Document | Purpose |
 |---|---|
 | docs/planning/MAC_AI_SERVICE.md | Multi-agent Mac service + collab-electron pattern |
+| companion/README.md | Companion PWA setup, local dev, and deployment notes |
+| docs/planning/COMPANION_APP.md | Companion app scope, security expectations, and MVP acceptance criteria |
+| docs/planning/FIRST_BOOT.md | First-boot provisioning flow, state machine, and failure handling |
+| docs/BLUETOOTH_NETWORK_SPEC.md | BLE provisioning/status contract and network behavior expectations |
+| docs/BACKEND_SPEC.md | Backend endpoint, auth, provider, and error contract specification |
 
 - [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) — Phase 1 build plan
 - [ROADMAP.md](ROADMAP.md) — Full project roadmap
@@ -128,6 +139,7 @@ If handing implementation to a new contributor/agent, start here:
 - [docs/planning/TASK_TRACKER.md](docs/planning/TASK_TRACKER.md) — Canonical backlog + per-iteration log for all contributors/agents
 - [docs/planning/HANDOFF_NEXT_AGENT.md](docs/planning/HANDOFF_NEXT_AGENT.md) — Practical takeover brief and next-slice implementation notes
 - [docs/reference-ui/README.md](docs/reference-ui/README.md) — Canonical location and naming conventions for imported HTML UI reference files
+- [companion/README.md](companion/README.md) — Companion PWA workflow for BLE Wi-Fi provisioning
 
 ## License
 
