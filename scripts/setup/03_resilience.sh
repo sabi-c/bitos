@@ -48,3 +48,37 @@ EOF'
 
 echo "RESILIENCE SETUP COMPLETE — reboot required for watchdog"
 echo "After reboot, verify: cat /proc/sys/kernel/watchdog"
+
+# Check for updates on boot (runs once, non-blocking)
+sudo bash -c 'cat > /etc/systemd/system/bitos-update-check.service << "UNIT"
+[Unit]
+Description=BITOS Update Check
+After=network-online.target bitos-server.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=pi
+ExecStart=/home/pi/bitos/scripts/ota_update.sh
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+UNIT'
+
+# Run update check weekly (not every boot — too slow)
+sudo bash -c 'cat > /etc/systemd/system/bitos-update-check.timer << "TIMER"
+[Unit]
+Description=BITOS Weekly Update Check
+
+[Timer]
+OnCalendar=weekly
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+TIMER'
+
+sudo systemctl daemon-reload
+sudo systemctl enable bitos-update-check.timer

@@ -1,20 +1,37 @@
 """BITOS Server backend: health, chat, and UI settings catalog endpoints."""
 import logging
 import os
+import subprocess
+import sys
+import threading
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from integrations.bluebubbles_adapter import BlueBubblesAdapter
-from integrations.vikunja_adapter import VikunjaAdapter
+SERVER_DIR = Path(__file__).resolve().parent
+INTEGRATIONS_DIR = SERVER_DIR / "integrations"
+if str(SERVER_DIR) not in sys.path:
+    sys.path.insert(0, str(SERVER_DIR))
+if str(INTEGRATIONS_DIR) not in sys.path:
+    sys.path.insert(0, str(INTEGRATIONS_DIR))
+
+from bluebubbles_adapter import BlueBubblesAdapter
+from vikunja_adapter import VikunjaAdapter
 
 from agent_modes import get_system_prompt
 from config import UI_SETTINGS_FILE
 from llm_bridge import create_llm_bridge, to_sse_data
 from ui_settings import UISettingsStore, UISettingsValidationError
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from version import __version__, __build__
 
 
 class ChatRequest(BaseModel):
@@ -39,6 +56,23 @@ class MessageDraftRequest(BaseModel):
 class IntegrationSettingsRequest(BaseModel):
     integration: str
     config: dict = Field(default_factory=dict)
+
+
+class MailDraftRequest(BaseModel):
+    thread_id: str
+    voice_transcript: str
+
+
+class MailCreateDraftRequest(BaseModel):
+    thread_id: str
+    body: str
+    confirmed: bool = False
+
+
+
+class DeviceUpdateRequest(BaseModel):
+    target: str = "both"
+    confirmed: bool = False
 
 
 def _is_real_anthropic_key(value: str) -> bool:
@@ -164,9 +198,86 @@ def _test_integration_connection(integration: str, config: dict) -> tuple[bool, 
 
     return False, "Unknown integration"
 
+
+REPO_DIR = ROOT_DIR
+_last_version_check: datetime | None = None
+
+
+def get_git_commit() -> str:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            cwd=REPO_DIR,
+            timeout=3,
+            check=False,
+        )
+        return result.stdout.strip() or "unknown"
+    except Exception:
+        return "unknown"
+
+
+def _git_branch() -> str:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True,
+            text=True,
+            cwd=REPO_DIR,
+            timeout=3,
+            check=False,
+        )
+        return result.stdout.strip() or "unknown"
+    except Exception:
+        return "unknown"
+
+
+def _commits_behind_origin_main() -> int:
+    global _last_version_check
+    _last_version_check = datetime.now(timezone.utc)
+    try:
+        subprocess.run(["git", "fetch", "--quiet"], cwd=REPO_DIR, timeout=5, check=False)
+        result = subprocess.run(
+            ["git", "rev-list", "HEAD..origin/main", "--count"],
+            capture_output=True,
+            text=True,
+            cwd=REPO_DIR,
+            timeout=3,
+            check=False,
+        )
+        return int((result.stdout or "0").strip() or "0")
+    except Exception:
+        return 0
+
+
+def _run_ota_update(target: str) -> dict:
+    allowed = {"device", "server", "both"}
+    normalized = target if target in allowed else "both"
+    script = REPO_DIR / "scripts" / "ota_update.sh"
+    env = os.environ.copy()
+    env["OTA_TARGET"] = normalized
+
+    if script.exists():
+        subprocess.run(["bash", str(script)], cwd=REPO_DIR, env=env, timeout=180, check=False)
+    else:
+        subprocess.run(["git", "pull", "origin", "main"], cwd=REPO_DIR, timeout=30, check=False)
+        subprocess.run(["pip", "install", "-r", "requirements.txt", "-q"], cwd=REPO_DIR, timeout=60, check=False)
+
+    # Best-effort health probe after restart/update
+    try:
+        import httpx
+
+        httpx.get("http://localhost:8000/health", timeout=5)
+    except Exception:
+        pass
+
+    return {"ok": True, "new_commit": get_git_commit(), "target": normalized}
+
+
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="BITOS Server", version="0.3.0")
+app = FastAPI(title="BITOS Server", version=__version__)
 settings_store = UISettingsStore(UI_SETTINGS_FILE)
 llm_bridge = create_llm_bridge()
 _token_warning_logged = False
@@ -206,6 +317,9 @@ async def require_device_token(request: Request, call_next):
 async def health():
     return {
         "status": "ok",
+        "version": __version__,
+        "build": __build__,
+        "commit": get_git_commit(),
         "provider": llm_bridge.provider,
         "model": llm_bridge.model,
         "settings_file": UI_SETTINGS_FILE,
@@ -215,6 +329,39 @@ async def health():
 @app.get("/status/integrations")
 async def get_integrations_status():
     return _integration_status_payload()
+
+
+@app.get("/device/version")
+async def device_version():
+    behind = _commits_behind_origin_main()
+    return {
+        "version": __version__,
+        "commit": get_git_commit(),
+        "branch": _git_branch(),
+        "behind": behind,
+        "update_available": behind > 0,
+        "last_checked": (_last_version_check or datetime.now(timezone.utc)).isoformat(),
+    }
+
+
+@app.post("/device/update")
+async def device_update(payload: DeviceUpdateRequest):
+    if not payload.confirmed:
+        raise HTTPException(status_code=403, detail="requires confirmed=true")
+
+    result: dict[str, object] = {"ok": False, "new_commit": get_git_commit()}
+
+    def runner():
+        nonlocal result
+        result = _run_ota_update(payload.target)
+
+    thread = threading.Thread(target=runner, daemon=True)
+    thread.start()
+    thread.join(timeout=25)
+
+    if thread.is_alive():
+        return {"ok": True, "new_commit": get_git_commit(), "message": "update started"}
+    return result
 
 
 @app.post("/settings/integrations")
