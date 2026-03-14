@@ -13,6 +13,7 @@ from bluetooth import AuthManager, get_gatt_server
 from bluetooth.constants import PAIRING_MODE_TIMEOUT_SECONDS
 from bluetooth.characteristics import DeviceStatusCharacteristic, KeyboardInputCharacteristic, WiFiConfigCharacteristic, WiFiStatusCharacteristic
 from bluetooth.wifi_manager import WiFiManager
+from audio import AudioPipeline
 from screens.manager import ScreenManager
 from screens.boot import BootScreen
 from screens.lock import LockScreen
@@ -57,6 +58,7 @@ def main():
     surface = driver.get_surface()
 
     button = ButtonHandler()
+    audio_pipeline = AudioPipeline()
     client = BackendClient()
     repository = DeviceRepository()
     repository.initialize()
@@ -146,7 +148,7 @@ def main():
         print(f"[BITOS] UI settings unavailable, using defaults ({exc})")
 
     def open_chat():
-        chat = ChatPanel(client, ui_settings=ui_settings, repository=repository)
+        chat = ChatPanel(client, ui_settings=ui_settings, repository=repository, audio_pipeline=audio_pipeline)
         screen_mgr.replace(chat)
 
     def on_home():
@@ -244,8 +246,9 @@ def main():
                 running = False
                 break
 
-            button.handle_pygame_event(event)
-            screen_mgr.handle_input(event)
+            consumed = button.handle_pygame_event(event)
+            if not consumed:
+                screen_mgr.handle_input(event)
 
         if not running:
             break
