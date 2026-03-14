@@ -1,4 +1,32 @@
 <!--
+# SPRINT: P0-DOCS-3 — Complete deferred docs cleanup, expand tracker backlog, and prep handoff for P5-010/P5-011 execution.
+# READS: docs/planning/TASK_TRACKER.md, docs/planning/HANDOFF_NEXT_AGENT.md, README.md, docs/planning/SECURITY_DECISIONS.md,
+#        docs/planning/DEVELOPMENT_PRACTICES.md, docs/planning/FUNCTIONALITY_ROADMAP.md, docs/planning/OFFLINE_AI.md,
+#        ROADMAP.md
+# WRITES: docs/planning/TASK_TRACKER.md, docs/planning/SECURITY_DECISIONS.md, docs/planning/DEVELOPMENT_PRACTICES.md,
+#         docs/planning/FUNCTIONALITY_ROADMAP.md, docs/planning/OFFLINE_AI.md, ROADMAP.md, README.md,
+#         docs/planning/HANDOFF_NEXT_AGENT.md, device/bluetooth/network_manager.py, scripts/setup/05_network_priority.sh,
+#         device/bluetooth/constants.py, device/overlays/qr_code.py, device/overlays/__init__.py, device/screens/manager.py,
+#         device/main.py, device/screens/panels/settings.py, device/bluetooth/characteristics/device_info.py,
+#         device/bluetooth/characteristics/__init__.py, device/bluetooth/server.py, device/bluetooth/wifi_manager.py,
+#         requirements-device.txt, tests/test_network_manager.py, tests/test_qr_overlay.py, tests/test_device_info.py,
+#         tests/test_settings_companion.py, tests/test_panel_shells.py
+# TESTS: python scripts/validate_tracker.py, pytest -q
+# DEFERRED: P5-012 companion web assets implementation (next sprint).
+-->
+
+<!--
+# SPRINT: P0-DOCS-2 — Backfill missing planning/spec docs and sync tracker/handoff/readme documentation surfaces.
+# READS: docs/planning/TASK_TRACKER.md, docs/planning/HANDOFF_NEXT_AGENT.md, README.md, docs/planning/SECURITY_DECISIONS.md,
+#        docs/planning/DEVELOPMENT_PRACTICES.md, docs/planning/FUNCTIONALITY_ROADMAP.md, docs/planning/OFFLINE_AI.md,
+#        docs/planning/MAC_AI_SERVICE.md, ROADMAP.md
+# WRITES: docs/planning/TASK_TRACKER.md, docs/planning/COMPANION_APP.md, docs/planning/FIRST_BOOT.md,
+#         docs/BLUETOOTH_NETWORK_SPEC.md, docs/BACKEND_SPEC.md, docs/planning/HANDOFF_NEXT_AGENT.md, README.md
+# TESTS: none (documentation-only sprint)
+# DEFERRED: feature/runtime code changes and any non-documentation tasks outside P0-DOCS-2.
+-->
+
+<!--
 # SPRINT: P5-007/P5-008/P5-009 — Implement BLE WiFi config, device status notify, and keyboard input routing characteristics.
 # READS: docs/planning/TASK_TRACKER.md, docs/planning/HANDOFF_NEXT_AGENT.md, device/bluetooth/constants.py, device/bluetooth/auth.py,
 #        device/bluetooth/characteristics/wifi_config.py, device/bluetooth/characteristics/device_status.py,
@@ -45,13 +73,13 @@ For **every implementation iteration** (code or docs):
 
 | ID | Phase | Workstream | Task | Owner | Status | Updated | Notes |
 |---|---|---|---|---|---|---|---|
-| P0-AUDIT-005 | Phase 0 | Quality | Create one-page `docs/reports/MASTER_AUDIT_SUMMARY.md` from audit reports and identify critical/sprint-parallel fixes | GPT-5.2-Codex | done | 2026-03-14 | Completed summary synthesis; noted missing report artifacts requiring follow-up publication. |
 | P0-AUDIT-001 | Phase 0 | Quality | Produce code-quality audit report for `device/` and `server/`, publish findings in `docs/reports/CODE_QUALITY.md` | GPT-5.2-Codex | done | 2026-03-14 | Added as todo then completed in same iteration. |
 | 2026-03-14 | GPT-5.2-Codex | work | `33848ad` | Completed P5-007/P5-008/P5-009 BLE characteristics: WiFi config+status, device status notify, keyboard input routing, companion protocol doc, and Phase 10 planning docs/tasks | `docs/planning/TASK_TRACKER.md`, `docs/planning/HANDOFF_NEXT_AGENT.md`, `docs/planning/MAC_AI_SERVICE.md`, `README.md`, `ROADMAP.md` | Next: P5-010 NetworkManager priority tuning + BT PAN baseline |
 | 2026-03-14 | GPT-5.2-Codex | work | `34cb423` | Completed P5-004/P5-005/P5-006 BLE foundation: UUID/constants, mockable GATT server shell, pairing agent, passkey overlay, BLE secret setup update, and test coverage | `docs/planning/TASK_TRACKER.md`, `docs/planning/HANDOFF_NEXT_AGENT.md`, `scripts/setup/02b_secrets.sh` | Next: P5-007/P5-008/P5-009 characteristic handlers (wifi config/device status/keyboard input) |
 | 2026-03-14 | GPT-5.2-Codex | work | `6bdf05f` | Completed P5-001/P5-002/P5-003 infra foundation: setup scripts, remote Makefile workflows, static device-token auth middleware, and validation tests | `docs/planning/TASK_TRACKER.md`, `docs/planning/HANDOFF_NEXT_AGENT.md`, `scripts/setup/README.md` | Next: P5-004 BLE GATT server + transport security follow-through |
 | P2-001 | Phase 2 | WS-A App Shell | Add lock screen + route from boot | GPT-5.2-Codex | done | 2026-03-14 | Implemented boot -> lock -> home flow in device runtime; added shell flow tests |
 | P0-002 | Phase 0 | Planning | Publish explicit handoff brief for next contributor with immediate next slice | GPT-5.2-Codex | done | 2026-03-14 | Added `docs/planning/HANDOFF_NEXT_AGENT.md` and linked it from key docs |
+| P0-AUDIT-002 | Phase 0 | Quality Audit | Run repository test coverage audit and publish prioritized coverage report | GPT-5.2-Codex | done | 2026-03-14 | Added `docs/reports/TEST_COVERAGE.md` with untested modules and priority targets |
 | P2-002 | Phase 2 | WS-A App Shell | Implement sidebar navigation for button-only controls | GPT-5.2-Codex | done | 2026-03-14 | Added focusable home nav items + button/keyboard navigation tests |
 | P2-002b | Phase 2 | WS-A App Shell | Extract reusable nav controller/item model for future pages | GPT-5.2-Codex | done | 2026-03-14 | Added `VerticalNavController` + `NavItem` and coverage tests for wrap/activation behavior |
 | P2-003 | Phase 2 | WS-B Persistence | Add SQLite schema + migration runner (`sessions/messages/settings/events`) | GPT-5.2-Codex | done | 2026-03-14 | Added `DeviceRepository` with schema versioning + startup migration initialization and tests |
@@ -77,6 +105,37 @@ For **every implementation iteration** (code or docs):
 | P5-007 | Phase 5 | WS-G Bluetooth Foundation | WiFi config + status characteristics | GPT-5.2-Codex | done | 2026-03-14 | Implemented protected WiFi write, status characteristic, and nmcli/mock manager plumbing |
 | P5-008 | Phase 5 | WS-G Bluetooth Foundation | Device status read/notify characteristic | GPT-5.2-Codex | done | 2026-03-14 | Implemented periodic updates, state-change updates on screen transitions, and notify payload serialization |
 | P5-009 | Phase 5 | WS-G Bluetooth Foundation | Keyboard input routing characteristic | GPT-5.2-Codex | done | 2026-03-14 | Implemented protected keyboard writes and ScreenManager compose routing hooks |
+| P5-010 | Phase 5 | WS-G Bluetooth Foundation | NetworkManager priority config + BT PAN fallback | GPT-5.2-Codex | done | 2026-03-14 | Implemented NetworkPriorityManager + nmcli setup script with WiFi priority/BT PAN baseline. |
+| P5-011a | Phase 5 | WS-H Companion | Add QROverlay class + qrcode dependency | GPT-5.2-Codex | done | 2026-03-14 | Implemented QROverlay and qrcode dependency surface (with fallback-safe generation). |
+| P5-011b | Phase 5 | WS-H Companion | Wire QROverlay into boot no-network flow | GPT-5.2-Codex | done | 2026-03-14 | Boot no-network flow now shows setup QR overlay and enables temporary discoverability. |
+| P5-011c | Phase 5 | WS-H Companion | Wire QROverlay into Settings → Pair Companion App | GPT-5.2-Codex | done | 2026-03-14 | Settings panel now includes Companion App row and pairing QR overlay action. |
+| P5-011d | Phase 5 | WS-H Companion | Add DEVICE_INFO characteristic (serial, read-only) | GPT-5.2-Codex | done | 2026-03-14 | Implemented read-only DEVICE_INFO characteristic and server wiring for companion reads. |
+| P5-012a | Phase 5 | WS-H Companion | companion/setup.html — WiFi provisioning PWA | unassigned | todo | 2026-03-14 | Planned PWA setup surface |
+| P5-012b | Phase 5 | WS-H Companion | companion/js/ble.js — Web Bluetooth wrapper | unassigned | todo | 2026-03-14 | Planned BLE transport wrapper |
+| P5-012c | Phase 5 | WS-H Companion | companion/js/auth.js — HMAC (must match Python) | unassigned | todo | 2026-03-14 | Planned auth parity with device |
+| P5-012d | Phase 5 | WS-H Companion | companion/js/crypto.js — AES-GCM encrypt | unassigned | todo | 2026-03-14 | Planned WiFi payload encryption |
+| P5-012e | Phase 5 | WS-H Companion | companion/pair.html — full pairing flow | unassigned | todo | 2026-03-14 | Planned companion pairing flow |
+| P5-012f | Phase 5 | WS-H Companion | Render/GitHub Pages deploy workflow | unassigned | todo | 2026-03-14 | Planned companion hosting pipeline |
+| P6-001 | Phase 6 | WS-I Resilience | 5-press graceful shutdown + state save | unassigned | todo | 2026-03-14 | Planned resilience improvement |
+| P6-002 | Phase 6 | WS-I Resilience | Offline mode UI states + status bar indicators | unassigned | todo | 2026-03-14 | Planned offline UX hardening |
+| P6-003 | Phase 6 | WS-I Resilience | Pomodoro state persistence across reboots | unassigned | todo | 2026-03-14 | Planned continuity enhancement |
+| P6-004 | Phase 6 | WS-I Resilience | Request signing on device→server calls (SD-004) | unassigned | todo | 2026-03-14 | Security alignment task |
+| P6-005 | Phase 6 | WS-I Resilience | Append-only audit log for tier-2 actions (SD-006) | unassigned | todo | 2026-03-14 | Security accountability task |
+| P6-006 | Phase 6 | WS-I Resilience | Anthropic API certificate pinning (SD-009) | unassigned | todo | 2026-03-14 | Security hardening task |
+| P7-001 | Phase 7 | WS-J Offline AI | PiperTTS + AutoFallbackTTS bridge | unassigned | todo | 2026-03-14 | Planned offline TTS fallback |
+| P7-002 | Phase 7 | WS-J Offline AI | whisper.cpp STT + AutoFallbackSTT bridge | unassigned | todo | 2026-03-14 | Planned offline STT fallback |
+| P7-003 | Phase 7 | WS-J Offline AI | Response cache: store + retrieve + stale label | unassigned | todo | 2026-03-14 | Planned offline cached responses |
+| P7-004 | Phase 7 | WS-J Offline AI | llama.cpp local LLM (experimental) | unassigned | blocked | 2026-03-14 | Blocked — Pi Zero 2W ~1-3 tok/s marginal. Revisit with Pi 5 (8GB). |
+| P8-001 | Phase 8 | WS-K AI Core | Global workspace class + schema | unassigned | todo | 2026-03-14 | Planned shared memory foundation |
+| P8-002 | Phase 8 | WS-K AI Core | Morning brief background worker (8am) | unassigned | todo | 2026-03-14 | Planned proactive summary worker |
+| P8-003 | Phase 8 | WS-K AI Core | Session distiller (post-conversation) | unassigned | todo | 2026-03-14 | Planned summarization pipeline |
+| P8-004 | Phase 8 | WS-K AI Core | Agent mode system prompt injection on server | unassigned | todo | 2026-03-14 | Planned server injection slice |
+| P8-005 | Phase 8 | WS-K AI Core | Proactive notifications (3/day rate limit) | unassigned | todo | 2026-03-14 | Planned rate-limited proactive alerts |
+| P9-001 | Phase 9 | WS-L Extensions | PWA companion app (Web Bluetooth) | unassigned | todo | 2026-03-14 | Planned companion app rollout |
+| P9-002 | Phase 9 | WS-L Extensions | BLE keyboard input → device compose fields | unassigned | todo | 2026-03-14 | Planned input handoff completion |
+| P9-003 | Phase 9 | WS-L Extensions | Wake word via openWakeWord (opt-in) | unassigned | todo | 2026-03-14 | Planned wake word integration |
+| P9-004 | Phase 9 | WS-L Extensions | Voice notes as first-class type | unassigned | todo | 2026-03-14 | Planned voice note feature |
+| P9-005 | Phase 9 | WS-L Extensions | Conversation branching (parent_message_id) | unassigned | todo | 2026-03-14 | Planned threaded branch UX |
 | P10-001 | Phase 10 | WS-M MacService | Code Agent service (port 8001) + file tools | unassigned | todo | 2026-03-14 | Planned multi-agent Mac service foundation |
 | P10-002 | Phase 10 | WS-M MacService | Ops Agent service (port 8003) separate process | unassigned | todo | 2026-03-14 | Planned multi-agent Mac service foundation |
 | P10-003 | Phase 10 | WS-M MacService | Research Agent service (port 8002) + web tools | unassigned | todo | 2026-03-14 | Planned multi-agent Mac service foundation |
@@ -85,11 +144,14 @@ For **every implementation iteration** (code or docs):
 | P10-006 | Phase 10 | WS-M MacService | Background tasks screen on device | unassigned | todo | 2026-03-14 | Planned multi-agent Mac service foundation |
 | P10-007 | Phase 10 | WS-M MacService | Orchestrator multi-agent routing | unassigned | todo | 2026-03-14 | Planned multi-agent Mac service foundation |
 | P10-008 | Phase 10 | WS-M MacService | Electron monitor app (optional) | unassigned | todo | 2026-03-14 | Planned multi-agent Mac service foundation |
+| P0-AUDIT-003 | Phase 0 | Security | Run dependency audit report for device/server requirement sets and document results | GPT-5.2-Codex | done | 2026-03-14 | Added `docs/reports/DEPENDENCY_AUDIT.md`; audit commands executed with environment limitations noted |
 
 ## Iteration Log
 
 | Date | Contributor | Branch | Commit | Tasks completed | Docs updated | Next tasks |
 |---|---|---|---|---|---|---|
+| 2026-03-14 | GPT-5.2-Codex | work | `this-commit` | Completed P0-DOCS-3 + P5-010/P5-011a/b/c/d (docs cleanup, tracker expansion, network priority manager, QR overlay flows, device info characteristic, and companion settings row) | `docs/planning/TASK_TRACKER.md`, `docs/planning/HANDOFF_NEXT_AGENT.md`, `README.md`, `ROADMAP.md`, `docs/planning/SECURITY_DECISIONS.md`, `docs/planning/DEVELOPMENT_PRACTICES.md`, `docs/planning/FUNCTIONALITY_ROADMAP.md`, `docs/planning/OFFLINE_AI.md` | Next: P5-012a/b/c/d companion PWA files and BLE JS auth/crypto parity |
+| 2026-03-14 | GPT-5.2-Codex | work | `this-commit` | Completed P0-DOCS-2 documentation audit + restoration (created missing planning/spec docs, updated README index, refreshed handoff first-read guidance) | `docs/planning/TASK_TRACKER.md`, `docs/planning/HANDOFF_NEXT_AGENT.md`, `README.md`, `docs/planning/COMPANION_APP.md`, `docs/planning/FIRST_BOOT.md`, `docs/BLUETOOTH_NETWORK_SPEC.md`, `docs/BACKEND_SPEC.md` | Resume P5-010 NetworkManager priority tuning + BT PAN baseline |
 | 2026-03-14 | GPT-5.2-Codex | work | `dd2fd73` | Completed P4-004 notification shade + live notification sources (health state + overdue tasks), schema migration to v4, and runtime poller wiring | `docs/planning/TASK_TRACKER.md`, `docs/planning/HANDOFF_NEXT_AGENT.md` | P5 notification sources (Gmail/SMS), global shade gesture, notification settings |
 | 2026-03-14 | GPT-5.2-Codex | work | `b07c5ae` | Added in-repo roadmap and detailed implementation plan docs | `README.md`, `ROADMAP.md`, `docs/planning/IMPLEMENTATION_PLAN_NEXT.md` | Establish explicit task tracking policy and seed backlog |
 | 2026-03-14 | GPT-5.2-Codex | work | `d4fd9cc` | Established canonical task tracker + contributor iteration protocol | `docs/planning/TASK_TRACKER.md`, roadmap/plan/readme updates | Start P2-001 and P2-003 in next implementation PR |
