@@ -147,9 +147,12 @@ Never use `print()`. Use Python's `logging` module configured to
 output JSON lines. Every log entry is machine-readable and can be
 searched remotely.
 
+**This is the required pattern — not illustrative. Implement this in `device/main.py` and `server/main.py` on startup.**
+
 ```python
-# server/config.py and device/main.py — logging setup
-import logging, json
+# shared startup logging pattern for server/main.py and device/main.py
+import json
+import logging
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):
@@ -159,15 +162,26 @@ class JsonFormatter(logging.Formatter):
             "module": record.module,
             "msg": record.getMessage(),
         }
-        if hasattr(record, "__dict__"):
-            obj.update({k: v for k, v in record.__dict__.items()
-                       if k not in logging.LogRecord.__dict__})
+        obj.update({
+            k: v
+            for k, v in record.__dict__.items()
+            if k not in logging.LogRecord.__dict__
+        })
         return json.dumps(obj)
 
-handler = logging.StreamHandler()
-handler.setFormatter(JsonFormatter())
-logging.root.addHandler(handler)
-logging.root.setLevel(logging.INFO)
+
+def configure_logging(level: int = logging.INFO) -> None:
+    root = logging.getLogger()
+    root.handlers.clear()
+
+    handler = logging.StreamHandler()
+    handler.setFormatter(JsonFormatter())
+
+    root.addHandler(handler)
+    root.setLevel(level)
+
+
+configure_logging()
 ```
 
 Usage:
