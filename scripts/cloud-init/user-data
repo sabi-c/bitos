@@ -20,3 +20,5 @@ write_files:
 runcmd:
   - mkdir -p /etc/bitos
   - chown -R pi:pi /home/pi
+  - su - pi -c 'test -d ~/bitos || git clone $(cat /etc/bitos/repo_url) ~/bitos'
+  - su - pi -c 'cd ~/bitos && bash scripts/install.sh --non-interactive'
