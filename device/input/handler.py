@@ -3,6 +3,8 @@ BITOS Button Handler
 Processes raw button press/release events into gesture types.
 Desktop: Space bar = physical button.
 """
+import os
+import threading
 import time
 from enum import Enum, auto
 from typing import Callable, Optional
@@ -31,6 +33,7 @@ class ButtonHandler:
 
     def __init__(self):
         self._callbacks: dict[ButtonEvent, list[Callable]] = {e: [] for e in ButtonEvent}
+        self._keyboard_mode = os.environ.get("BITOS_BUTTON", "").lower() == "keyboard"
         self._press_time: Optional[float] = None
         self._release_times: list[float] = []
         self._is_pressed = False
@@ -49,12 +52,29 @@ class ButtonHandler:
             except Exception as e:
                 print(f"[ButtonHandler] Callback error for {event_type.name}: {e}")
 
-    def handle_pygame_event(self, event: pygame.event.Event):
-        """Process a Pygame keyboard event (Space = button)."""
+    def handle_pygame_event(self, event: pygame.event.Event) -> bool:
+        """Process a Pygame keyboard event. Returns True when event is consumed as a button gesture."""
+        if self._keyboard_mode and event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_SPACE:
+                self._emit(ButtonEvent.SHORT_PRESS)
+                return True
+            if event.key == pygame.K_RETURN:
+                self._emit(ButtonEvent.LONG_PRESS)
+                return True
+            if event.key == pygame.K_BACKSPACE:
+                self._emit(ButtonEvent.DOUBLE_PRESS)
+                return True
+            if event.key == pygame.K_TAB:
+                self._emit(ButtonEvent.TRIPLE_PRESS)
+                return True
+
         if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
             self._on_press()
-        elif event.type == pygame.KEYUP and event.key == pygame.K_SPACE:
+            return True
+        if event.type == pygame.KEYUP and event.key == pygame.K_SPACE:
             self._on_release()
+            return True
+        return False
 
     def _on_press(self):
         now = time.time()
@@ -112,3 +132,93 @@ class ButtonHandler:
             self._emit(ButtonEvent.DOUBLE_PRESS)
         elif tap_count == 1:
             self._emit(ButtonEvent.SHORT_PRESS)
+
+
+class GPIOButtonHandler:
+    """GPIO-backed button handler for Pi hardware mode."""
+
+    GPIO_PIN = 11  # Board P11 = BCM 17
+
+    def __init__(self, on_event: Callable[[ButtonEvent], None]):
+        import RPi.GPIO as GPIO  # type: ignore
+
+        self._on_event = on_event
+        self._press_times: list[float] = []
+        self._press_start: float | None = None
+        self._lock = threading.Lock()
+
+        GPIO.setmode(GPIO.BOARD)
+        GPIO.setup(self.GPIO_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.add_event_detect(
+            self.GPIO_PIN,
+            GPIO.BOTH,
+            callback=self._raw_callback,
+            bouncetime=30,
+        )
+
+    def _raw_callback(self, channel):
+        import RPi.GPIO as GPIO  # type: ignore
+
+        now_ms = time.time() * 1000.0
+        if GPIO.input(channel) == GPIO.LOW:
+            self._press_start = now_ms
+            return
+
+        start_ms = self._press_start if self._press_start is not None else now_ms
+        duration_ms = now_ms - start_ms
+        self._handle_release(duration_ms=duration_ms, now_ms=now_ms)
+
+    def _handle_release(self, duration_ms: float, now_ms: float) -> None:
+        short_threshold_ms = SHORT_THRESHOLD * 1000.0
+        double_window_ms = DOUBLE_WINDOW * 1000.0
+        triple_window_ms = TRIPLE_WINDOW * 1000.0
+
+        with self._lock:
+            self._press_times.append(now_ms)
+            self._press_times = [t for t in self._press_times if (now_ms - t) < triple_window_ms]
+            count = len(self._press_times)
+
+        if duration_ms >= short_threshold_ms:
+            with self._lock:
+                self._press_times.clear()
+        self._press_times.append(now_ms)
+        self._press_times = [t for t in self._press_times if (now_ms - t) < triple_window_ms]
+        count = len(self._press_times)
+
+        if duration_ms >= short_threshold_ms:
+            self._press_times.clear()
+            self._on_event(ButtonEvent.LONG_PRESS)
+            return
+
+        if count >= 3:
+            with self._lock:
+                self._press_times.clear()
+            self._press_times.clear()
+            self._on_event(ButtonEvent.TRIPLE_PRESS)
+            return
+
+        if count == 2:
+            def check_double():
+                time.sleep(double_window_ms / 1000.0)
+                with self._lock:
+                    if len(self._press_times) < 3:
+                        self._press_times.clear()
+                        self._on_event(ButtonEvent.DOUBLE_PRESS)
+                if len(self._press_times) == 2:
+                    self._press_times.clear()
+                    self._on_event(ButtonEvent.DOUBLE_PRESS)
+
+            threading.Thread(target=check_double, daemon=True).start()
+            return
+
+        def check_single():
+            time.sleep(double_window_ms / 1000.0)
+            with self._lock:
+                if len(self._press_times) == 1:
+                    self._press_times.clear()
+                    self._on_event(ButtonEvent.SHORT_PRESS)
+            if len(self._press_times) == 1:
+                self._press_times.clear()
+                self._on_event(ButtonEvent.SHORT_PRESS)
+
+        threading.Thread(target=check_single, daemon=True).start()

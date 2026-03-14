@@ -287,6 +287,20 @@ class DeviceRepository:
             )
             conn.commit()
 
+    def list_incomplete_tasks(self, limit: int = 3) -> list[dict]:
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                """
+                SELECT id, title, due_date, completed
+                FROM tasks
+                WHERE completed = 0
+                ORDER BY COALESCE(date(due_date), date('9999-12-31')) ASC, datetime(updated_at) DESC, id ASC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
     def add_task(self, task_id: str, title: str, due_date: str | None = None, completed: bool = False) -> None:
         now = time.time()
         with closing(self._connect()) as conn:

@@ -3,12 +3,25 @@ import logging
 import os
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel, Field
 
+from agent_modes import get_system_prompt
 from config import UI_SETTINGS_FILE
-from ui_settings import UISettingsStore, UISettingsValidationError
 from llm_bridge import create_llm_bridge, to_sse_data
+from ui_settings import UISettingsStore, UISettingsValidationError
+
+
+class ChatRequest(BaseModel):
+    message: str
+    session_id: str = ""
+    agent_mode: str = "producer"
+    tasks_today: list[str] = Field(default_factory=list)
+    battery_pct: int | None = None
+
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="BITOS Server", version="0.3.0")
 settings_store = UISettingsStore(UI_SETTINGS_FILE)
@@ -36,7 +49,7 @@ async def require_device_token(request: Request, call_next):
 
     if not expected:
         if not _token_warning_logged:
-            logging.warning("[BITOS] BITOS_DEVICE_TOKEN is not set; allowing all requests (dev mode)")
+            logger.warning("[BITOS] BITOS_DEVICE_TOKEN is not set; allowing all requests (dev mode)")
             _token_warning_logged = True
         return await call_next(request)
 
@@ -82,16 +95,21 @@ async def update_ui_settings(request: Request):
 
 
 @app.post("/chat")
-async def chat(request: Request):
+async def chat(payload: ChatRequest):
     """Stream model response from the active LLM bridge as SSE."""
-    body = await request.json()
-    message = body.get("message", "")
-
+    message = payload.message
     if not message:
         return {"error": "No message provided"}
 
+    agent_mode = payload.agent_mode or "producer"
+    system_prompt = get_system_prompt(
+        agent_mode,
+        tasks_today=payload.tasks_today,
+        battery_pct=payload.battery_pct,
+    )
+
     def stream_response():
-        for text in llm_bridge.stream_text(message):
+        for text in llm_bridge.stream_text(message, system_prompt=system_prompt):
             yield to_sse_data(text)
 
         yield "data: [DONE]\n\n"
@@ -106,6 +124,7 @@ async def chat(request: Request):
             },
         )
     except Exception as exc:
+        logger.error("[BITOS] Chat stream failed: %s", exc)
         return {"error": str(exc)}
 
 
@@ -113,4 +132,5 @@ if __name__ == "__main__":
     import uvicorn
     from config import SERVER_HOST, SERVER_PORT
 
+    logger.info("[BITOS] Starting server on %s:%s", SERVER_HOST, SERVER_PORT)
     uvicorn.run(app, host=SERVER_HOST, port=SERVER_PORT)

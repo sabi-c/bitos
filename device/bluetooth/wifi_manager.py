@@ -1,10 +1,11 @@
 """NetworkManager wrapper used by BLE WiFi provisioning characteristic."""
 from __future__ import annotations
 
-import json
 import logging
 import os
 import subprocess
+
+from bluetooth.network_manager import NetworkPriorityManager
 
 
 NMCLI_TIMEOUT_SECONDS = 8
@@ -54,25 +55,28 @@ class WiFiManager:
             ]
 
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=NMCLI_TIMEOUT_SECONDS)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         except subprocess.TimeoutExpired:
             logging.warning("wifi_add_timeout ssid=%s", ssid)
             return False
+
         if result.returncode != 0:
             logging.warning("wifi_add_failed stderr=%s", result.stderr.strip())
             return False
 
         try:
-            up = subprocess.run(
-                ["nmcli", "connection", "up", ssid],
-                capture_output=True,
-                text=True,
-                timeout=NMCLI_TIMEOUT_SECONDS,
-            )
+            up = subprocess.run(["nmcli", "connection", "up", ssid], capture_output=True, text=True, timeout=15)
         except subprocess.TimeoutExpired:
             logging.warning("wifi_up_timeout ssid=%s", ssid)
             return False
+
         return up.returncode == 0
+        up = subprocess.run(["nmcli", "connection", "up", ssid], capture_output=True, text=True)
+        ok = up.returncode == 0
+        if ok:
+            priority_manager = NetworkPriorityManager()
+            priority_manager.set_priority(ssid, priority)
+        return ok
 
     def get_status(self) -> dict:
         if os.environ.get("BITOS_WIFI") == "mock":
@@ -89,11 +93,12 @@ class WiFiManager:
                 ["nmcli", "-t", "-f", "ACTIVE,SSID,SIGNAL", "dev", "wifi"],
                 capture_output=True,
                 text=True,
-                timeout=STATUS_TIMEOUT_SECONDS,
+                timeout=5,
             )
         except subprocess.TimeoutExpired:
             logging.warning("wifi_status_timeout")
-            return {"connected": False, "ssid": "", "signal": "weak", "ip": "", "last_error": None}
+            return {"connected": False, "ssid": "", "signal": "weak", "ip": "", "last_error": "timeout"}
+
         ssid = ""
         signal = "weak"
         if active.returncode == 0:
@@ -106,9 +111,10 @@ class WiFiManager:
                     break
 
         try:
-            ip_cmd = subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=STATUS_TIMEOUT_SECONDS)
+            ip_cmd = subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=3)
         except subprocess.TimeoutExpired:
             logging.warning("wifi_ip_timeout")
-            ip_cmd = subprocess.CompletedProcess(args=["hostname", "-I"], returncode=1, stdout="", stderr="")
+            return {"connected": bool(ssid), "ssid": ssid, "signal": signal, "ip": "", "last_error": "timeout"}
+
         ip = ip_cmd.stdout.strip().split()[0] if ip_cmd.returncode == 0 and ip_cmd.stdout.strip() else ""
         return {"connected": bool(ssid), "ssid": ssid, "signal": signal, "ip": ip, "last_error": None}

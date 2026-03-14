@@ -32,7 +32,7 @@ class LLMBridge:
     provider: str
     model: str
 
-    def stream_text(self, message: str) -> Generator[str, None, None]:
+    def stream_text(self, message: str, system_prompt: str | None = None) -> Generator[str, None, None]:
         raise NotImplementedError
 
 
@@ -41,7 +41,7 @@ class AnthropicBridge(LLMBridge):
         super().__init__(provider="anthropic", model=model)
         self._api_key = api_key
 
-    def stream_text(self, message: str) -> Generator[str, None, None]:
+    def stream_text(self, message: str, system_prompt: str | None = None) -> Generator[str, None, None]:
         if not self._api_key:
             raise RuntimeError("ANTHROPIC_API_KEY not configured")
 
@@ -50,7 +50,7 @@ class AnthropicBridge(LLMBridge):
             model=self.model,
             max_tokens=1024,
             messages=[{"role": "user", "content": message}],
-            system=SYSTEM_PROMPT,
+            system=system_prompt or SYSTEM_PROMPT,
         ) as stream:
             for text in stream.text_stream:
                 yield text
@@ -64,7 +64,7 @@ class OpenAICompatibleBridge(LLMBridge):
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
 
-    def stream_text(self, message: str) -> Generator[str, None, None]:
+    def stream_text(self, message: str, system_prompt: str | None = None) -> Generator[str, None, None]:
         if not self._api_key:
             raise RuntimeError(f"{self.provider.upper()} API key not configured")
 
@@ -78,7 +78,7 @@ class OpenAICompatibleBridge(LLMBridge):
             json={
                 "model": self.model,
                 "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "system", "content": system_prompt or SYSTEM_PROMPT},
                     {"role": "user", "content": message},
                 ],
                 "temperature": 0.2,
@@ -102,7 +102,8 @@ class EchoBridge(LLMBridge):
     def __init__(self):
         super().__init__(provider="echo", model="echo-v1")
 
-    def stream_text(self, message: str) -> Generator[str, None, None]:
+    def stream_text(self, message: str, system_prompt: str | None = None) -> Generator[str, None, None]:
+        _ = system_prompt
         out = f"[echo] {message.strip()}"
         for token in out.split(" "):
             if token:

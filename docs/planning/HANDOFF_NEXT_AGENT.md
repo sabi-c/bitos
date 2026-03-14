@@ -25,22 +25,32 @@ This document is a practical takeover brief for the next implementation contribu
 
 ## 2) Immediate next implementation target
 
-## P5-012a — Companion PWA `setup.html` baseline
 
-Built this sprint: all audit follow-up fixes are complete, including UI render-path cache cleanup, SD trace-comment coverage across security boundaries, and WiFi timeout hardening + regression tests for timeout paths.
+### Documentation sweep completed (P0-DOCS-2)
+- Audited markdown footprint (`docs/`, `scripts/`, repo root) and confirmed missing docs were restored.
+- Added committed planning/spec docs:
+  - `docs/planning/COMPANION_APP.md`
+  - `docs/planning/FIRST_BOOT.md`
+  - `docs/BLUETOOTH_NETWORK_SPEC.md`
+  - `docs/BACKEND_SPEC.md`
+- Updated README docs index to include the new planning/spec references.
+
+## P5-012 — Companion PWA implementation slices
+
+Built this sprint: completed P0-DOCS-3 plus P5-010/P5-011a/b/c/d. Added NetworkManager priority helper + setup script, QR overlay infrastructure, boot no-network QR setup flow, Settings→Companion App QR pairing row, and read-only `DEVICE_INFO` BLE characteristic wiring. Docs/roadmap/tracker were synchronized with expanded P5-P10 backlog and explicit security/development plans.
 
 Read first next iteration:
 1. `docs/planning/TASK_TRACKER.md`
-2. `companion/setup.html`
-3. `companion/` assets + scripts referenced by setup flow
+2. `docs/BLUETOOTH_NETWORK_SPEC.md` and `docs/planning/COMPANION_APP.md`
+3. `device/overlays/qr_code.py`, `device/bluetooth/network_manager.py`, and `device/main.py`
 
-Most important thing to know: audit remediations are now complete; preserve those invariants while starting companion onboarding UI work.
+Most important thing to know: preserve strict auth boundaries and schema parity — keep `WIFI_CONFIG`/`KEYBOARD_INPUT` protected by session tokens, and ensure upcoming companion JS HMAC/AES implementations match Python exactly before enabling real provisioning writes.
 
 Deliver the next Phase 5 slice:
-1. P5-012a: scaffold companion PWA `setup.html` baseline flow.
-2. Keep companion work isolated to `companion/` assets with no device/server regressions.
-3. Preserve existing BLE protocol contracts and docs while adding setup UX.
-4. Add focused companion tests/checks where available.
+1. Implement P5-012a/b/c/d companion web assets (`setup.html`, BLE/auth/crypto JS parity).
+2. Keep `BITOS_BLUETOOTH=mock` and `BITOS_WIFI=mock` paths deterministic for desktop tests.
+3. Maintain QR flow compatibility with `BITOS_COMPANION_URL` and URL versioning (`v=1`).
+4. Keep companion protocol docs aligned with payload/schema changes.
 
 ### Suggested acceptance checks
 - Protected characteristic writes fail fast on invalid session token.

@@ -20,6 +20,7 @@ from display.tokens import (
 from display.animator import blink_cursor
 from display.theme import merge_runtime_ui_settings, load_ui_font, ui_line_height
 from client.api import BackendClient, BackendChatError
+from audio import AudioPipeline
 from storage.repository import DeviceRepository
 
 
@@ -42,11 +43,12 @@ class ChatPanel(BaseScreen):
         "unknown": "unknown error",
     }
 
-    def __init__(self, client: BackendClient, ui_settings: dict | None = None, repository: DeviceRepository | None = None):
+    def __init__(self, client: BackendClient, ui_settings: dict | None = None, repository: DeviceRepository | None = None, audio_pipeline: AudioPipeline | None = None):
         self._client = client
         self._cursor_anim = blink_cursor()
         self._repository = repository
         self._messages_lock = threading.Lock()
+        self._audio_pipeline = audio_pipeline
 
         # State
         self._input_text = ""
@@ -96,8 +98,11 @@ class ChatPanel(BaseScreen):
             self._input_text += event.unicode
 
     def handle_action(self, action: str):
-        if action == "LONG_PRESS" and self._can_retry():
-            self._retry_last_failed()
+        if action == "LONG_PRESS":
+            if self._can_retry():
+                self._retry_last_failed()
+            else:
+                self._capture_voice_input()
 
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
@@ -168,13 +173,22 @@ class ChatPanel(BaseScreen):
             cursor_x = 4 + input_surface.get_width() + 1
             pygame.draw.rect(surface, WHITE, (cursor_x, input_y, 6, self._font.get_height()))
 
-    def restore_session_id(self, session_id: int | None):
-        if session_id is None:
+
+    def _capture_voice_input(self):
+        if self._is_streaming or not self._audio_pipeline:
             return
         try:
-            self._session_id = int(session_id)
-        except (TypeError, ValueError):
+            audio_path = self._audio_pipeline.record()
+            text = self._audio_pipeline.transcribe(audio_path).strip()
+        except Exception as exc:
+            self._mark_failed("", "unknown", False)
+            self._status_detail = f"voice err: {str(exc)[:20]}"
             return
+
+        if not text:
+            return
+        self._input_text = text
+        self._send_message()
 
     def _send_message(self):
         text = self._input_text.strip()
