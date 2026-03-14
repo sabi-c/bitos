@@ -48,7 +48,7 @@ CONN_OFFLINE = "✕"
 
 COMPANION_BASE_URL = os.environ.get(
     "BITOS_COMPANION_URL",
-    "https://bitos-companion.onrender.com",
+    "https://bitos-p8xw.onrender.com",
 )
 
 
