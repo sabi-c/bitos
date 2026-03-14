@@ -28,11 +28,13 @@ Ship a dependable pocket AI companion where voice interaction, navigation, and c
 - Backend settings catalog + UI theming controls (`/settings/catalog`, `/settings/ui`)
 - Session restore at boot
 - Error states for backend unavailable / timeout
+- Provider-agnostic LLM bridge (Anthropic/OpenAI/OpenClaw/NanoClaw)
 
 **Exit criteria**
 - Boot lands on lock/home flow
 - Navigation can reach all implemented screens with button-only controls
 - Chat history survives restart
+- Active LLM provider can be swapped via config without UI changes
 - UI settings changes are persisted and reflected in device/preview runtime
 
 ## Phase 3 — Tasks + MCP Foundations
@@ -43,10 +45,12 @@ Ship a dependable pocket AI companion where voice interaction, navigation, and c
 - Integration adapter boundary for Things (or pluggable task provider)
 - Local queue + retry for outbound sync
 - Permission/confirmation UX for external actions
+- OS bridge adapters for tasks/messages/email/calendar with provider-independent contracts
 
 **Exit criteria**
 - User can capture, browse, and complete tasks on-device
 - Sync failures are visible and recoverable
+- Domain adapter boundaries allow local/runtime-specific implementations without screen-layer edits
 
 ## Phase 4 — Core Screen Set
 
@@ -105,6 +109,7 @@ Ship a dependable pocket AI companion where voice interaction, navigation, and c
 - Record per-iteration progress in the tracker's **Iteration Log** (who, commit, what changed, what's next).
 - Keep roadmap and implementation docs synchronized when scope/sequence changes.
 - PRs should map changes to at least one tracker task ID.
+- Maintain/update `docs/planning/HANDOFF_NEXT_AGENT.md` when transitions between contributors are expected.
 
 ## Cross-phase quality bars
 

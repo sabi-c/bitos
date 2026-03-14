@@ -12,21 +12,24 @@ Per iteration (agent or human):
 - Update status + notes inline while working (`todo` → `in_progress` → `done`/`blocked`).
 - Add an **Iteration Log** entry with commit hash and follow-up tasks.
 - If priorities or sequencing changed, patch this plan and `ROADMAP.md` in the same PR.
+- Handoff artifact: keep `docs/planning/HANDOFF_NEXT_AGENT.md` current with execution-ready next steps.
 
 ## 1) Current-State Review
 
 Based on the current repository:
 
-- Device simulator loop, boot flow, and chat panel are implemented.
+- Device simulator loop, boot->lock->home flow, and chat panel are implemented.
+- Button-first navigation primitives are extracted for reuse across future screens.
+- Local SQLite persistence + migration runner are in place for sessions/messages/settings/events.
 - Backend health and streaming chat endpoint are implemented.
 - Web preview service exists for mobile-browser testing.
-- Planning docs currently emphasize scaffold setup more than delivery sequencing.
 
 ## 2) Planning Assumptions
 
 - Primary target remains Pi Zero 2W hardware; desktop simulator is the fastest iteration loop.
 - Phase 2 should prioritize navigation + persistence to reduce rework in every subsequent screen.
 - Phase 3 should establish integration boundaries (adapters, queues, retries) before broad feature expansion.
+- LLM provider selection should be bridge-based so Anthropic/OpenAI/OpenClaw/NanoClaw can be swapped via config.
 - Phase 4 should finish core UX breadth using shared primitives created in Phase 2.
 
 ## 3) Workstreams
@@ -105,6 +108,7 @@ Definition of done:
 - Introduce app shell state model and nav map.
 - Add lock screen and route transitions from boot.
 - Refactor `ScreenManager` for route-based transitions.
+- Extract reusable navigation primitives (item model + focus controller) so new screens can be added without bespoke input logic.
 
 Acceptance criteria:
 - Boot → lock/home flow works on desktop and preview modes.

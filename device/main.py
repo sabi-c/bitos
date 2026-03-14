@@ -12,6 +12,7 @@ from screens.lock import LockScreen
 from screens.panels.home import HomePanel
 from screens.panels.chat import ChatPanel
 from client.api import BackendClient
+from storage.repository import DeviceRepository
 
 
 def main():
@@ -24,6 +25,8 @@ def main():
     button = ButtonHandler()
     screen_mgr = ScreenManager()
     client = BackendClient()
+    repository = DeviceRepository()
+    repository.initialize()
 
     server_ok = client.health()
     if server_ok:
@@ -40,7 +43,7 @@ def main():
         print(f"[BITOS] UI settings unavailable, using defaults ({exc})")
 
     def open_chat():
-        chat = ChatPanel(client, ui_settings=ui_settings)
+        chat = ChatPanel(client, ui_settings=ui_settings, repository=repository)
         screen_mgr.replace(chat)
 
     def on_unlock():
