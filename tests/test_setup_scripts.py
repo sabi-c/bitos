@@ -39,6 +39,14 @@ class SetupScriptsTests(unittest.TestCase):
         ]:
             self.assertIn(name, content)
 
+    def test_offline_ai_script_exists_and_has_expected_content(self):
+        script = Path("scripts/setup/06_offline_ai.sh")
+        self.assertTrue(script.exists())
+        content = script.read_text()
+        self.assertIn("set -euo pipefail", content)
+        self.assertIn("piper", content.lower())
+        self.assertIn("whisper.cpp", content)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,4 +1,4 @@
-.PHONY: dev-server dev-device dev-preview dev-both run-dev run-server run-both verify-hw run-pi run-pi-server install ssh-pi logs db-web vnc push deploy ship
+.PHONY: dev-server dev-device dev-preview dev-both run-dev run-server run-both verify-hw run-pi run-pi-server install ssh-pi logs db-web vnc push deploy ship setup-offline-ai
 
 install:
 	pip install -r requirements.txt
@@ -71,3 +71,7 @@ run-pi:
 
 run-pi-server:
 	bash -lc "source .venv/bin/activate && source /etc/bitos/secrets && uvicorn server.main:app --host 0.0.0.0 --port 8000"
+
+
+setup-offline-ai:
+	ssh pi@bitos "bash ~/bitos/scripts/setup/06_offline_ai.sh"

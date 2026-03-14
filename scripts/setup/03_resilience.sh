@@ -8,8 +8,21 @@ curl -L https://github.com/azlux/log2ram/archive/master.tar.gz \
 cd /tmp/log2ram-master
 sudo ./install.sh
 
-# Set log2ram size (default 40MB, bump to 64MB for bitos)
-sudo sed -i 's/SIZE=40M/SIZE=64M/' /etc/log2ram.conf
+# Increase log2ram size for BITOS (default 40MB is too small)
+sudo sed -i 's/SIZE=40M/SIZE=64M/' /etc/log2ram.conf 2>/dev/null || true
+sudo sed -i 's/SIZE=128M/SIZE=64M/' /etc/log2ram.conf 2>/dev/null || true
+
+# Also set log rotation for bitos specifically
+sudo bash -c 'cat > /etc/logrotate.d/bitos << EOF
+/var/log/bitos/*.log {
+    daily
+    rotate 7
+    compress
+    missingok
+    notifempty
+    create 644 pi pi
+}
+EOF'
 
 # Hardware watchdog — auto-reboots if system hangs
 # Add to /boot/config.txt (or /boot/firmware/config.txt on newer Pi OS)

@@ -17,7 +17,22 @@ jobs:
           cache: 'pip'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt 2>/dev/null || true
+          pip install -r requirements-device.txt 2>/dev/null || true
+          pip install -r requirements-server.txt 2>/dev/null || true
+          pip install pytest pytest-cov pygame 2>/dev/null || true
+
+      - name: Verify pytest installed
+        run: pytest --version
+
+      - name: Install SDL2 system deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libsdl2-dev libsdl2-ttf-dev libsdl2-image-dev \
+            python3-dev portaudio19-dev
 
       - name: Validate task tracker
         run: python scripts/validate_tracker.py

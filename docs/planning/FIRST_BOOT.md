@@ -61,3 +61,15 @@ Record first-boot milestones as structured events (timestamped) for diagnostics:
 - OTA update installation
 - Full account sign-in system
 - Background app sync before provisioning completes
+
+## Part 10: Optional — Offline AI
+
+For voice that works without internet:
+  ssh pi@bitos
+  bash ~/bitos/scripts/setup/06_offline_ai.sh
+
+Takes ~10 min. Adds:
+- Piper TTS (speaks offline, ~63MB model)
+- whisper.cpp STT (transcribes offline, ~75MB model)
+
+After install: device degrades gracefully when WiFi drops.

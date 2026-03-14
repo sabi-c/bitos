@@ -39,3 +39,6 @@ From your Mac:
   make logs                       # stream device logs
   make db-web                     # browse conversation DB
   curl http://bitos:8000/health   # check backend
+
+6. Optional: bash scripts/setup/06_offline_ai.sh
+   → Installs offline Piper TTS + whisper.cpp STT models

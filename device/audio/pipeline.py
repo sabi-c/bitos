@@ -1,109 +1,178 @@
-"""
-BITOS Audio Pipeline (stub)
-Will port from whisplay-ai-chatbot in Phase 5.
-"""
+"""BITOS audio pipelines for mock desktop and Pi WM8960 hardware."""
+
+from __future__ import annotations
+
 import logging
 import os
 import subprocess
+import tempfile
+import time
+from pathlib import Path
 
 
 logger = logging.getLogger(__name__)
 
 
-_AUDIO_MODE_MOCK = "mock"
-_AUDIO_MODE_HW = "hw:0"
-
-
 class AudioPipeline:
-    """Audio recording, STT, and TTS pipeline.
-    
-    Phase 1: stub that returns is_available=False on desktop.
-    Phase 5: will port pyaudio + Whisper + TTS from whisplay-ai-chatbot.
-    """
+    """Audio recording, STT, and TTS pipeline interface."""
 
-    def __init__(self):
-        self._mode = os.environ.get("BITOS_AUDIO", _AUDIO_MODE_MOCK).lower()
-        self._available = self._mode == _AUDIO_MODE_HW
-        if self._mode == _AUDIO_MODE_MOCK:
-            logger.info("[BITOS] Audio pipeline initialized in mock mode")
-        elif self._mode == _AUDIO_MODE_HW:
-            logger.info("[BITOS] Audio pipeline initialized in hardware mode (%s)", self._mode)
-        else:
-            logger.warning("[BITOS] Unknown BITOS_AUDIO mode '%s'; falling back to mock mode", self._mode)
-            self._mode = _AUDIO_MODE_MOCK
-            self._available = False
+    def record(self, max_seconds: int = 60) -> str | None:
+        raise NotImplementedError
 
-    def _is_mock_mode(self) -> bool:
-        return self._mode == _AUDIO_MODE_MOCK
-
-    def is_available(self) -> bool:
-        """Check if audio hardware is available."""
-        return self._available
-
-    def record(self, max_seconds: float = 10.0) -> str:
-        """Record audio and return file path."""
-        if self._is_mock_mode():
-            logger.info("[BITOS] Audio mock record invoked (max_seconds=%s)", max_seconds)
-            return ""
-        raise NotImplementedError(
-            "Audio recording not available in desktop mode. "
-            "Use keyboard input in the chat panel."
-        )
+    def stop_recording(self) -> None:
+        return None
 
     def transcribe(self, audio_path: str) -> str:
-        """Transcribe audio file to text via Whisper API."""
-        if self._is_mock_mode():
-            logger.info("[BITOS] Audio mock transcribe invoked (audio_path=%s)", audio_path)
+        raise NotImplementedError
+
+    def speak(self, text: str) -> None:
+        raise NotImplementedError
+
+    def is_available(self) -> bool:
+        return False
+
+
+class MockAudioPipeline(AudioPipeline):
+    """Desktop-safe mock pipeline for local development and tests."""
+
+    def __init__(self):
+        self._last_typed_text = ""
+
+    def record(self, max_seconds: int = 60) -> str | None:
+        fd, out = tempfile.mkstemp(prefix="bitos_mock_rec_", suffix=".txt")
+        os.close(fd)
+        Path(out).write_text("", encoding="utf-8")
+        return out
+
+    def transcribe(self, audio_path: str) -> str:
+        try:
+            typed = Path(audio_path).read_text(encoding="utf-8") if audio_path else ""
+            self._last_typed_text = typed
+            return typed
+        except Exception:
+            return self._last_typed_text
+        finally:
+            if audio_path and os.path.exists(audio_path):
+                os.remove(audio_path)
+
+    def speak(self, text: str) -> None:
+        logger.info("mock_speak text_len=%s", len(text))
+
+    def is_available(self) -> bool:
+        return True
+
+
+class WM8960Pipeline(AudioPipeline):
+    """
+    # WHY THIS EXISTS: real audio for Whisplay HAT WM8960.
+    # Only instantiated when BITOS_AUDIO=hw:0 on Pi hardware.
+    # Reference: github.com/PiSugar/whisplay-ai-chatbot
+    """
+
+    ALSA_DEVICE = os.environ.get("BITOS_AUDIO", "hw:0")
+    SAMPLE_RATE = 16000
+    CHANNELS = 1
+    FORMAT = "S16_LE"
+    CHUNK_SECONDS = 0.1
+
+    def __init__(self):
+        self._rec_proc: subprocess.Popen | None = None
+
+    def record(self, max_seconds: int = 60) -> str | None:
+        """Record until button released or max_seconds."""
+        out = f"/tmp/bitos_rec_{int(time.time())}.wav"
+        try:
+            proc = subprocess.Popen(
+                [
+                    "arecord",
+                    "-D",
+                    self.ALSA_DEVICE,
+                    "-f",
+                    self.FORMAT,
+                    "-r",
+                    str(self.SAMPLE_RATE),
+                    "-c",
+                    str(self.CHANNELS),
+                    out,
+                ]
+            )
+            self._rec_proc = proc
+            return out
+        except Exception as e:
+            logger.error("record_failed error=%s", e)
+            return None
+
+    def stop_recording(self) -> None:
+        if self._rec_proc:
+            self._rec_proc.terminate()
+            self._rec_proc.wait(timeout=2)
+            self._rec_proc = None
+
+    def transcribe(self, audio_path: str) -> str:
+        """Send to Whisper API. Falls back to empty string."""
+        try:
+            import openai
+
+            client = openai.OpenAI(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+            with open(audio_path, "rb") as f:
+                result = client.audio.transcriptions.create(model="whisper-1", file=f)
+            return result.text
+        except Exception as e:
+            logger.error("transcribe_failed error=%s", e)
             return ""
-        raise NotImplementedError("Audio transcription not available in desktop mode.")
-
-    def speak(self, text: str):
-        """Convert text to speech and play."""
-        if self._is_mock_mode():
-            logger.info("[BITOS] Audio mock speak invoked (text_len=%s)", len(text))
-            return
-        AutoFallbackTTS().speak(text)
-
-
-class CloudTTS:
-    """Placeholder cloud TTS implementation."""
+        finally:
+            if os.path.exists(audio_path):
+                os.remove(audio_path)
 
     def speak(self, text: str) -> None:
-        raise NotImplementedError("Cloud TTS provider is not configured")
+        """TTS via OpenAI, play via aplay. Falls back to Piper."""
+        try:
+            self._speak_openai(text)
+        except Exception:
+            self._speak_piper(text)
 
+    def _speak_openai(self, text: str) -> None:
+        import openai
 
-class PiperTTS:
-    MODEL_PATH = os.environ.get(
-        "PIPER_MODEL",
-        "/home/pi/bitos/models/tts/en_US-lessac-medium.onnx",
-    )
+        client = openai.OpenAI(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+        out = "/tmp/bitos_tts.mp3"
+        with client.audio.speech.with_streaming_response.create(model="tts-1", voice="alloy", input=text) as resp:
+            resp.stream_to_file(out)
+        subprocess.run(
+            ["aplay", "-D", self.ALSA_DEVICE, out],
+            capture_output=True,
+            timeout=30,
+            check=False,
+        )
 
-    def speak(self, text: str) -> None:
-        if not os.path.exists(self.MODEL_PATH):
-            logger.warning("piper_model_not_found path=%s", self.MODEL_PATH)
+    def _speak_piper(self, text: str) -> None:
+        model = os.environ.get("PIPER_MODEL", "/home/pi/bitos/models/tts/en_US-lessac-medium.onnx")
+        if not os.path.exists(model):
+            logger.warning("piper_model_missing path=%s", model)
             return
         out = "/tmp/bitos_tts.wav"
         subprocess.run(
-            ["piper", "--model", self.MODEL_PATH, "--output_file", out],
+            ["piper", "--model", model, "--output_file", out],
             input=text.encode(),
             capture_output=True,
             timeout=30,
             check=False,
         )
         subprocess.run(
-            ["aplay", "-D", "hw:0", out],
+            ["aplay", "-D", self.ALSA_DEVICE, out],
             capture_output=True,
             timeout=10,
             check=False,
         )
 
+    def is_available(self) -> bool:
+        return True
 
-class AutoFallbackTTS:
-    """Try cloud TTS first, fall back to Piper."""
 
-    def speak(self, text: str) -> None:
-        try:
-            CloudTTS().speak(text)
-        except Exception:
-            logger.warning("cloud_tts_failed, using piper")
-            PiperTTS().speak(text)
+def get_audio_pipeline() -> AudioPipeline:
+    mode = os.environ.get("BITOS_AUDIO", "mock").lower()
+    if mode == "hw:0" or mode.startswith("hw:"):
+        return WM8960Pipeline()
+    if mode == "mock":
+        return MockAudioPipeline()
+    return MockAudioPipeline()

@@ -18,7 +18,7 @@ from bluetooth.characteristics import DeviceInfoCharacteristic, DeviceStatusChar
 from bluetooth.constants import build_pair_url, build_setup_url
 from bluetooth.network_manager import NetworkPriorityManager
 from bluetooth.wifi_manager import WiFiManager
-from audio import AudioPipeline
+from audio import get_audio_pipeline
 from hardware import BatteryMonitor
 from screens.manager import ScreenManager
 from screens.boot import BootScreen
@@ -144,7 +144,7 @@ def main():
     driver.init()
 
     button = ButtonHandler()
-    audio_pipeline = AudioPipeline()
+    audio_pipeline = get_audio_pipeline()
     battery_monitor = BatteryMonitor()
     client = BackendClient()
     repository = DeviceRepository()
