@@ -23,3 +23,9 @@ Use these files as design references for:
 - per-screen spacing/typography consistency
 
 Do not serve these files in production paths; they are documentation/reference artifacts only.
+
+
+## Validation command
+
+Run `make audit-reference-ui` before starting a pixel-porting iteration.
+It verifies the expected `flow-*` + `nav-*` HTML files exist in this repo checkout.

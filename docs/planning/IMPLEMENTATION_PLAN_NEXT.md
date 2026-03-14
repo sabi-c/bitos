@@ -51,10 +51,12 @@ Definition of done:
 Deliverables:
 - SQLite schema (`sessions`, `messages`, `settings`, `events`).
 - Data access layer with migration/versioning support.
+- UI settings catalog endpoint + persisted settings payload for theming/layout knobs.
 - Startup hydration and periodic flush policies.
 
 Definition of done:
 - Restarting the device restores latest active session + settings.
+- Device can query settings catalog and apply server-provided UI knobs (font family/scale, density, layout widths).
 - Migration path from schema v1 to v2 tested with fixture DB.
 
 ### WS-C: Reliability & Error Handling

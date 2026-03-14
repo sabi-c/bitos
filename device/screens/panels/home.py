@@ -2,22 +2,19 @@
 import pygame
 
 from screens.base import BaseScreen
-from display.tokens import BLACK, WHITE, DIM2, DIM3, HAIRLINE, PHYSICAL_W, PHYSICAL_H, FONT_PATH, FONT_SIZES
+from display.tokens import BLACK, WHITE, DIM2, DIM3, HAIRLINE, PHYSICAL_W, PHYSICAL_H
+from display.theme import merge_runtime_ui_settings, load_ui_font
 
 
 class HomePanel(BaseScreen):
     """Minimal home panel with route to chat."""
 
-    def __init__(self, on_open_chat=None):
+    def __init__(self, on_open_chat=None, ui_settings: dict | None = None):
         self._on_open_chat = on_open_chat
-        try:
-            self._font_title = pygame.font.Font(FONT_PATH, FONT_SIZES["title"])
-            self._font_body = pygame.font.Font(FONT_PATH, FONT_SIZES["body"])
-            self._font_small = pygame.font.Font(FONT_PATH, FONT_SIZES["small"])
-        except FileNotFoundError:
-            self._font_title = pygame.font.SysFont("monospace", FONT_SIZES["title"])
-            self._font_body = pygame.font.SysFont("monospace", FONT_SIZES["body"])
-            self._font_small = pygame.font.SysFont("monospace", FONT_SIZES["small"])
+        self._ui_settings = merge_runtime_ui_settings(ui_settings)
+        self._font_title = load_ui_font("title", self._ui_settings)
+        self._font_body = load_ui_font("body", self._ui_settings)
+        self._font_small = load_ui_font("small", self._ui_settings)
 
     def handle_action(self, action: str):
         if action == "SHORT_PRESS":

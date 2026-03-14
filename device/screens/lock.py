@@ -3,24 +3,21 @@ import time
 import pygame
 
 from screens.base import BaseScreen
-from display.tokens import BLACK, WHITE, DIM3, HAIRLINE, PHYSICAL_W, PHYSICAL_H, FONT_PATH, FONT_SIZES
+from display.tokens import BLACK, WHITE, DIM3, HAIRLINE, PHYSICAL_W
+from display.theme import merge_runtime_ui_settings, load_ui_font
 
 
 class LockScreen(BaseScreen):
     """Simple lock gate before entering home flow."""
 
-    def __init__(self, on_unlock=None):
+    def __init__(self, on_unlock=None, ui_settings: dict | None = None):
         self._on_unlock = on_unlock
         self._is_unlocking = False
+        self._ui_settings = merge_runtime_ui_settings(ui_settings)
 
-        try:
-            self._font_title = pygame.font.Font(FONT_PATH, FONT_SIZES["title"])
-            self._font_body = pygame.font.Font(FONT_PATH, FONT_SIZES["body"])
-            self._font_small = pygame.font.Font(FONT_PATH, FONT_SIZES["small"])
-        except FileNotFoundError:
-            self._font_title = pygame.font.SysFont("monospace", FONT_SIZES["title"])
-            self._font_body = pygame.font.SysFont("monospace", FONT_SIZES["body"])
-            self._font_small = pygame.font.SysFont("monospace", FONT_SIZES["small"])
+        self._font_title = load_ui_font("title", self._ui_settings)
+        self._font_body = load_ui_font("body", self._ui_settings)
+        self._font_small = load_ui_font("small", self._ui_settings)
 
     def handle_action(self, action: str):
         if action in {"SHORT_PRESS", "LONG_PRESS", "DOUBLE_PRESS", "TRIPLE_PRESS"}:

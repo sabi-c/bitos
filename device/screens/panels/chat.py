@@ -8,16 +8,17 @@ import pygame
 from screens.base import BaseScreen
 from display.tokens import (
     BLACK, WHITE, DIM2, DIM3, HAIRLINE,
-    PHYSICAL_W, PHYSICAL_H, FONT_PATH, FONT_SIZES, PAD_ROW
+    PHYSICAL_W, PHYSICAL_H
 )
 from display.animator import blink_cursor
+from display.theme import merge_runtime_ui_settings, load_ui_font, ui_line_height
 from client.api import BackendClient
 
 
 class ChatPanel(BaseScreen):
     """Simplified chat: keyboard input → streaming Claude response."""
 
-    def __init__(self, client: BackendClient):
+    def __init__(self, client: BackendClient, ui_settings: dict | None = None):
         self._client = client
         self._cursor_anim = blink_cursor()
 
@@ -27,15 +28,10 @@ class ChatPanel(BaseScreen):
         self._is_streaming = False
         self._scroll_offset = 0
 
-        # Font
-        try:
-            self._font = pygame.font.Font(FONT_PATH, FONT_SIZES["body"])
-            self._font_small = pygame.font.Font(FONT_PATH, FONT_SIZES["small"])
-        except FileNotFoundError:
-            self._font = pygame.font.SysFont("monospace", FONT_SIZES["body"])
-            self._font_small = pygame.font.SysFont("monospace", FONT_SIZES["small"])
-
-        self._line_height = self._font.get_height() + PAD_ROW
+        self._ui_settings = merge_runtime_ui_settings(ui_settings)
+        self._font = load_ui_font("body", self._ui_settings)
+        self._font_small = load_ui_font("small", self._ui_settings)
+        self._line_height = ui_line_height(self._font, self._ui_settings)
 
     def update(self, dt: float):
         self._cursor_anim.update(dt)

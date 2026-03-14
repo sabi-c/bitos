@@ -93,14 +93,21 @@ if __name__ == "__main__":
     screen_mgr = ScreenManager()
     client = BackendClient()
 
+    ui_settings = None
+    try:
+        ui_settings = client.get_ui_settings()
+        print(f"[Preview] UI settings loaded (font={ui_settings.get('font_family')}, scale={ui_settings.get('font_scale')})")
+    except Exception as exc:
+        print(f"[Preview] UI settings unavailable, using defaults ({exc})")
+
     def open_chat():
-        screen_mgr.replace(ChatPanel(client))
+        screen_mgr.replace(ChatPanel(client, ui_settings=ui_settings))
 
     def on_unlock():
-        screen_mgr.replace(HomePanel(on_open_chat=open_chat))
+        screen_mgr.replace(HomePanel(on_open_chat=open_chat, ui_settings=ui_settings))
 
     def on_boot_complete():
-        screen_mgr.replace(LockScreen(on_unlock=on_unlock))
+        screen_mgr.replace(LockScreen(on_unlock=on_unlock, ui_settings=ui_settings))
 
     screen_mgr.push(BootScreen(on_complete=on_boot_complete))
 

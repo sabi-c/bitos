@@ -26,6 +26,25 @@ class BackendClient:
         except Exception:
             return False
 
+
+    def get_ui_settings(self) -> dict:
+        """Fetch persisted UI settings from backend."""
+        r = httpx.get(f"{self.base_url}/settings/ui", timeout=3.0)
+        r.raise_for_status()
+        return r.json()
+
+    def get_settings_catalog(self) -> dict:
+        """Fetch editable settings catalog metadata."""
+        r = httpx.get(f"{self.base_url}/settings/catalog", timeout=3.0)
+        r.raise_for_status()
+        return r.json()
+
+    def update_ui_settings(self, patch: dict) -> dict:
+        """Persist a partial UI settings patch."""
+        r = httpx.put(f"{self.base_url}/settings/ui", json=patch, timeout=3.0)
+        r.raise_for_status()
+        return r.json()
+
     def chat(self, message: str) -> Generator[str, None, None]:
         """Send a message and yield streamed response chunks."""
         try:

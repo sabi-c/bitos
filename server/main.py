@@ -1,18 +1,16 @@
-"""
-BITOS Server — Minimal FastAPI Backend
-Two endpoints: /health and /chat (streaming).
-"""
-from fastapi import FastAPI, Request
+"""BITOS Server backend: health, chat, and UI settings catalog endpoints."""
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import anthropic
 import json
 
-from config import ANTHROPIC_API_KEY, MODEL_NAME
+from config import ANTHROPIC_API_KEY, MODEL_NAME, UI_SETTINGS_FILE
+from ui_settings import UISettingsStore, UISettingsValidationError
 
-app = FastAPI(title="BITOS Server", version="0.1.0")
+app = FastAPI(title="BITOS Server", version="0.2.0")
+settings_store = UISettingsStore(UI_SETTINGS_FILE)
 
-# Allow CORS for web preview
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,7 +21,36 @@ app.add_middleware(
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "model": MODEL_NAME}
+    return {
+        "status": "ok",
+        "model": MODEL_NAME,
+        "settings_file": UI_SETTINGS_FILE,
+    }
+
+
+@app.get("/settings/catalog")
+async def settings_catalog():
+    """Return catalog metadata for editable UI settings."""
+    return settings_store.catalog()
+
+
+@app.get("/settings/ui")
+async def get_ui_settings():
+    """Return current persisted UI settings."""
+    return settings_store.get()
+
+
+@app.put("/settings/ui")
+async def update_ui_settings(request: Request):
+    """Persist a partial UI settings update after validation."""
+    patch = await request.json()
+    if not isinstance(patch, dict):
+        raise HTTPException(status_code=400, detail="Settings patch must be an object")
+
+    try:
+        return settings_store.update(patch)
+    except UISettingsValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.post("/chat")

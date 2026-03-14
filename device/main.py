@@ -31,16 +31,24 @@ def main():
     else:
         print("[BITOS] Backend not reachable — chat will not work until server starts")
 
+
+    ui_settings = None
+    try:
+        ui_settings = client.get_ui_settings()
+        print(f"[BITOS] UI settings loaded (font={ui_settings.get('font_family')}, scale={ui_settings.get('font_scale')})")
+    except Exception as exc:
+        print(f"[BITOS] UI settings unavailable, using defaults ({exc})")
+
     def open_chat():
-        chat = ChatPanel(client)
+        chat = ChatPanel(client, ui_settings=ui_settings)
         screen_mgr.replace(chat)
 
     def on_unlock():
-        home = HomePanel(on_open_chat=open_chat)
+        home = HomePanel(on_open_chat=open_chat, ui_settings=ui_settings)
         screen_mgr.replace(home)
 
     def on_boot_complete():
-        lock = LockScreen(on_unlock=on_unlock)
+        lock = LockScreen(on_unlock=on_unlock, ui_settings=ui_settings)
         screen_mgr.replace(lock)
 
     boot = BootScreen(on_complete=on_boot_complete)

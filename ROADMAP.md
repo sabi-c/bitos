@@ -25,6 +25,7 @@ Ship a dependable pocket AI companion where voice interaction, navigation, and c
 
 - Lock screen + sidebar navigation shell
 - Persistent local SQLite store (chat sessions, settings, recent activity)
+- Backend settings catalog + UI theming controls (`/settings/catalog`, `/settings/ui`)
 - Session restore at boot
 - Error states for backend unavailable / timeout
 
@@ -32,6 +33,7 @@ Ship a dependable pocket AI companion where voice interaction, navigation, and c
 - Boot lands on lock/home flow
 - Navigation can reach all implemented screens with button-only controls
 - Chat history survives restart
+- UI settings changes are persisted and reflected in device/preview runtime
 
 ## Phase 3 — Tasks + MCP Foundations
 
