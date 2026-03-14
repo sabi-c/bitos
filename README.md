@@ -7,20 +7,24 @@ Hold the button, ask Claude something, hear it answer.
 ## Quick Start
 
 ```bash
-# 1. Clone and setup
+# 1. git clone + cd
 git clone git@github.com:sabi-c/bitos.git
 cd bitos
-cp .env.template .env
-# Edit .env with your ANTHROPIC_API_KEY
 
-# 2. Install deps
+# 2. cp .env.template .env, then edit ANTHROPIC_API_KEY
+cp .env.template .env
+
+# 3. install dependencies
 pip install -r requirements.txt
 
-# 3. Run
-make dev-server   # Terminal 1: FastAPI backend on :8000
-make dev-device   # Terminal 2: Pygame device simulator
-make dev-preview  # Terminal 3: Mobile web preview on :5001
+# 4. terminal 1
+make run-server
+
+# 5. terminal 2
+make run-dev
 ```
+
+That's it — Pygame window opens, SPACE/ENTER/BACKSPACE to navigate.
 
 ## Architecture
 
