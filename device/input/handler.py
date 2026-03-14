@@ -59,9 +59,6 @@ class ButtonHandler:
     def handle_pygame_event(self, event: pygame.event.Event) -> bool:
         """Process a Pygame keyboard event. Returns True when event is consumed as a button gesture."""
         if self._keyboard_mode and event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_SPACE:
-                self._emit(ButtonEvent.SHORT_PRESS)
-                return True
             if event.key == pygame.K_RETURN:
                 self._emit(ButtonEvent.LONG_PRESS)
                 return True
