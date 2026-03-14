@@ -71,8 +71,13 @@ class QROverlay:
         countdown = body_font.render(f"PAIRING MODE · {remaining}s", False, DIM2)
         surface.blit(countdown, ((PHYSICAL_W - countdown.get_width()) // 2, PHYSICAL_H - 28))
 
-        hint = body_font.render("LONG PRESS TO CANCEL", False, DIM2)
-        surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - 14))
+        from display.tokens import FONT_SIZES, FONT_PATH
+        try:
+            hint_font = pygame.font.Font(FONT_PATH, FONT_SIZES.get("hint", 4))
+        except FileNotFoundError:
+            hint_font = pygame.font.SysFont("monospace", 4)
+        hint = hint_font.render("LONG:CANCEL", False, DIM2)
+        surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
 
     def tick(self, dt_ms: int) -> bool:
         self._elapsed_ms += dt_ms

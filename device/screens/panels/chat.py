@@ -17,6 +17,7 @@ from display.tokens import (
     HAIRLINE,
     PHYSICAL_W,
     PHYSICAL_H,
+    STATUS_BAR_H,
 )
 from display.animator import blink_cursor
 from display.theme import merge_runtime_ui_settings, load_ui_font, ui_line_height
@@ -87,6 +88,7 @@ class ChatPanel(BaseScreen):
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
         self._font = load_ui_font("body", self._ui_settings)
         self._font_small = load_ui_font("small", self._ui_settings)
+        self._font_hint = load_ui_font("hint", self._ui_settings)
         self._line_height = ui_line_height(self._font, self._ui_settings)
 
         if self._repository:
@@ -146,21 +148,19 @@ class ChatPanel(BaseScreen):
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
 
-        # ── Header + status banner ──
-        header_y = 2
-        header_text = self._font_small.render("CHAT", False, DIM3)
-        surface.blit(header_text, (4, header_y))
+        # ── Status bar: 18px, dark variant (black bg, white text, hairline border) ──
+        pygame.draw.line(surface, HAIRLINE, (0, STATUS_BAR_H - 1), (PHYSICAL_W, STATUS_BAR_H - 1))
+        header_text = self._font_small.render("CHAT", False, WHITE)
+        surface.blit(header_text, (6, (STATUS_BAR_H - header_text.get_height()) // 2))
 
         status_copy = self._status_copy()
         status_color = self._status_color()
         status_surface = self._font_small.render(status_copy, False, status_color)
-        status_x = max(70, PHYSICAL_W - status_surface.get_width() - 4)
-        surface.blit(status_surface, (status_x, header_y))
-
-        pygame.draw.line(surface, HAIRLINE, (0, header_y + 10), (PHYSICAL_W, header_y + 10))
+        status_x = max(70, PHYSICAL_W - status_surface.get_width() - 6)
+        surface.blit(status_surface, (status_x, (STATUS_BAR_H - status_surface.get_height()) // 2))
 
         # ── Messages area ──
-        msg_y = header_y + 14
+        msg_y = STATUS_BAR_H + 2
         max_y = PHYSICAL_H - 26  # Leave room for input bar + hint
 
         with self._messages_lock:
@@ -201,8 +201,8 @@ class ChatPanel(BaseScreen):
             surface.blit(queue_surface, (queue_x, max_y - 8))
 
         # ── Input bar ──
-        input_y = PHYSICAL_H - 18
-        pygame.draw.line(surface, HAIRLINE, (0, input_y - 4), (PHYSICAL_W, input_y - 4))
+        input_y = PHYSICAL_H - 20
+        pygame.draw.line(surface, HAIRLINE, (0, input_y - 2), (PHYSICAL_W, input_y - 2))
 
         display_text = self._input_text
         if len(display_text) > 28:
@@ -214,6 +214,14 @@ class ChatPanel(BaseScreen):
         if not self._is_streaming and self._cursor_anim.step == 0:
             cursor_x = 4 + input_surface.get_width() + 1
             pygame.draw.rect(surface, WHITE, (cursor_x, input_y, 6, self._font.get_height()))
+
+        # ── Key hint bar ──
+        if self._showing_templates():
+            hint_text = "SHORT:NEXT \u00b7 LONG:SEND \u00b7 DBL:BACK"
+        else:
+            hint_text = "SHORT:SCROLL \u00b7 LONG:VOICE \u00b7 DBL:BACK"
+        hint = self._font_hint.render(hint_text, False, DIM3)
+        surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 1))
 
 
     def _capture_voice_input(self):
@@ -358,16 +366,18 @@ class ChatPanel(BaseScreen):
 
     def _render_templates(self, surface: pygame.Surface, start_y: int, max_y: int) -> int:
         y = start_y
+        row_h = max(self._line_height, 20)
         for idx, template in enumerate(self._templates):
             if y > max_y:
                 break
             label = str(template.get("label", "TEMPLATE"))
-            color = WHITE if idx == self._template_index else DIM2
-            text_surface = self._font.render(label, False, color)
-            surface.blit(text_surface, (4, y))
-            hint_surface = self._font_small.render("LONG: SEND", False, DIM3)
-            surface.blit(hint_surface, (PHYSICAL_W - hint_surface.get_width() - 4, y + 1))
-            y += self._line_height
+            focused = idx == self._template_index
+            if focused:
+                pygame.draw.rect(surface, WHITE, pygame.Rect(0, y - 2, PHYSICAL_W, row_h + 2))
+            text_color = BLACK if focused else DIM2
+            text_surface = self._font.render(label, False, text_color)
+            surface.blit(text_surface, (8, y))
+            y += row_h
         return y
 
 

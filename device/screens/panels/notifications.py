@@ -13,7 +13,7 @@ from __future__ import annotations
 import pygame
 
 from display.theme import load_ui_font, merge_runtime_ui_settings
-from display.tokens import BLACK, DIM2, DIM3, HAIRLINE, PHYSICAL_H, PHYSICAL_W, WHITE
+from display.tokens import BLACK, DIM2, DIM3, HAIRLINE, PHYSICAL_H, PHYSICAL_W, WHITE, STATUS_BAR_H, ROW_H_MIN
 from screens.base import BaseScreen
 from screens.components import NavItem, VerticalNavController
 
@@ -27,6 +27,7 @@ class NotificationsPanel(BaseScreen):
         self._font_title = load_ui_font("title", self._ui_settings)
         self._font_body = load_ui_font("body", self._ui_settings)
         self._font_small = load_ui_font("small", self._ui_settings)
+        self._font_hint = load_ui_font("hint", self._ui_settings)
         self._items: list[str] = []
         self._error_copy = ""
 
@@ -58,34 +59,48 @@ class NotificationsPanel(BaseScreen):
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
 
-        title = self._font_title.render("NOTIFS", False, WHITE)
-        surface.blit(title, (8, 8))
-        pygame.draw.line(surface, HAIRLINE, (0, 24), (PHYSICAL_W, 24))
+        # ── Status bar: inverted ──
+        pygame.draw.rect(surface, WHITE, pygame.Rect(0, 0, PHYSICAL_W, STATUS_BAR_H))
+        title = self._font_small.render("NOTIFS", False, BLACK)
+        surface.blit(title, (6, (STATUS_BAR_H - title.get_height()) // 2))
 
+        # ── Content area ──
+        content_y = STATUS_BAR_H + 4
         if self._error_copy:
             body = self._font_body.render(self._error_copy[:24], False, WHITE)
-            surface.blit(body, (8, 48))
+            surface.blit(body, (8, content_y + 8))
         elif not self._items:
             body = self._font_body.render("NO ALERTS", False, DIM2)
-            surface.blit(body, (8, 48))
+            surface.blit(body, (8, content_y + 8))
             sub = self._font_small.render("PRESS REFRESH", False, DIM3)
-            surface.blit(sub, (8, 62))
+            surface.blit(sub, (8, content_y + 22))
         else:
-            y = 48
+            y = content_y
             for item in self._items[:5]:
                 line = self._font_body.render(item[:24], False, WHITE)
                 surface.blit(line, (8, y))
                 y += 14
 
-        y = PHYSICAL_H - 54
+        # ── Nav rows: 26px, inverted focus ──
+        y = PHYSICAL_H - ROW_H_MIN * len(self._nav.items) - 14
         for idx, item in enumerate(self._nav.items):
-            row = self._font_body.render(item.label, False, WHITE)
-            status = self._font_small.render(item.status, False, DIM2)
-            if idx == self._nav.focus_index:
-                pygame.draw.rect(surface, WHITE, pygame.Rect(4, y - 2, PHYSICAL_W - 8, 15), width=1)
-            surface.blit(row, (8, y))
-            surface.blit(status, (PHYSICAL_W - status.get_width() - 8, y + 2))
-            y += 20
+            focused = idx == self._nav.focus_index
+            if focused:
+                pygame.draw.rect(surface, WHITE, pygame.Rect(0, y, PHYSICAL_W, ROW_H_MIN))
+            row_color = BLACK if focused else WHITE
+            status_color = BLACK if focused else DIM2
+            row = self._font_body.render(item.label, False, row_color)
+            status = self._font_small.render(item.status, False, status_color)
+            text_y = y + (ROW_H_MIN - row.get_height()) // 2
+            surface.blit(row, (8, text_y))
+            surface.blit(status, (PHYSICAL_W - status.get_width() - 8, text_y + 2))
+            if not focused:
+                pygame.draw.line(surface, HAIRLINE, (0, y + ROW_H_MIN - 1), (PHYSICAL_W, y + ROW_H_MIN - 1))
+            y += ROW_H_MIN
+
+        # ── Key hint bar ──
+        hint = self._font_hint.render("SHORT:SEL \u00b7 LONG:NEXT \u00b7 DBL:BACK", False, DIM3)
+        surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
 
     def set_error(self, copy: str):
         self._error_copy = copy
