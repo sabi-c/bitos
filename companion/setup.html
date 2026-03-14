@@ -1,24 +1,205 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>BITOS Setup</title>
   <style>
-    body{background:#0b0b0b;color:#f2f2f2;font-family:system-ui,sans-serif;margin:0;padding:24px}
-    .card{max-width:420px;margin:0 auto;padding:18px;border:1px solid #333;border-radius:14px;background:#121212}
-    h1{font-size:18px;margin:0 0 12px}
-    .btn{display:block;width:100%;padding:11px;border:1px solid #555;background:#1b1b1b;color:#fff;border-radius:10px}
-    .muted{color:#aaa;font-size:12px}
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #000; color: #fff;
+      font-family: monospace; font-size: 14px;
+      display: flex; flex-direction: column;
+      align-items: center; padding: 32px 16px;
+      min-height: 100vh;
+    }
+    h1 { font-size: 20px; letter-spacing: .1em; margin-bottom: 8px; }
+    .sub { color: #555; font-size: 11px; margin-bottom: 32px; }
+    .card {
+      border: 2px solid #fff; padding: 20px;
+      width: 100%; max-width: 360px; margin-bottom: 16px;
+    }
+    .card h2 { font-size: 12px; letter-spacing: .08em;
+               margin-bottom: 16px; color: #aaa; }
+    input {
+      width: 100%; background: #111; border: 2px solid #444;
+      color: #fff; font-family: monospace; font-size: 14px;
+      padding: 10px; margin-bottom: 10px; outline: none;
+    }
+    input:focus { border-color: #fff; }
+    button {
+      width: 100%; background: #fff; color: #000;
+      border: none; font-family: monospace; font-size: 14px;
+      font-weight: bold; padding: 12px; cursor: pointer;
+      letter-spacing: .06em;
+    }
+    button:disabled { background: #333; color: #666; }
+    button.secondary {
+      background: #000; color: #fff; border: 2px solid #444;
+      margin-top: 8px;
+    }
+    .status {
+      font-size: 11px; letter-spacing: .06em; color: #888;
+      text-align: center; padding: 8px; min-height: 20px;
+    }
+    .status.error { color: #f44; }
+    .status.ok { color: #4f4; }
+    .step { display: none; }
+    .step.active { display: block; }
+    .progress {
+      display: flex; gap: 6px; justify-content: center;
+      margin-bottom: 24px;
+    }
+    .dot { width: 8px; height: 8px; background: #333; }
+    .dot.done { background: #fff; }
+    .dot.active { background: #aaa; }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h1>SETUP DONE</h1>
-    <p class="muted">Your device is configured.</p>
-    <a href="pair.html" style="color:#aaa;font-size:11px;display:block;text-align:center;margin-top:16px">
-      → OPEN COMPANION DASHBOARD
-    </a>
+  <h1>◎ BITOS</h1>
+  <div class="sub">COMPANION SETUP</div>
+
+  <div class="progress">
+    <div class="dot active" id="d0"></div>
+    <div class="dot" id="d1"></div>
+    <div class="dot" id="d2"></div>
+    <div class="dot" id="d3"></div>
   </div>
+
+  <!-- Step 0: Connect -->
+  <div class="step active" id="s0">
+    <div class="card">
+      <h2>STEP 1 — CONNECT TO DEVICE</h2>
+      <div class="status" id="conn-status">
+        Press connect to find your BITOS device.
+      </div>
+      <button id="btn-connect" onclick="connectBLE()">
+        CONNECT TO BITOS
+      </button>
+    </div>
+    <div class="status" id="ble-warn" style="color:#f84;display:none">
+      ⚠ On iPhone: use Safari with Web Bluetooth enabled.<br>
+      Settings → Safari → Advanced → Experimental Features
+    </div>
+  </div>
+
+  <!-- Step 1: Authenticate -->
+  <div class="step" id="s1">
+    <div class="card">
+      <h2>STEP 2 — ENTER YOUR PIN</h2>
+      <input type="password" id="pin-input" maxlength="4"
+             placeholder="4-digit PIN (default: 0000)"
+             inputmode="numeric" pattern="[0-9]*">
+      <button onclick="authenticate()">AUTHENTICATE</button>
+      <div class="status" id="auth-status"></div>
+    </div>
+  </div>
+
+  <!-- Step 2: WiFi -->
+  <div class="step" id="s2">
+    <div class="card">
+      <h2>STEP 3 — CONFIGURE WI-FI</h2>
+      <input type="text" id="ssid-input" placeholder="Network name (SSID)">
+      <input type="password" id="pw-input" placeholder="Password">
+      <select id="sec-input" style="width:100%;background:#111;color:#fff;
+              border:2px solid #444;font-family:monospace;font-size:14px;
+              padding:10px;margin-bottom:10px">
+        <option value="WPA2">WPA2</option>
+        <option value="WPA3">WPA3</option>
+        <option value="OPEN">Open (no password)</option>
+      </select>
+      <button onclick="sendWifi()">SEND TO DEVICE</button>
+      <div class="status" id="wifi-status"></div>
+    </div>
+  </div>
+
+  <!-- Step 3: Done -->
+  <div class="step" id="s3">
+    <div class="card">
+      <h2>✓ ALL DONE</h2>
+      <div class="status ok" style="font-size:13px;padding:16px">
+        Wi-Fi configured.<br>
+        Your BITOS device is connecting...<br><br>
+        <span id="final-ssid"></span>
+      </div>
+      <button class="secondary" onclick="location.reload()">
+        CONFIGURE AGAIN
+      </button>
+    </div>
+  </div>
+
+  <script src="js/ble.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/crypto.js"></script>
+  <script>
+    // Detect iOS Safari for BLE warning
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    if (isIOS) document.getElementById('ble-warn').style.display = 'block';
+
+    let companion = null;
+
+    function goStep(n) {
+      document.querySelectorAll('.step').forEach((s, i) =>
+        s.classList.toggle('active', i === n));
+      document.querySelectorAll('.dot').forEach((d, i) => {
+        d.classList.remove('active', 'done');
+        if (i < n) d.classList.add('done');
+        if (i === n) d.classList.add('active');
+      });
+    }
+
+    function setStatus(id, msg, type = '') {
+      const el = document.getElementById(id);
+      el.textContent = msg;
+      el.className = 'status ' + type;
+    }
+
+    async function connectBLE() {
+      const btn = document.getElementById('btn-connect');
+      btn.disabled = true;
+      setStatus('conn-status', 'Scanning for BITOS...');
+      try {
+        companion = new BitosCompanion();
+        const bleAddr = new URLSearchParams(location.search).get('ble');
+        await companion.connect(bleAddr);
+        setStatus('conn-status', '✓ Connected to BITOS', 'ok');
+        setTimeout(() => goStep(1), 800);
+      } catch (e) {
+        setStatus('conn-status', '✗ ' + e.message, 'error');
+        btn.disabled = false;
+      }
+    }
+
+    async function authenticate() {
+      const pin = document.getElementById('pin-input').value || '0000';
+      setStatus('auth-status', 'Authenticating...');
+      try {
+        await companion.authenticate(pin);
+        setStatus('auth-status', '✓ Authenticated', 'ok');
+        setTimeout(() => goStep(2), 600);
+      } catch (e) {
+        setStatus('auth-status', '✗ ' + e.message, 'error');
+      }
+    }
+
+    async function sendWifi() {
+      const ssid = document.getElementById('ssid-input').value.trim();
+      const pw = document.getElementById('pw-input').value;
+      const sec = document.getElementById('sec-input').value;
+      if (!ssid) {
+        setStatus('wifi-status', 'Network name required', 'error');
+        return;
+      }
+      setStatus('wifi-status', 'Sending credentials...');
+      try {
+        await companion.sendWifiConfig(ssid, pw, sec);
+        document.getElementById('final-ssid').textContent =
+          'Connected to: ' + ssid;
+        goStep(3);
+      } catch (e) {
+        setStatus('wifi-status', '✗ ' + e.message, 'error');
+      }
+    }
+  </script>
 </body>
 </html>

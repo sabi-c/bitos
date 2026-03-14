@@ -97,6 +97,12 @@ class FocusPanel(BaseScreen):
         hint = self._font_small.render("SEL SHORT • BACK MENU", False, DIM3)
         surface.blit(hint, (8, PHYSICAL_H - 14))
 
+
+    def restore_state(self, remaining_seconds: int, is_running: bool):
+        self._remaining_seconds = max(0, int(remaining_seconds))
+        self._is_running = bool(is_running and self._remaining_seconds > 0)
+        self._countdown_accum = 0.0
+
     @property
     def remaining_seconds(self) -> int:
         return self._remaining_seconds

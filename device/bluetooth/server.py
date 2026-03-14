@@ -32,6 +32,7 @@ class BitosGATTServer:
         on_reboot=None,
         on_show_passkey=None,
         on_pairing_complete=None,
+        device_info_characteristic=None,
     ):
         self._auth_manager = auth_manager
         self._on_wifi_config = on_wifi_config
@@ -41,21 +42,25 @@ class BitosGATTServer:
         self._on_reboot = on_reboot
         self._on_show_passkey = on_show_passkey
         self._on_pairing_complete = on_pairing_complete
+        self._device_info_characteristic = device_info_characteristic
         self._running = False
         self._thread: threading.Thread | None = None
         self._discoverable = False
         self._pairing_until = 0.0
         self._companion_connected = False
+        self._stop_event = threading.Event()
 
     def start(self) -> None:
         if self._running:
             return
         self._running = True
+        self._stop_event.clear()
         self._thread = threading.Thread(target=self._loop, name="bitos-gatt", daemon=True)
         self._thread.start()
 
     def stop(self) -> None:
         self._running = False
+        self._stop_event.set()
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=1.0)
 
@@ -75,11 +80,14 @@ class BitosGATTServer:
     def is_companion_connected(self) -> bool:
         return self._companion_connected
 
+    def get_device_address(self) -> str:
+        return os.environ.get("BITOS_BLE_ADDRESS", "AA:BB:CC:DD:EE:FF")
+
     def _loop(self) -> None:
         while self._running:
             if self._discoverable and self._pairing_until and time.time() >= self._pairing_until:
                 self.set_discoverable(False)
-            time.sleep(0.2)
+            self._stop_event.wait(timeout=0.2)
 
 
 class MockGATTServer:
@@ -95,10 +103,12 @@ class MockGATTServer:
         on_reboot=None,
         on_show_passkey=None,
         on_pairing_complete=None,
+        device_info_characteristic=None,
     ):
         self._auth_manager = auth_manager
         self._on_show_passkey = on_show_passkey
         self._on_pairing_complete = on_pairing_complete
+        self._device_info_characteristic = device_info_characteristic
         self._running = False
         self._discoverable = False
         self._timeout_s = PAIRING_MODE_TIMEOUT_SECONDS
@@ -125,6 +135,9 @@ class MockGATTServer:
 
     def is_companion_connected(self) -> bool:
         return self._companion_connected
+
+    def get_device_address(self) -> str:
+        return "mock-BT-addr"
 
 
 def get_gatt_server(**kwargs) -> BitosGATTServer | MockGATTServer:

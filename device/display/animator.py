@@ -3,9 +3,6 @@ BITOS Step Animator
 All animations use discrete steps — no smooth interpolation.
 Per spec: "ALL animations must use steps()"
 """
-import time
-
-
 class StepAnimator:
     """Discrete-step animation. Advances one step per interval."""
 

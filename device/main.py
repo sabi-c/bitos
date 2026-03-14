@@ -1,5 +1,5 @@
 """BITOS Device main entry point."""
-import json
+import logging
 import os
 import subprocess
 import time
@@ -11,11 +11,14 @@ from display.driver import create_driver
 from display.tokens import FPS
 from input.handler import ButtonHandler, ButtonEvent
 from notifications import NotificationPoller
-from overlays import NotificationQueue, NotificationToast, PowerOverlay
+from overlays import NotificationQueue, NotificationToast, QROverlay
 from bluetooth import AuthManager, get_gatt_server
 from bluetooth.constants import PAIRING_MODE_TIMEOUT_SECONDS
-from bluetooth.characteristics import DeviceStatusCharacteristic, KeyboardInputCharacteristic, WiFiConfigCharacteristic, WiFiStatusCharacteristic
+from bluetooth.characteristics import DeviceInfoCharacteristic, DeviceStatusCharacteristic, KeyboardInputCharacteristic, WiFiConfigCharacteristic, WiFiStatusCharacteristic
+from bluetooth.constants import build_pair_url, build_setup_url
+from bluetooth.network_manager import NetworkPriorityManager
 from bluetooth.wifi_manager import WiFiManager
+from audio import AudioPipeline
 from screens.manager import ScreenManager
 from screens.boot import BootScreen
 from screens.lock import LockScreen
@@ -37,6 +40,11 @@ from integrations.queue import OutboundCommandQueue
 from integrations.runtime import OutboundWorkerRuntimeLoop
 from integrations.worker import OutboundCommandWorker
 
+logger = logging.getLogger(__name__)
+
+
+logger = logging.getLogger(__name__)
+
 
 def _read_device_serial() -> str:
     try:
@@ -51,77 +59,101 @@ def _read_device_serial() -> str:
     return "desktop-sim"
 
 
-def _cancel_inflight_voice_recording(screen_mgr) -> None:
-    current = screen_mgr.current
-    if not current:
-        return
-    stopper = getattr(current, "cancel_recording", None)
-    if callable(stopper):
-        try:
-            stopper()
-        except Exception:
-            pass
-
-
-def _save_runtime_state(screen_mgr, timestamp: float) -> None:
-    current = screen_mgr.current
-    current_name = current.__class__.__name__ if current else "none"
-    session_id = getattr(current, "_session_id", None) if current else None
-
-    pomodoro = None
-    if current and hasattr(current, "is_running") and hasattr(current, "remaining_seconds"):
-        if bool(getattr(current, "is_running", False)):
-            pomodoro = {"running": True, "remaining_seconds": int(getattr(current, "remaining_seconds", 0))}
-
-    payload = {
-        "session_id": session_id,
-        "screen": current_name,
-        "pomodoro": pomodoro,
-        "timestamp": int(timestamp),
-    }
-
-    with open("/tmp/bitos_state.json", "w", encoding="utf-8") as f:
-        json.dump(payload, f)
-
-
-def _request_backend_shutdown(client: BackendClient) -> None:
+def _restore_state() -> dict | None:
+    path = "/tmp/bitos_state.json"
     try:
-        httpx.post(
-            f"{client.base_url}/shutdown",
-            timeout=3.0,
-            headers=client._request_headers(),
-        )
+        if not os.path.exists(path):
+            return None
+        with open(path, "r", encoding="utf-8") as f:
+            state = json.load(f)
+        age = time.time() - state.get("timestamp", 0)
+        if age > 300:
+            return None
+        os.remove(path)
+        return state
     except Exception:
-        pass
+        return None
 
 
-def _execute_power_action(action: str) -> None:
-    live = os.environ.get("BITOS_POWER_EXEC", "mock").lower() == "live"
-    if not live:
-        print(f"[Power] mock execute {action}")
-        return
-    if action == "shutdown":
-        subprocess.run(["sudo", "systemctl", "stop", "bitos"], check=False)
-    elif action == "reboot":
-        subprocess.run(["sudo", "reboot"], check=False)
+def _run_startup_health_check(client: BackendClient, repository: DeviceRepository, startup_health: dict) -> dict:
+    startup_health["backend"] = client.health(timeout=2.0)
+    try:
+        repository.get_setting("agent_mode", "normal")
+        startup_health["database"] = True
+    except Exception:
+        startup_health["database"] = False
+    startup_health["api_key"] = bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY"))
+    return startup_health
+
+
+def _handle_main_loop_crash(error: Exception, crash_path: str = "/tmp/bitos_crash.json"):
+    logger.critical(
+        "main_loop_crash",
+        extra={"error": str(error), "type": type(error).__name__},
+        exc_info=True,
+    )
+    with open(crash_path, "w", encoding="utf-8") as f:
+        json.dump({"error": str(error), "timestamp": time.time()}, f)
+
+
+def _run_main_loop(driver, button: ButtonHandler, screen_mgr: ScreenManager, outbound_loop: OutboundWorkerRuntimeLoop):
+    clock = pygame.time.Clock()
+    running = True
+    last_time = time.time()
+
+    while running:
+        now = time.time()
+        dt = now - last_time
+        last_time = now
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+                break
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                running = False
+                break
+
+            button.handle_pygame_event(event)
+            screen_mgr.handle_input(event)
+
+        if not running:
+            break
+
+        button.update()
+        worker_results = outbound_loop.tick(now=now)
+        for result in worker_results:
+            if result.status in ("retrying", "dead_letter"):
+                reason = result.reason or "unknown"
+                print(f"[Queue] command={result.command_id} status={result.status} reason={reason}")
+
+        surface = driver.get_surface()
+        screen_mgr.update(dt)
+        screen_mgr.render(surface)
+        driver.update()
+
+        clock.tick(FPS)
 
 
 def main():
-    print("[BITOS] Starting device...")
+    logger.info("[BITOS] Starting device...")
     start_time = time.time()
 
     driver = create_driver()
     driver.init()
-    surface = driver.get_surface()
 
     button = ButtonHandler()
+    audio_pipeline = AudioPipeline()
     client = BackendClient()
     repository = DeviceRepository()
     repository.initialize()
     notification_queue = NotificationQueue(repository=repository)
     screen_mgr = ScreenManager(notification_queue=notification_queue)
     notification_poller = NotificationPoller(queue=notification_queue, api_client=client, repository=repository)
+
+    # SD-002: BLE auth bootstrap binds device identity + shared secret before any protected characteristic writes.
     auth_manager = AuthManager(
+        # SD-005: PIN hash and BLE secret are sourced from env-backed device secrets.
         pin_hash=os.environ.get("BITOS_PIN_HASH", ""),
         device_serial=_read_device_serial(),
         ble_secret=os.environ.get("BITOS_BLE_SECRET", ""),
@@ -142,6 +174,7 @@ def main():
         )
 
     wifi_manager = WiFiManager()
+    network_manager = NetworkPriorityManager()
     wifi_status_char = WiFiStatusCharacteristic()
 
     def on_wifi_config(ssid: str, password: str, security: str, priority: int) -> bool:
@@ -157,7 +190,10 @@ def main():
     wifi_config_char = WiFiConfigCharacteristic(auth_manager=auth_manager, on_wifi_config=on_wifi_config, wifi_status=wifi_status_char)
     keyboard_input_char = KeyboardInputCharacteristic(auth_manager=auth_manager, on_keyboard_input=on_keyboard_input)
     device_status_char = DeviceStatusCharacteristic()
-    _ = (wifi_config_char, keyboard_input_char)
+    device_info_char = DeviceInfoCharacteristic()
+    _ = (wifi_config_char, keyboard_input_char, device_info_char)
+
+    startup_health = {"backend": None, "database": None, "api_key": bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY"))}
 
     def _collect_device_status() -> dict:
         current = screen_mgr.current
@@ -167,7 +203,7 @@ def main():
             "charging": bool(repository.get_setting("charging", False)),
             "wifi_connected": bool(wifi_status_char._status.get("connected", False)),
             "wifi_ssid": str(wifi_status_char._status.get("ssid", "")),
-            "ai_online": bool(client.health()),
+            "ai_online": bool(startup_health.get("backend")) if startup_health.get("backend") is not None else bool(client.health(timeout=2.0)),
             "active_screen": active_screen,
             "agent_mode": str(repository.get_setting("agent_mode", "normal")),
             "bitos_version": "1.0.0",
@@ -178,6 +214,7 @@ def main():
         auth_manager=auth_manager,
         on_show_passkey=on_show_passkey,
         on_pairing_complete=on_pairing_complete,
+        device_info_characteristic=device_info_char,
     )
     outbound_queue = OutboundCommandQueue(repository)
     runtime_adapter = create_runtime_adapter()
@@ -192,19 +229,27 @@ def main():
 
     server_ok = client.health()
     if server_ok:
-        print("[BITOS] Backend connected ✓")
+        logger.info("[BITOS] Backend connected ✓")
     else:
-        print("[BITOS] Backend not reachable — chat will not work until server starts")
+        logger.warning("[BITOS] Backend not reachable — chat will not work until server starts")
 
     ui_settings = None
     try:
         ui_settings = client.get_ui_settings()
-        print(f"[BITOS] UI settings loaded (font={ui_settings.get('font_family')}, scale={ui_settings.get('font_scale')})")
+        logger.info(
+            "[BITOS] UI settings loaded (font=%s, scale=%s)",
+            ui_settings.get("font_family"),
+            ui_settings.get("font_scale"),
+        )
     except Exception as exc:
-        print(f"[BITOS] UI settings unavailable, using defaults ({exc})")
+        logger.warning("[BITOS] UI settings unavailable, using defaults (%s)", exc)
+
+    restored_state = _restore_state()
+    restored_session_id = restored_state.get("session_id") if restored_state else None
+    restored_pomodoro = restored_state.get("pomodoro") if restored_state else None
 
     def open_chat():
-        chat = ChatPanel(client, ui_settings=ui_settings, repository=repository)
+        chat = ChatPanel(client, ui_settings=ui_settings, repository=repository, audio_pipeline=audio_pipeline)
         screen_mgr.replace(chat)
 
     def on_home():
@@ -215,11 +260,17 @@ def main():
             on_open_settings=open_settings,
             on_show_shade=screen_mgr.show_shade,
             ui_settings=ui_settings,
+            startup_health=startup_health,
         )
         screen_mgr.replace(home)
 
     def open_focus():
         focus = FocusPanel(on_back=on_home, ui_settings=ui_settings)
+        if restored_pomodoro and restored_pomodoro.get("is_running"):
+            started_at = float(restored_pomodoro.get("started_at", restored_state.get("timestamp", time.time()))) if restored_state else time.time()
+            elapsed = max(0, int(time.time() - started_at))
+            remaining = max(0, int(restored_pomodoro.get("remaining_seconds", focus.remaining_seconds)) - elapsed)
+            focus.restore_state(remaining_seconds=remaining, is_running=remaining > 0)
         screen_mgr.replace(focus)
 
     def open_notifications():
@@ -234,6 +285,11 @@ def main():
             on_open_agent_mode=open_agent_mode,
             on_open_sleep_timer=open_sleep_timer,
             on_open_about=open_about,
+            on_open_companion_app=open_companion_app,
+            get_ble_address=gatt_server.get_device_address,
+            on_set_discoverable=lambda enabled, timeout: gatt_server.set_discoverable(enabled, timeout),
+            on_push_overlay=screen_mgr.push_overlay,
+            on_dismiss_overlay=screen_mgr.dismiss_overlay,
             ui_settings=ui_settings,
         )
         screen_mgr.replace(settings)
@@ -250,12 +306,52 @@ def main():
     def open_about():
         screen_mgr.replace(AboutPanel(on_back=open_settings, ui_settings=ui_settings))
 
-    def on_boot_complete():
+
+    def open_companion_app():
+        ble_addr = gatt_server.get_device_address()
+        qr = QROverlay(
+            url=build_pair_url(ble_addr),
+            title="PAIR COMPANION APP",
+            subtitle="SCAN WITH YOUR PHONE",
+            on_dismiss=lambda: screen_mgr.dismiss_overlay(qr),
+        )
+        screen_mgr.push_overlay(qr)
+        gatt_server.set_discoverable(True, 120)
+
+
+    def _enter_offline_mode():
+        screen_mgr.dismiss_overlay()
         lock = LockScreen(on_home=on_home, ui_settings=ui_settings)
         screen_mgr.replace(lock)
 
-    boot = BootScreen(on_complete=on_boot_complete)
-    screen_mgr.push(boot)
+    def _show_setup_qr_if_needed():
+        active = network_manager.get_active_connection()
+        if active:
+            return
+        ble_addr = gatt_server.get_device_address()
+        qr = QROverlay(
+            url=build_setup_url(ble_addr),
+            title="NO NETWORK FOUND",
+            subtitle="SCAN TO CONFIGURE WI-FI",
+            timeout_s=120,
+            on_connected=lambda: screen_mgr.dismiss_overlay(qr),
+            on_timeout=lambda: _enter_offline_mode(),
+            on_dismiss=lambda: _enter_offline_mode(),
+        )
+        screen_mgr.push_overlay(qr)
+        gatt_server.set_discoverable(True, timeout_s=120)
+
+    def on_boot_complete():
+        lock = LockScreen(on_home=on_home, ui_settings=ui_settings)
+        screen_mgr.replace(lock)
+        _show_setup_qr_if_needed()
+
+    boot = BootScreen(on_complete=on_boot_complete, startup_health=startup_health, health_check=lambda: _run_startup_health_check(client, repository, startup_health))
+
+    if restored_state:
+        on_boot_complete()
+    else:
+        screen_mgr.push(boot)
 
     power_overlay: PowerOverlay | None = None
 
@@ -290,27 +386,19 @@ def main():
     device_status_char.start_periodic_updates(_collect_device_status, interval_s=30)
 
     def on_short():
-        print("[Button] SHORT_PRESS")
-        if power_overlay and power_overlay.handle_input("SHORT_PRESS"):
-            return
+        logger.info("[Button] SHORT_PRESS")
         screen_mgr.handle_action("SHORT_PRESS")
 
     def on_long():
-        print("[Button] LONG_PRESS")
-        if power_overlay and power_overlay.handle_input("LONG_PRESS"):
-            return
+        logger.info("[Button] LONG_PRESS")
         screen_mgr.handle_action("LONG_PRESS")
 
     def on_double():
-        print("[Button] DOUBLE_PRESS")
-        if power_overlay and power_overlay.handle_input("DOUBLE_PRESS"):
-            return
+        logger.info("[Button] DOUBLE_PRESS")
         screen_mgr.handle_action("DOUBLE_PRESS")
 
     def on_triple():
-        print("[Button] TRIPLE_PRESS")
-        if power_overlay and power_overlay.handle_input("TRIPLE_PRESS"):
-            return
+        logger.info("[Button] TRIPLE_PRESS")
         screen_mgr.handle_action("TRIPLE_PRESS")
 
     def on_power_gesture():
@@ -340,8 +428,8 @@ def main():
                 running = False
                 break
 
-            button.handle_pygame_event(event)
-            if power_overlay is None:
+            consumed = button.handle_pygame_event(event)
+            if not consumed:
                 screen_mgr.handle_input(event)
 
         if not running:
@@ -352,7 +440,7 @@ def main():
         for result in worker_results:
             if result.status in ("retrying", "dead_letter"):
                 reason = result.reason or "unknown"
-                print(f"[Queue] command={result.command_id} status={result.status} reason={reason}")
+                logger.error("[Queue] command=%s status=%s reason=%s", result.command_id, result.status, reason)
         screen_mgr.update(dt)
         screen_mgr.render(surface)
         if power_overlay:
@@ -366,7 +454,7 @@ def main():
     device_status_char.stop_periodic_updates()
     gatt_server.stop()
     driver.quit()
-    print("[BITOS] Shut down.")
+    logger.info("[BITOS] Shut down.")
 
 
 if __name__ == "__main__":

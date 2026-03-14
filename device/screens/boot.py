@@ -4,6 +4,7 @@ BITOS Boot Screen
 Auto-advances after 3 seconds or any button press.
 """
 import math
+import threading
 import pygame
 
 from screens.base import BaseScreen
@@ -17,8 +18,10 @@ from display.animator import StepAnimator, orb_rotate, blink_cursor
 class BootScreen(BaseScreen):
     """Boot animation: rotating orbs + BITOS title."""
 
-    def __init__(self, on_complete=None):
+    def __init__(self, on_complete=None, startup_health: dict | None = None, health_check=None):
         self._on_complete = on_complete
+        self._startup_health = startup_health if startup_health is not None else {}
+        self._health_check = health_check
         self._orb_anim = orb_rotate()
         self._cursor_anim = blink_cursor()
         self._elapsed = 0.0
@@ -30,6 +33,14 @@ class BootScreen(BaseScreen):
             self._font = pygame.font.Font(FONT_PATH, FONT_SIZES["title"])
         except FileNotFoundError:
             self._font = pygame.font.SysFont("monospace", FONT_SIZES["title"])
+
+        try:
+            self._status_font = pygame.font.Font(FONT_PATH, FONT_SIZES["small"])
+        except FileNotFoundError:
+            self._status_font = pygame.font.SysFont("monospace", FONT_SIZES["small"])
+
+        if self._health_check:
+            threading.Thread(target=self._run_health_check, daemon=True).start()
 
     def update(self, dt: float):
         if self._done:
@@ -80,9 +91,27 @@ class BootScreen(BaseScreen):
             cursor_h = FONT_SIZES["title"]
             pygame.draw.rect(surface, WHITE, (cursor_x, text_y, cursor_w, cursor_h))
 
+        status_surface = self._status_font.render(self._status_copy(), False, DIM2)
+        status_x = (PHYSICAL_W - status_surface.get_width()) // 2
+        surface.blit(status_surface, (status_x, PHYSICAL_H - 14))
+
     def _advance(self):
         if self._done:
             return
         self._done = True
         if self._on_complete:
             self._on_complete()
+
+    def _run_health_check(self):
+        try:
+            result = self._health_check()
+            if isinstance(result, dict):
+                self._startup_health.update(result)
+        except Exception:
+            self._startup_health.update({"backend": False})
+
+    def _status_copy(self) -> str:
+        backend_status = self._startup_health.get("backend")
+        if backend_status is None:
+            return "CONNECTING..."
+        return "CLAUDE ONLINE ✓" if backend_status else "AI OFFLINE ⚠"

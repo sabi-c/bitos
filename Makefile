@@ -1,4 +1,4 @@
-.PHONY: dev-server dev-device dev-preview dev-both install ssh-pi logs db-web vnc push deploy ship
+.PHONY: dev-server dev-device dev-preview dev-both run-dev run-server run-both verify-hw run-pi run-pi-server install ssh-pi logs db-web vnc push deploy ship
 
 install:
 	pip install -r requirements.txt
@@ -44,8 +44,30 @@ deploy: push
 
 ship: push deploy logs
 
-shutdown-pi:
-	ssh pi@bitos "sudo systemctl stop bitos"
 
-reboot-pi:
-	ssh pi@bitos "sudo reboot"
+run-dev:
+	BITOS_DISPLAY=pygame \
+	BITOS_AUDIO=mock \
+	BITOS_BUTTON=keyboard \
+	BITOS_WIFI=mock \
+	BITOS_BLUETOOTH=mock \
+	bash -lc "if [ -f .venv/bin/activate ]; then source .venv/bin/activate; fi; python device/main.py"
+
+run-server:
+	bash -lc "if [ -f .venv/bin/activate ]; then source .venv/bin/activate; fi; PYTHONPATH=server uvicorn server.main:app --reload --port 8000"
+
+run-both:
+	make -j2 run-server run-dev
+
+
+verify-hw:
+	python scripts/verify_hardware.py
+
+run-pi:
+	BITOS_DISPLAY=st7789 \
+	BITOS_AUDIO=hw:0 \
+	BITOS_BUTTON=gpio \
+	bash -lc "source .venv/bin/activate && source /etc/bitos/secrets && python device/main.py"
+
+run-pi-server:
+	bash -lc "source .venv/bin/activate && source /etc/bitos/secrets && uvicorn server.main:app --host 0.0.0.0 --port 8000"
