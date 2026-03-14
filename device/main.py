@@ -425,24 +425,30 @@ def main():
     gatt_server.set_discoverable(False)
     device_status_char.start_periodic_updates(_collect_device_status, interval_s=30)
 
+    def _dispatch_action(action: str):
+        if power_overlay is not None:
+            power_overlay.handle_input(action)
+            return
+        screen_mgr.handle_action(action)
+
     def on_short():
         logger.info("[Button] SHORT_PRESS")
-        screen_mgr.handle_action("SHORT_PRESS")
+        _dispatch_action("SHORT_PRESS")
 
     def on_long():
         logger.info("[Button] LONG_PRESS")
-        screen_mgr.handle_action("LONG_PRESS")
+        _dispatch_action("LONG_PRESS")
 
     def on_double():
         logger.info("[Button] DOUBLE_PRESS")
-        screen_mgr.handle_action("DOUBLE_PRESS")
+        _dispatch_action("DOUBLE_PRESS")
 
     def on_triple():
         logger.info("[Button] TRIPLE_PRESS")
-        screen_mgr.handle_action("TRIPLE_PRESS")
+        _dispatch_action("TRIPLE_PRESS")
 
     def on_power_gesture():
-        print("[Button] POWER_GESTURE")
+        logger.info("[Button] POWER_GESTURE")
         open_power_overlay()
 
     button.on(ButtonEvent.SHORT_PRESS, on_short)
