@@ -60,6 +60,13 @@ class WiFiManager:
             logging.warning("wifi_add_failed stderr=%s", result.stderr.strip())
             return False
 
+        try:
+            up = subprocess.run(["nmcli", "connection", "up", ssid], capture_output=True, text=True, timeout=15)
+        except subprocess.TimeoutExpired:
+            logging.warning("wifi_up_timeout ssid=%s", ssid)
+            return False
+
+        return up.returncode == 0
         up = subprocess.run(["nmcli", "connection", "up", ssid], capture_output=True, text=True)
         ok = up.returncode == 0
         if ok:

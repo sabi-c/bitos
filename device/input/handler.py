@@ -145,6 +145,7 @@ class GPIOButtonHandler:
         self._on_event = on_event
         self._press_times: list[float] = []
         self._press_start: float | None = None
+        self._lock = threading.Lock()
 
         GPIO.setmode(GPIO.BOARD)
         GPIO.setup(self.GPIO_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
@@ -172,6 +173,14 @@ class GPIOButtonHandler:
         double_window_ms = DOUBLE_WINDOW * 1000.0
         triple_window_ms = TRIPLE_WINDOW * 1000.0
 
+        with self._lock:
+            self._press_times.append(now_ms)
+            self._press_times = [t for t in self._press_times if (now_ms - t) < triple_window_ms]
+            count = len(self._press_times)
+
+        if duration_ms >= short_threshold_ms:
+            with self._lock:
+                self._press_times.clear()
         self._press_times.append(now_ms)
         self._press_times = [t for t in self._press_times if (now_ms - t) < triple_window_ms]
         count = len(self._press_times)
@@ -182,6 +191,8 @@ class GPIOButtonHandler:
             return
 
         if count >= 3:
+            with self._lock:
+                self._press_times.clear()
             self._press_times.clear()
             self._on_event(ButtonEvent.TRIPLE_PRESS)
             return
@@ -189,6 +200,10 @@ class GPIOButtonHandler:
         if count == 2:
             def check_double():
                 time.sleep(double_window_ms / 1000.0)
+                with self._lock:
+                    if len(self._press_times) < 3:
+                        self._press_times.clear()
+                        self._on_event(ButtonEvent.DOUBLE_PRESS)
                 if len(self._press_times) == 2:
                     self._press_times.clear()
                     self._on_event(ButtonEvent.DOUBLE_PRESS)
@@ -198,6 +213,10 @@ class GPIOButtonHandler:
 
         def check_single():
             time.sleep(double_window_ms / 1000.0)
+            with self._lock:
+                if len(self._press_times) == 1:
+                    self._press_times.clear()
+                    self._on_event(ButtonEvent.SHORT_PRESS)
             if len(self._press_times) == 1:
                 self._press_times.clear()
                 self._on_event(ButtonEvent.SHORT_PRESS)

@@ -5,6 +5,7 @@ ST7789 hardware driver is a stub — will be ported from whisplay.py in Phase 5.
 """
 import logging
 import os
+import time
 from abc import ABC, abstractmethod
 
 import pygame
