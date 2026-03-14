@@ -1,0 +1,11 @@
+{
+  "font_family": "press_start_2p",
+  "font_scale": 1.0,
+  "font_size_overrides": {
+    "body": 8,
+    "small": 6,
+    "title": 10
+  },
+  "layout_density": "comfy",
+  "sidebar_width": 84
+}
