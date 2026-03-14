@@ -74,6 +74,7 @@ For **every implementation iteration** (code or docs):
 | ID | Phase | Workstream | Task | Owner | Status | Updated | Notes |
 |---|---|---|---|---|---|---|---|
 | MSGS-RESEARCH-001 | Phase 3 | Messaging/iMessage | BlueBubbles iMessage integration research report and implementation plan | GPT-5.2-Codex | done | 2026-03-14 | Added `docs/planning/IMESSAGE_INTEGRATION.md` with endpoint/auth/webhook/adapter design recommendations |
+| MSGS-001 | Phase 3 | Messaging/iMessage | BlueBubbles adapter + messages panel + home unread wiring | GPT-5.2-Codex | done | 2026-03-14 | Implemented server/device message flows, UI panel states, and tests for adapter/endpoints/panel behavior |
 | POLISH-001 | Phase 2 | UX/Install | End-to-end system polish + one-command SD flash + diagnostics | GPT-5.2-Codex | done | 2026-03-14 | Added flash script, boot diagnostics, error handling polish, UI verification trail, README one-pager |
 | FUNC-001 | Phase 2 | UX/Data | Quick capture end-to-end + tasks panel + chat session restore | GPT-5.2-Codex | done | 2026-03-14 | Implemented overlay/panels/API wiring, persistence, and tests |
 | P2-001 | Phase 2 | WS-A App Shell | Add lock screen + route from boot | GPT-5.2-Codex | done | 2026-03-14 | Implemented boot -> lock -> home flow in device runtime; added shell flow tests |

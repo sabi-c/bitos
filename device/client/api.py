@@ -142,6 +142,57 @@ class BackendClient:
             retryable = kind in {"offline", "timeout", "network", "server"}
             return {"error": message_copy, "kind": kind, "retryable": retryable}
 
+
+    def get_conversations(self) -> list[dict]:
+        """GET /messages and return conversations list."""
+        try:
+            resp = httpx.get(f"{self.base_url}/messages", timeout=5, headers=self._request_headers())
+            resp.raise_for_status()
+            return resp.json().get("conversations", [])
+        except Exception as exc:
+            logging.warning("messages_conversations_failed error=%s", exc)
+            return []
+
+    def get_messages(self, chat_id: str) -> list[dict]:
+        """GET /messages/{chat_id} and return thread messages."""
+        try:
+            resp = httpx.get(f"{self.base_url}/messages/{chat_id}", timeout=5, headers=self._request_headers())
+            resp.raise_for_status()
+            return resp.json().get("messages", [])
+        except Exception as exc:
+            logging.warning("messages_thread_failed chat=%s error=%s", chat_id[:24], exc)
+            return []
+
+    def draft_reply(self, chat_id: str, transcript: str) -> str:
+        """POST /messages/draft and return generated draft text."""
+        try:
+            resp = httpx.post(
+                f"{self.base_url}/messages/draft",
+                json={"chat_id": chat_id, "voice_transcript": transcript},
+                timeout=30,
+                headers=self._request_headers(),
+            )
+            resp.raise_for_status()
+            return str(resp.json().get("draft", "")).strip()
+        except Exception as exc:
+            logging.warning("messages_draft_failed chat=%s error=%s", chat_id[:24], exc)
+            return ""
+
+    def send_message(self, chat_id: str, text: str, confirmed=False) -> bool:
+        """POST /messages/send and return sent status."""
+        try:
+            resp = httpx.post(
+                f"{self.base_url}/messages/send",
+                json={"chat_id": chat_id, "text": text, "confirmed": bool(confirmed)},
+                timeout=10,
+                headers=self._request_headers(),
+            )
+            resp.raise_for_status()
+            return bool(resp.json().get("sent", False))
+        except Exception as exc:
+            logging.warning("messages_send_failed chat=%s error=%s", chat_id[:24], exc)
+            return False
+
     async def get_tasks(self) -> list[dict]:
         """GET /tasks/today from server."""
         try:
