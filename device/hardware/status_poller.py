@@ -31,11 +31,16 @@ class StatusPoller:
             batt = self._battery.get_status()
             online = self._api.health(timeout=2)
             conn = self._network.get_connectivity_symbol()
+            integrations = self._api.get_integrations_status() if hasattr(self._api, "get_integrations_status") else {}
+            msgs_unread = int((integrations.get("bluebubbles") or {}).get("unread", 0))
+            gmail_unread = int((integrations.get("gmail") or {}).get("unread", 0))
             self._state.update(
                 battery_pct=batt["pct"],
                 charging=batt["charging"],
                 ai_online=online,
                 wifi_symbol=conn,
+                msgs_unread=msgs_unread,
+                gmail_unread=gmail_unread,
             )
         except Exception as e:
             logger.warning("status_poll_failed error=%s", e)

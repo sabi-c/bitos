@@ -1,6 +1,7 @@
 """BITOS Server backend: health, chat, and UI settings catalog endpoints."""
 import logging
 import os
+from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -285,6 +286,65 @@ async def get_messages_conversations():
     }
 
 
+@app.get("/mail")
+async def get_mail_threads():
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "integrations"))
+    from gmail_adapter import GmailAdapter
+
+    adapter = GmailAdapter()
+    return {
+        "threads": adapter.get_inbox(limit=10),
+        "unread_total": adapter.get_unread_count(),
+    }
+
+
+@app.get("/mail/{thread_id:path}")
+async def get_mail_thread(thread_id: str):
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "integrations"))
+    from gmail_adapter import GmailAdapter
+
+    adapter = GmailAdapter()
+    return {
+        "messages": adapter.get_thread(thread_id),
+        "thread_id": thread_id,
+    }
+
+
+@app.post("/mail/draft")
+async def draft_mail(payload: MailDraftRequest):
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "integrations"))
+    from gmail_adapter import GmailAdapter
+
+    adapter = GmailAdapter()
+    draft = adapter.draft_reply(payload.thread_id, payload.voice_transcript)
+    return {"draft": draft}
+
+
+@app.post("/mail/create-draft")
+async def create_mail_draft(payload: MailCreateDraftRequest):
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "integrations"))
+    from gmail_adapter import GmailAdapter
+
+    if not payload.confirmed:
+        raise HTTPException(status_code=403, detail="requires confirmed=true")
+
+    adapter = GmailAdapter()
+    draft_id = adapter.create_draft(payload.thread_id, payload.body)
+    return {"draft_id": draft_id, "ok": bool(draft_id)}
+
+
 @app.get("/messages/{chat_id:path}")
 async def get_messages_for_chat(chat_id: str):
     adapter = BlueBubblesAdapter()
@@ -339,6 +399,33 @@ async def imessage_webhook(request: Request):
     data = body.get("data", {})
     logger.info("imessage_webhook sender=%s", data.get("handle", {}).get("address", ""))
     return {"ok": True}
+
+
+@app.get("/status/integrations")
+async def integrations_status():
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "integrations"))
+    from bluebubbles_adapter import BlueBubblesAdapter
+    from gmail_adapter import GmailAdapter
+
+    now = datetime.now(timezone.utc).isoformat()
+    msg_adapter = BlueBubblesAdapter()
+    gmail_adapter = GmailAdapter()
+
+    return {
+        "bluebubbles": {
+            "status": "mock" if msg_adapter._mock else "online",
+            "unread": msg_adapter.get_unread_count(),
+            "last_checked": now,
+        },
+        "gmail": {
+            "status": gmail_adapter.integration_status(),
+            "unread": gmail_adapter.get_unread_count(),
+            "last_checked": now,
+        },
+    }
 
 @app.post("/shutdown")
 async def shutdown():

@@ -19,6 +19,7 @@ class HomePanel(BaseScreen):
         on_open_captures=None,
         on_open_notifications=None,
         on_open_messages=None,
+        on_open_mail=None,
         on_open_settings=None,
         on_show_shade=None,
         ui_settings: dict | None = None,
@@ -33,6 +34,7 @@ class HomePanel(BaseScreen):
         self._on_open_captures = on_open_captures
         self._on_open_notifications = on_open_notifications
         self._on_open_messages = on_open_messages
+        self._on_open_mail = on_open_mail
         self._on_open_settings = on_open_settings
         self._on_show_shade = on_show_shade
         self._repository = repository
@@ -53,6 +55,7 @@ class HomePanel(BaseScreen):
                 NavItem(key="settings", label="SETTINGS", status="READY", action=self._open_settings),
                 NavItem(key="tasks", label="TASKS", status="SYNC", action=self._open_tasks),
                 NavItem(key="msgs", label="MSGS", status="SYNC", action=self._open_messages),
+                NavItem(key="mail", label="MAIL", status="SYNC", action=self._open_mail),
                 NavItem(key="captures", label="CAPTURES", status="", action=self._open_captures),
             ]
         )
@@ -141,6 +144,10 @@ class HomePanel(BaseScreen):
     def _open_messages(self):
         if self._on_open_messages:
             self._on_open_messages()
+
+    def _open_mail(self):
+        if self._on_open_mail:
+            self._on_open_mail()
 
     def _open_notifications(self):
         # VERIFIED: HOME NOTIFS nav opens NotificationsPanel.
