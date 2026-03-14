@@ -77,6 +77,24 @@ def _restore_state() -> dict | None:
         return None
 
 
+def _save_runtime_state(screen_mgr: ScreenManager, timestamp: float, path: str = "/tmp/bitos_state.json") -> None:
+    state: dict[str, object] = {"timestamp": float(timestamp)}
+    current = screen_mgr.current
+
+    if current is not None and hasattr(current, "_session_id"):
+        state["session_id"] = getattr(current, "_session_id")
+
+    if current is not None and hasattr(current, "remaining_seconds") and hasattr(current, "is_running"):
+        state["pomodoro"] = {
+            "is_running": bool(getattr(current, "is_running", False)),
+            "remaining_seconds": int(getattr(current, "remaining_seconds", 0)),
+            "started_at": float(timestamp),
+        }
+
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(state, f)
+
+
 def _run_startup_health_check(client: BackendClient, repository: DeviceRepository, startup_health: dict) -> dict:
     startup_health["backend"] = client.health(timeout=2.0)
     try:
@@ -253,6 +271,7 @@ def main():
     restored_state = _restore_state()
     restored_session_id = restored_state.get("session_id") if restored_state else None
     restored_pomodoro = restored_state.get("pomodoro") if restored_state else None
+    focus_panel: FocusPanel | None = None
 
     def open_chat():
         chat = ChatPanel(client, ui_settings=ui_settings, repository=repository, audio_pipeline=audio_pipeline)
@@ -271,12 +290,22 @@ def main():
         screen_mgr.replace(home)
 
     def open_focus():
-        focus = FocusPanel(on_back=on_home, ui_settings=ui_settings)
+        nonlocal focus_panel
+        focus = FocusPanel(on_back=on_home, ui_settings=ui_settings, repository=repository)
+
+        raw = repository.get_setting("pomodoro_state", None)
+        if raw:
+            try:
+                focus.restore_state(json.loads(raw))
+            except Exception:
+                pass
+
         if restored_pomodoro and restored_pomodoro.get("is_running"):
             started_at = float(restored_pomodoro.get("started_at", restored_state.get("timestamp", time.time()))) if restored_state else time.time()
             elapsed = max(0, int(time.time() - started_at))
             remaining = max(0, int(restored_pomodoro.get("remaining_seconds", focus.remaining_seconds)) - elapsed)
             focus.restore_state(remaining_seconds=remaining, is_running=remaining > 0)
+        focus_panel = focus
         screen_mgr.replace(focus)
 
     def open_notifications():
@@ -369,6 +398,8 @@ def main():
         nonlocal running
         _cancel_inflight_voice_recording(screen_mgr)
         _request_backend_shutdown(client)
+        if focus_panel is not None:
+            focus_panel.save_state()
         _save_runtime_state(screen_mgr, time.time())
         _execute_power_action(action)
         running = False
