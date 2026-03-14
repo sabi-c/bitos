@@ -20,7 +20,7 @@ from bluetooth.constants import build_pair_url, build_setup_url
 from bluetooth.network_manager import NetworkPriorityManager
 from bluetooth.wifi_manager import WiFiManager
 from audio import get_audio_pipeline
-from hardware import BatteryMonitor
+from hardware import BatteryMonitor, StatusPoller, StatusState
 from screens.manager import ScreenManager
 from screens.boot import BootScreen
 from screens.lock import LockScreen
@@ -151,7 +151,8 @@ def main():
     repository = DeviceRepository()
     repository.initialize()
     notification_queue = NotificationQueue(repository=repository)
-    screen_mgr = ScreenManager(notification_queue=notification_queue)
+    status_state = StatusState()
+    screen_mgr = ScreenManager(notification_queue=notification_queue, status_state=status_state)
     notification_poller = NotificationPoller(queue=notification_queue, api_client=client, repository=repository)
 
     # SD-002: BLE auth bootstrap binds device identity + shared secret before any protected characteristic writes.
@@ -178,6 +179,7 @@ def main():
 
     wifi_manager = WiFiManager()
     network_manager = NetworkPriorityManager()
+    status_poller = StatusPoller(status_state, client, battery_monitor, network_manager)
     wifi_status_char = WiFiStatusCharacteristic()
 
     def on_wifi_config(ssid: str, password: str, security: str, priority: int) -> bool:
@@ -387,6 +389,7 @@ def main():
     screen_mgr.attach_device_status_characteristic(device_status_char)
 
     notification_poller.start()
+    status_poller.start()
     gatt_server.start()
     gatt_server.set_discoverable(False)
     device_status_char.start_periodic_updates(_collect_device_status, interval_s=30)
@@ -457,6 +460,7 @@ def main():
         clock.tick(FPS)
 
     notification_poller.stop()
+    status_poller.stop()
     device_status_char.stop_periodic_updates()
     gatt_server.stop()
     driver.quit()
