@@ -45,7 +45,7 @@ For **every implementation iteration** (code or docs):
 
 | ID | Phase | Workstream | Task | Owner | Status | Updated | Notes |
 |---|---|---|---|---|---|---|---|
-| P0-AUDIT-004 | Phase 0 | Audit | Architecture consistency checker report (SD refs, env mock paths, callback naming, plan/code class alignment) | GPT-5.2-Codex | done | 2026-03-14 | Added `docs/reports/ARCH_CONSISTENCY.md` with findings and fixes |
+| P0-AUDIT-001 | Phase 0 | Quality | Produce code-quality audit report for `device/` and `server/`, publish findings in `docs/reports/CODE_QUALITY.md` | GPT-5.2-Codex | done | 2026-03-14 | Added as todo then completed in same iteration. |
 | 2026-03-14 | GPT-5.2-Codex | work | `33848ad` | Completed P5-007/P5-008/P5-009 BLE characteristics: WiFi config+status, device status notify, keyboard input routing, companion protocol doc, and Phase 10 planning docs/tasks | `docs/planning/TASK_TRACKER.md`, `docs/planning/HANDOFF_NEXT_AGENT.md`, `docs/planning/MAC_AI_SERVICE.md`, `README.md`, `ROADMAP.md` | Next: P5-010 NetworkManager priority tuning + BT PAN baseline |
 | 2026-03-14 | GPT-5.2-Codex | work | `34cb423` | Completed P5-004/P5-005/P5-006 BLE foundation: UUID/constants, mockable GATT server shell, pairing agent, passkey overlay, BLE secret setup update, and test coverage | `docs/planning/TASK_TRACKER.md`, `docs/planning/HANDOFF_NEXT_AGENT.md`, `scripts/setup/02b_secrets.sh` | Next: P5-007/P5-008/P5-009 characteristic handlers (wifi config/device status/keyboard input) |
 | 2026-03-14 | GPT-5.2-Codex | work | `6bdf05f` | Completed P5-001/P5-002/P5-003 infra foundation: setup scripts, remote Makefile workflows, static device-token auth middleware, and validation tests | `docs/planning/TASK_TRACKER.md`, `docs/planning/HANDOFF_NEXT_AGENT.md`, `scripts/setup/README.md` | Next: P5-004 BLE GATT server + transport security follow-through |
@@ -84,6 +84,7 @@ For **every implementation iteration** (code or docs):
 | P10-006 | Phase 10 | WS-M MacService | Background tasks screen on device | unassigned | todo | 2026-03-14 | Planned multi-agent Mac service foundation |
 | P10-007 | Phase 10 | WS-M MacService | Orchestrator multi-agent routing | unassigned | todo | 2026-03-14 | Planned multi-agent Mac service foundation |
 | P10-008 | Phase 10 | WS-M MacService | Electron monitor app (optional) | unassigned | todo | 2026-03-14 | Planned multi-agent Mac service foundation |
+| P0-AUDIT-003 | Phase 0 | Security | Run dependency audit report for device/server requirement sets and document results | GPT-5.2-Codex | done | 2026-03-14 | Added `docs/reports/DEPENDENCY_AUDIT.md`; audit commands executed with environment limitations noted |
 
 ## Iteration Log
 
