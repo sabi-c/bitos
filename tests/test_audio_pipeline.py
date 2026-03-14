@@ -36,8 +36,7 @@ class AudioPipelineTests(unittest.TestCase):
             pipeline.record()
         with self.assertRaises(NotImplementedError):
             pipeline.transcribe("/tmp/fake.wav")
-        with self.assertRaises(NotImplementedError):
-            pipeline.speak("hello")
+        self.assertIsNone(pipeline.speak("hello"))
 
     def test_unknown_mode_falls_back_to_mock(self):
         os.environ["BITOS_AUDIO"] = "invalid"

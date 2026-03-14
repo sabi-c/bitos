@@ -19,6 +19,7 @@ from bluetooth.constants import build_pair_url, build_setup_url
 from bluetooth.network_manager import NetworkPriorityManager
 from bluetooth.wifi_manager import WiFiManager
 from audio import AudioPipeline
+from hardware import BatteryMonitor
 from screens.manager import ScreenManager
 from screens.boot import BootScreen
 from screens.lock import LockScreen
@@ -144,6 +145,7 @@ def main():
 
     button = ButtonHandler()
     audio_pipeline = AudioPipeline()
+    battery_monitor = BatteryMonitor()
     client = BackendClient()
     repository = DeviceRepository()
     repository.initialize()
@@ -198,9 +200,12 @@ def main():
     def _collect_device_status() -> dict:
         current = screen_mgr.current
         active_screen = current.__class__.__name__.replace("Panel", "").replace("Screen", "").lower() if current else "none"
+        battery = battery_monitor.get_status()
+        repository.set_setting("battery_pct", int(battery["pct"]))
+        repository.set_setting("charging", bool(battery["charging"]))
         return {
-            "battery_pct": int(repository.get_setting("battery_pct", 0) or 0),
-            "charging": bool(repository.get_setting("charging", False)),
+            "battery_pct": int(battery["pct"]),
+            "charging": bool(battery["charging"]),
             "wifi_connected": bool(wifi_status_char._status.get("connected", False)),
             "wifi_ssid": str(wifi_status_char._status.get("ssid", "")),
             "ai_online": bool(startup_health.get("backend")) if startup_health.get("backend") is not None else bool(client.health(timeout=2.0)),
