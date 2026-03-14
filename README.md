@@ -129,6 +129,7 @@ If handing implementation to a new contributor/agent, start here:
 | Document | Purpose |
 |---|---|
 | docs/planning/MAC_AI_SERVICE.md | Multi-agent Mac service + collab-electron pattern |
+| companion/README.md | Companion PWA setup, local dev, and deployment notes |
 | docs/planning/COMPANION_APP.md | Companion app scope, security expectations, and MVP acceptance criteria |
 | docs/planning/FIRST_BOOT.md | First-boot provisioning flow, state machine, and failure handling |
 | docs/BLUETOOTH_NETWORK_SPEC.md | BLE provisioning/status contract and network behavior expectations |

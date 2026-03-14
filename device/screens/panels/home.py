@@ -18,6 +18,7 @@ class HomePanel(BaseScreen):
         on_open_settings=None,
         on_show_shade=None,
         ui_settings: dict | None = None,
+        startup_health: dict | None = None,
     ):
         self._on_open_chat = on_open_chat
         self._on_open_focus = on_open_focus
@@ -25,6 +26,7 @@ class HomePanel(BaseScreen):
         self._on_open_settings = on_open_settings
         self._on_show_shade = on_show_shade
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
+        self._startup_health = startup_health if startup_health is not None else {}
         self._font_title = load_ui_font("title", self._ui_settings)
         self._font_body = load_ui_font("body", self._ui_settings)
         self._font_small = load_ui_font("small", self._ui_settings)
@@ -77,6 +79,11 @@ class HomePanel(BaseScreen):
             pygame.draw.line(surface, HAIRLINE, (8, y + 12), (PHYSICAL_W - 8, y + 12))
             y += 20
 
+        health = self._health_indicator()
+        health_surface = self._font_small.render(health, False, DIM2)
+        health_x = max(8, PHYSICAL_W - health_surface.get_width() - 8)
+        surface.blit(health_surface, (health_x, 8))
+
         hint = self._font_small.render("SEL SHORT • SHADE DOUBLE", False, DIM3)
         surface.blit(hint, (8, PHYSICAL_H - 14))
 
@@ -100,3 +107,10 @@ class HomePanel(BaseScreen):
     def _open_shade(self):
         if self._on_show_shade:
             self._on_show_shade()
+
+
+    def _health_indicator(self) -> str:
+        backend = self._startup_health.get("backend")
+        if backend is None:
+            return "AI ?"
+        return "AI ✓" if backend else "AI ⚠"

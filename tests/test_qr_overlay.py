@@ -80,8 +80,8 @@ class QROverlayTests(unittest.TestCase):
         import bluetooth.constants as constants
 
         reload(constants)
-        self.assertEqual(constants.build_setup_url("AA:BB"), "https://bitos-companion.onrender.com/setup.html?ble=AA:BB&v=1")
-        self.assertEqual(constants.build_pair_url("AA:BB"), "https://bitos-companion.onrender.com/pair.html?ble=AA:BB&v=1")
+        self.assertEqual(constants.build_setup_url("AA:BB"), "https://bitos-p8xw.onrender.com/setup.html?ble=AA:BB&v=1")
+        self.assertEqual(constants.build_pair_url("AA:BB"), "https://bitos-p8xw.onrender.com/pair.html?ble=AA:BB&v=1")
 
     def test_env_override_companion_url(self):
         os.environ["BITOS_COMPANION_URL"] = "https://example.test"

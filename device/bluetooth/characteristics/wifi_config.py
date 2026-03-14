@@ -43,6 +43,7 @@ class WiFiConfigCharacteristic:
         payload = json.loads(raw.decode("utf-8"))
 
         session_token = str(payload.get("session_token", ""))
+        # SD-002: Session token validation is the auth gate for protected provisioning writes.
         if not self._auth_manager.validate_session_token(session_token):
             raise AuthError("INVALID_SESSION_TOKEN")
 
@@ -56,7 +57,9 @@ class WiFiConfigCharacteristic:
         if security == "OPEN":
             password = ""
         else:
+            # SD-005: WiFi credential decrypt uses the BLE shared secret from protected env config.
             ble_secret = os.environ.get("BITOS_BLE_SECRET", "")
+            # SD-003: AES-GCM decrypt enforces confidentiality/integrity of companion-provided WiFi credentials.
             password = decrypt_wifi_password(encrypted_password, session_token=session_token, ble_secret_hex=ble_secret)
 
         ok = bool(self._on_wifi_config(ssid, password, security, priority))

@@ -4,6 +4,7 @@ Will port from whisplay-ai-chatbot in Phase 5.
 """
 import logging
 import os
+import subprocess
 
 
 logger = logging.getLogger(__name__)
@@ -61,4 +62,48 @@ class AudioPipeline:
         if self._is_mock_mode():
             logger.info("[BITOS] Audio mock speak invoked (text_len=%s)", len(text))
             return
-        raise NotImplementedError("TTS not available in desktop mode.")
+        AutoFallbackTTS().speak(text)
+
+
+class CloudTTS:
+    """Placeholder cloud TTS implementation."""
+
+    def speak(self, text: str) -> None:
+        raise NotImplementedError("Cloud TTS provider is not configured")
+
+
+class PiperTTS:
+    MODEL_PATH = os.environ.get(
+        "PIPER_MODEL",
+        "/home/pi/bitos/models/tts/en_US-lessac-medium.onnx",
+    )
+
+    def speak(self, text: str) -> None:
+        if not os.path.exists(self.MODEL_PATH):
+            logger.warning("piper_model_not_found path=%s", self.MODEL_PATH)
+            return
+        out = "/tmp/bitos_tts.wav"
+        subprocess.run(
+            ["piper", "--model", self.MODEL_PATH, "--output_file", out],
+            input=text.encode(),
+            capture_output=True,
+            timeout=30,
+            check=False,
+        )
+        subprocess.run(
+            ["aplay", "-D", "hw:0", out],
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+
+
+class AutoFallbackTTS:
+    """Try cloud TTS first, fall back to Piper."""
+
+    def speak(self, text: str) -> None:
+        try:
+            CloudTTS().speak(text)
+        except Exception:
+            logger.warning("cloud_tts_failed, using piper")
+            PiperTTS().speak(text)

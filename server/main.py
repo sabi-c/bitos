@@ -3,12 +3,23 @@ import logging
 import os
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel, Field
 
+from agent_modes import get_system_prompt
 from config import UI_SETTINGS_FILE
-from ui_settings import UISettingsStore, UISettingsValidationError
 from llm_bridge import create_llm_bridge, to_sse_data
+from ui_settings import UISettingsStore, UISettingsValidationError
+
+
+class ChatRequest(BaseModel):
+    message: str
+    session_id: str = ""
+    agent_mode: str = "producer"
+    tasks_today: list[str] = Field(default_factory=list)
+    battery_pct: int | None = None
+
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +43,7 @@ async def require_device_token(request: Request, call_next):
     if request.method == "GET" and request.url.path == "/health":
         return await call_next(request)
 
+    # SD-004: Static device-token middleware enforces device identity on non-health endpoints.
     expected = os.environ.get("BITOS_DEVICE_TOKEN", "")
     provided = request.headers.get("X-Device-Token", "")
 
@@ -82,17 +94,29 @@ async def update_ui_settings(request: Request):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@app.post("/chat")
-async def chat(request: Request):
-    """Stream model response from the active LLM bridge as SSE."""
-    body = await request.json()
-    message = body.get("message", "")
+@app.post("/shutdown")
+async def shutdown():
+    """Graceful shutdown hook for device power gesture flow."""
+    logging.info("[BITOS] shutdown requested")
+    return {"status": "ok"}
 
+
+@app.post("/chat")
+async def chat(payload: ChatRequest):
+    """Stream model response from the active LLM bridge as SSE."""
+    message = payload.message
     if not message:
         return {"error": "No message provided"}
 
+    agent_mode = payload.agent_mode or "producer"
+    system_prompt = get_system_prompt(
+        agent_mode,
+        tasks_today=payload.tasks_today,
+        battery_pct=payload.battery_pct,
+    )
+
     def stream_response():
-        for text in llm_bridge.stream_text(message):
+        for text in llm_bridge.stream_text(message, system_prompt=system_prompt):
             yield to_sse_data(text)
 
         yield "data: [DONE]\n\n"
