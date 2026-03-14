@@ -73,6 +73,7 @@ For **every implementation iteration** (code or docs):
 
 | ID | Phase | Workstream | Task | Owner | Status | Updated | Notes |
 |---|---|---|---|---|---|---|---|
+| MSGS-RESEARCH-001 | Phase 3 | Messaging/iMessage | BlueBubbles iMessage integration research report and implementation plan | GPT-5.2-Codex | done | 2026-03-14 | Added `docs/planning/IMESSAGE_INTEGRATION.md` with endpoint/auth/webhook/adapter design recommendations |
 | POLISH-001 | Phase 2 | UX/Install | End-to-end system polish + one-command SD flash + diagnostics | GPT-5.2-Codex | done | 2026-03-14 | Added flash script, boot diagnostics, error handling polish, UI verification trail, README one-pager |
 | FUNC-001 | Phase 2 | UX/Data | Quick capture end-to-end + tasks panel + chat session restore | GPT-5.2-Codex | done | 2026-03-14 | Implemented overlay/panels/API wiring, persistence, and tests |
 | P2-001 | Phase 2 | WS-A App Shell | Add lock screen + route from boot | GPT-5.2-Codex | done | 2026-03-14 | Implemented boot -> lock -> home flow in device runtime; added shell flow tests |
@@ -217,3 +218,6 @@ For **every implementation iteration** (code or docs):
 - [x] DEPS-001 — Integrate key external libraries
 - [x] DEPS-002 — Port key external repos into BITOS
 - [x] DAY-ONE-001 — First hardware session hardening
+
+| 2026-03-14 | GPT-5.2-Codex | work | this-commit | Completed MSGS-RESEARCH-001 BlueBubbles iMessage integration research report (research-only; no implementation code) | `docs/planning/IMESSAGE_INTEGRATION.md`, `docs/planning/TASK_TRACKER.md` | Next: validate endpoint/payload details against live BlueBubbles docs from an environment with outbound access, then begin adapter implementation slice |
+
