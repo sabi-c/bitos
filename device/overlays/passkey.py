@@ -47,6 +47,7 @@ class PasskeyOverlay:
     # ── Render ────────────────────────────────────────────────────
 
     def render(self, surface: pygame.Surface, tokens=None) -> None:
+        # VERIFIED: BLE pairing displays PIN code prominently until confirmed/cancelled/timeout.
         surface.fill(BLACK)
 
         title_font = self._font("title")

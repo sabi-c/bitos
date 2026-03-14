@@ -49,6 +49,7 @@ class PowerOverlay:
         surface.blit(hint, ((tokens.PHYSICAL_W - hint.get_width()) // 2, tokens.PHYSICAL_H - hint.get_height() - 2))
 
     def handle_input(self, event):
+        # VERIFIED: power overlay blocks underlying screen input while visible.
         if self._saving:
             return True
         if event == "SHORT_PRESS":

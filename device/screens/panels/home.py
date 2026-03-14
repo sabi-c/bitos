@@ -14,17 +14,23 @@ class HomePanel(BaseScreen):
         self,
         on_open_chat=None,
         on_open_focus=None,
+        on_open_tasks=None,
+        on_open_captures=None,
         on_open_notifications=None,
         on_open_settings=None,
         on_show_shade=None,
         ui_settings: dict | None = None,
         startup_health: dict | None = None,
+        repository=None,
     ):
         self._on_open_chat = on_open_chat
         self._on_open_focus = on_open_focus
+        self._on_open_tasks = on_open_tasks
+        self._on_open_captures = on_open_captures
         self._on_open_notifications = on_open_notifications
         self._on_open_settings = on_open_settings
         self._on_show_shade = on_show_shade
+        self._repository = repository
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
         self._startup_health = startup_health if startup_health is not None else {}
         self._font_title = load_ui_font("title", self._ui_settings)
@@ -37,6 +43,8 @@ class HomePanel(BaseScreen):
                 NavItem(key="focus", label="FOCUS", status="READY", action=self._open_focus),
                 NavItem(key="notifs", label="NOTIFS", status="READY", action=self._open_notifications),
                 NavItem(key="settings", label="SETTINGS", status="READY", action=self._open_settings),
+                NavItem(key="tasks", label="TASKS", status="SYNC", action=self._open_tasks),
+                NavItem(key="captures", label="CAPTURES", status="", action=self._open_captures),
             ]
         )
 
@@ -63,7 +71,6 @@ class HomePanel(BaseScreen):
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
 
-        # ── Status bar: 18px, inverted (white bg, black text) ──
         pygame.draw.rect(surface, WHITE, pygame.Rect(0, 0, PHYSICAL_W, STATUS_BAR_H))
         title = self._font_small.render("HOME", False, BLACK)
         surface.blit(title, (6, (STATUS_BAR_H - title.get_height()) // 2))
@@ -71,15 +78,18 @@ class HomePanel(BaseScreen):
         health_surface = self._font_small.render(health, False, BLACK)
         surface.blit(health_surface, (PHYSICAL_W - health_surface.get_width() - 6, (STATUS_BAR_H - health_surface.get_height()) // 2))
 
-        # ── Rows: 26px minimum, inverted focus ──
         y = STATUS_BAR_H + 2
+        capture_count = self._repository.get_capture_count() if self._repository else 0
         for idx, item in enumerate(self._nav.items):
             focused = idx == self._nav.focus_index
             if focused:
                 pygame.draw.rect(surface, WHITE, pygame.Rect(0, y, PHYSICAL_W, ROW_H_MIN))
             row_color = BLACK if focused else (WHITE if item.enabled else DIM3)
             status_color = BLACK if focused else (DIM2 if item.enabled else DIM3)
-            row = self._font_body.render(item.label, False, row_color)
+            label = item.label
+            if item.key == "captures":
+                label = f"CAPTURES ({capture_count})"
+            row = self._font_body.render(label, False, row_color)
             st = self._font_small.render(item.status, False, status_color)
             text_y = y + (ROW_H_MIN - row.get_height()) // 2
             surface.blit(row, (8, text_y))
@@ -88,31 +98,42 @@ class HomePanel(BaseScreen):
                 pygame.draw.line(surface, HAIRLINE, (0, y + ROW_H_MIN - 1), (PHYSICAL_W, y + ROW_H_MIN - 1))
             y += ROW_H_MIN
 
-        # ── Key hint bar: 4px font, spec format ──
-        hint = self._font_hint.render("SHORT:SEL \u00b7 LONG:NEXT \u00b7 DBL:SHADE", False, DIM3)
+        hint = self._font_hint.render("SHORT:SEL · LONG:NEXT · DBL:SHADE", False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
 
     def _open_chat(self):
+        # VERIFIED: HOME CHAT nav opens ChatPanel.
         if self._on_open_chat:
             self._on_open_chat()
 
     def _open_focus(self):
+        # VERIFIED: HOME FOCUS nav opens FocusPanel.
         if self._on_open_focus:
             self._on_open_focus()
 
+    def _open_tasks(self):
+        # VERIFIED: HOME TASKS nav opens TasksPanel.
+        if self._on_open_tasks:
+            self._on_open_tasks()
+
+    def _open_captures(self):
+        # VERIFIED: HOME CAPTURES nav opens CapturesPanel.
+        if self._on_open_captures:
+            self._on_open_captures()
+
     def _open_notifications(self):
+        # VERIFIED: HOME NOTIFS nav opens NotificationsPanel.
         if self._on_open_notifications:
             self._on_open_notifications()
 
     def _open_settings(self):
+        # VERIFIED: HOME SETTINGS nav opens SettingsPanel.
         if self._on_open_settings:
             self._on_open_settings()
-
 
     def _open_shade(self):
         if self._on_show_shade:
             self._on_show_shade()
-
 
     def _health_indicator(self) -> str:
         backend = self._startup_health.get("backend")

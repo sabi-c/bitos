@@ -27,7 +27,6 @@ class BackendClient:
 
     def __init__(self, base_url: str | None = None):
         self.base_url = base_url or os.environ.get("BITOS_SERVER_URL", DEFAULT_SERVER_URL)
-        # SD-005: Device API token is loaded from environment-backed secret material.
         self.device_token = os.environ.get("BITOS_DEVICE_TOKEN", "")
         if not self.device_token:
             logging.warning("[BITOS] BITOS_DEVICE_TOKEN is not set; running in dev mode without device token auth")
@@ -35,39 +34,62 @@ class BackendClient:
     def _request_headers(self) -> dict:
         if not self.device_token:
             return {}
-        # SD-004: X-Device-Token header applies static device-token middleware auth on server routes.
         return {"X-Device-Token": self.device_token}
+
+    @staticmethod
+    def _http_error_message(exc: Exception) -> tuple[str, str]:
+        if isinstance(exc, httpx.ConnectError):
+            return "offline", "Server offline"
+        if isinstance(exc, httpx.TimeoutException):
+            return "timeout", "Server timeout"
+        if isinstance(exc, httpx.HTTPStatusError):
+            status = exc.response.status_code if exc.response is not None else 500
+            return "server", f"Server error {status}"
+        return "network", "Server error 500"
 
     def health(self, timeout: float = 3.0) -> bool:
         """Check if the server is running."""
         try:
             r = httpx.get(f"{self.base_url}/health", timeout=timeout, headers=self._request_headers())
             return r.status_code == 200
-        except Exception:
+        except Exception as exc:
+            logging.warning("backend_health_failed error=%s", exc)
             return False
 
     def get_ui_settings(self) -> dict:
         """Fetch persisted UI settings from backend."""
-        r = httpx.get(f"{self.base_url}/settings/ui", timeout=3.0, headers=self._request_headers())
-        r.raise_for_status()
-        return r.json()
+        try:
+            r = httpx.get(f"{self.base_url}/settings/ui", timeout=3.0, headers=self._request_headers())
+            r.raise_for_status()
+            return r.json()
+        except Exception as exc:
+            _kind, message = self._http_error_message(exc)
+            raise RuntimeError(message) from exc
 
     def get_settings_catalog(self) -> dict:
         """Fetch editable settings catalog metadata."""
-        r = httpx.get(f"{self.base_url}/settings/catalog", timeout=3.0, headers=self._request_headers())
-        r.raise_for_status()
-        return r.json()
+        try:
+            r = httpx.get(f"{self.base_url}/settings/catalog", timeout=3.0, headers=self._request_headers())
+            r.raise_for_status()
+            return r.json()
+        except Exception as exc:
+            _kind, message = self._http_error_message(exc)
+            raise RuntimeError(message) from exc
 
     def update_ui_settings(self, patch: dict) -> dict:
         """Persist a partial UI settings patch."""
-        r = httpx.put(f"{self.base_url}/settings/ui", json=patch, timeout=3.0, headers=self._request_headers())
-        r.raise_for_status()
-        return r.json()
+        try:
+            r = httpx.put(f"{self.base_url}/settings/ui", json=patch, timeout=3.0, headers=self._request_headers())
+            r.raise_for_status()
+            return r.json()
+        except Exception as exc:
+            _kind, message = self._http_error_message(exc)
+            raise RuntimeError(message) from exc
 
-    def chat(self, message: str) -> Generator[str, None, None]:
-        """Send a message and yield streamed response chunks."""
-        from device.power import BatteryMonitor
-        from device.storage.repository import DeviceRepository
+    def chat(self, message: str) -> Generator[str, None, None] | dict:
+        """Send a message and return either chunk iterator or error dict."""
+        from power import BatteryMonitor
+        from storage.repository import DeviceRepository
 
         mode = "producer"
         tasks_today: list[str] = []
@@ -78,14 +100,15 @@ class BackendClient:
             mode = str(repository.get_setting("agent_mode", "producer"))
             tasks_today = [str(t.get("title", "")).strip() for t in repository.list_incomplete_tasks(limit=3)]
             tasks_today = [t for t in tasks_today if t]
-        except Exception:
-            mode = "producer"
-            tasks_today = []
+        except Exception as exc:
+            # Safe fallback to defaults is acceptable: prompt context enrichment is optional.
+            logging.debug("chat_context_load_failed error=%s", exc)
 
         try:
             battery_pct = int(BatteryMonitor().get_status().get("pct"))
-        except Exception:
-            battery_pct = None
+        except Exception as exc:
+            # Safe fallback to unknown battery percentage is acceptable.
+            logging.debug("battery_read_failed error=%s", exc)
 
         try:
             with httpx.stream(
@@ -101,6 +124,7 @@ class BackendClient:
                 headers=self._request_headers(),
             ) as response:
                 response.raise_for_status()
+                chunks: list[str] = []
                 for line in response.iter_lines():
                     if line.startswith("data: "):
                         data = line[6:]
@@ -109,21 +133,25 @@ class BackendClient:
                         try:
                             chunk = json.loads(data)
                             if "text" in chunk:
-                                yield chunk["text"]
+                                chunks.append(chunk["text"])
                         except json.JSONDecodeError:
-                            yield data
-        except httpx.HTTPStatusError as e:
-            status = e.response.status_code
-            if status in (401, 403):
-                raise BackendChatError("auth", "Authentication failed", retryable=False) from e
-            if status == 429:
-                raise BackendChatError("rate_limit", "Rate limited", retryable=True) from e
-            if status >= 500:
-                raise BackendChatError("upstream", f"Server error {status}", retryable=True) from e
-            raise BackendChatError("request", f"Request failed {status}", retryable=False) from e
-        except httpx.TimeoutException as e:
-            raise BackendChatError("timeout", "Request timed out", retryable=True) from e
-        except httpx.ConnectError as e:
-            raise BackendChatError("offline", f"Cannot connect to server at {self.base_url}", retryable=True) from e
-        except httpx.HTTPError as e:
-            raise BackendChatError("network", "Network error", retryable=True) from e
+                            chunks.append(data)
+                return iter(chunks)
+        except Exception as exc:
+            kind, message_copy = self._http_error_message(exc)
+            retryable = kind in {"offline", "timeout", "network", "server"}
+            return {"error": message_copy, "kind": kind, "retryable": retryable}
+
+    async def get_tasks(self) -> list[dict]:
+        """GET /tasks/today from server."""
+        try:
+            resp = httpx.get(
+                f"{self.base_url}/tasks/today",
+                timeout=5,
+                headers=self._request_headers(),
+            )
+            resp.raise_for_status()
+            return resp.json().get("tasks", [])
+        except Exception as exc:
+            logging.warning("tasks_fetch_failed error=%s", exc)
+            return []

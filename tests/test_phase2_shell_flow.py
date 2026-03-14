@@ -2,6 +2,7 @@ import os
 import unittest
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+os.environ.setdefault("ANTHROPIC_API_KEY", "sk-ant-test")
 
 import pygame
 

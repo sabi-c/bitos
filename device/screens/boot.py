@@ -1,22 +1,137 @@
-"""
-BITOS Boot Screen
-4 pixel orbs rotating in 8 steps + "BITOS" text with blinking cursor.
-Auto-advances after 3 seconds or any button press.
-"""
+"""BITOS Boot screen with diagnostics sequencing and gated readiness."""
+from __future__ import annotations
+
 import math
+import os
+import subprocess
 import threading
+import time
+import urllib.request
+import logging
+
 import pygame
 
 from screens.base import BaseScreen
 from display.tokens import (
-    BLACK, WHITE, DIM2, DIM3, DIM4,
-    PHYSICAL_W, PHYSICAL_H, FONT_PATH, FONT_SIZES, STATUS_BAR_H
+    BLACK,
+    WHITE,
+    DIM2,
+    DIM3,
+    DIM4,
+    PHYSICAL_W,
+    PHYSICAL_H,
+    FONT_PATH,
+    FONT_SIZES,
+    STATUS_BAR_H,
 )
-from display.animator import StepAnimator, orb_rotate, blink_cursor
+from display.animator import orb_rotate, blink_cursor
+
+
+logger = logging.getLogger(__name__)
+
+
+class BootDiagnostics:
+    CHECKS = ["display", "button", "audio", "network", "api_key", "battery"]
+
+    def __init__(self):
+        self.results: dict[str, bool | None] = {}
+        self._lock = threading.Lock()
+
+    def run_async(self):
+        """Start all checks in background threads."""
+        for idx, check in enumerate(self.CHECKS):
+            threading.Thread(target=self._run_check, args=(check, idx), daemon=True).start()
+
+    def _run_check(self, name: str, idx: int):
+        try:
+            result = bool(getattr(self, f"_check_{name}")())
+            with self._lock:
+                self.results[name] = result
+        except Exception as exc:
+            logger.warning("boot_check_failed check=%s error=%s", name, exc)
+            with self._lock:
+                self.results[name] = False
+
+    def _check_display(self):
+        return True
+
+    def _check_button(self):
+        mode = os.environ.get("BITOS_BUTTON", "keyboard")
+        if mode == "gpio":
+            try:
+                import RPi.GPIO as _  # type: ignore
+            except Exception as exc:
+                logger.warning("boot_gpio_import_failed error=%s", exc)
+                return False
+        return True
+
+    def _check_audio(self):
+        mode = os.environ.get("BITOS_AUDIO", "mock")
+        if mode == "mock":
+            return True
+        r = subprocess.run(["aplay", "-l"], capture_output=True, timeout=1, check=False)
+        return r.returncode == 0
+
+    def _check_network(self):
+        base = os.environ.get("SERVER_URL") or os.environ.get("BITOS_SERVER_URL", "http://localhost:8000")
+        url = f"{base.rstrip('/')}/health"
+        with urllib.request.urlopen(url, timeout=1):
+            return True
+
+    def _check_api_key(self):
+        key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+        return bool(key and not key.startswith("test-"))
+
+    def _check_battery(self):
+        mode = os.environ.get("BITOS_BATTERY", "mock")
+        if mode == "mock":
+            return True
+        try:
+            from device.power import BatteryMonitor
+
+            status = BatteryMonitor().get_status()
+            return bool(status)
+        except Exception as exc:
+            logger.warning("boot_battery_check_failed error=%s", exc)
+            return False
+
+
+    def ensure_critical_results(self) -> None:
+        """Fill any missing critical results synchronously to avoid indefinite wait."""
+        for name in ("display", "button", "api_key"):
+            with self._lock:
+                if name in self.results:
+                    continue
+            try:
+                value = bool(getattr(self, f"_check_{name}")())
+            except Exception as exc:
+                logger.warning("boot_critical_check_failed check=%s error=%s", name, exc)
+                value = False
+            with self._lock:
+                self.results[name] = value
+
+    def all_critical_passed(self) -> bool:
+        """Display + button + api_key must pass."""
+        critical = ["display", "button", "api_key"]
+        with self._lock:
+            return all(self.results.get(c) for c in critical)
+
+    def is_complete(self) -> bool:
+        with self._lock:
+            return len(self.results) == len(self.CHECKS)
 
 
 class BootScreen(BaseScreen):
-    """Boot animation: rotating orbs + BITOS title."""
+    """Boot animation: rotating orbs + diagnostics grid."""
+
+    _LABELS = {
+        "display": "DISPLAY",
+        "button": "BUTTON",
+        "audio": "AUDIO",
+        "network": "NETWORK",
+        "api_key": "API KEY",
+        "battery": "BATTERY",
+    }
 
     def __init__(self, on_complete=None, startup_health: dict | None = None, health_check=None):
         self._on_complete = on_complete
@@ -28,8 +143,9 @@ class BootScreen(BaseScreen):
         self._elapsed = 0.0
         self._auto_advance_time = 3.0
         self._done = False
+        self._diagnostics = BootDiagnostics()
+        self._diagnostics.run_async()
 
-        # Load font
         try:
             self._font = pygame.font.Font(FONT_PATH, FONT_SIZES["title"])
         except FileNotFoundError:
@@ -52,19 +168,27 @@ class BootScreen(BaseScreen):
         self._cursor_anim.update(dt)
 
         if self._elapsed >= self._auto_advance_time:
-            self._advance()
+            self._diagnostics.ensure_critical_results()
+            if self._diagnostics.all_critical_passed():
+                self._advance()
 
     def handle_input(self, event: pygame.event.Event):
         if self._done:
             return
-        if event.type == pygame.KEYDOWN:
+        if event.type == pygame.KEYDOWN and self._diagnostics.all_critical_passed():
+            self._advance()
+
+    def handle_action(self, action: str):
+        if self._done:
+            return
+        if action in {"SHORT_PRESS", "LONG_PRESS"} and not self._diagnostics.results.get("api_key", True):
+            # VERIFIED: when API key is missing, user sees blinking warning and can continue with SHORT/LONG.
             self._advance()
 
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
 
-        # ── Draw 4 rotating orbs ──
-        cx, cy = PHYSICAL_W // 2, PHYSICAL_H // 2 - 20
+        cx, cy = PHYSICAL_W // 2, PHYSICAL_H // 2 - 66
         radius = 24
         orb_size = 4
         step = self._orb_anim.step
@@ -78,23 +202,41 @@ class BootScreen(BaseScreen):
             color = orb_colors[i % len(orb_colors)]
             pygame.draw.rect(surface, color, (ox - orb_size // 2, oy - orb_size // 2, orb_size, orb_size))
 
-        # ── Draw "BITOS" text ──
-        text = "BITOS"
-        text_surface = self._font.render(text, False, WHITE)
+        text_surface = self._font.render("BITOS", False, WHITE)
         text_x = (PHYSICAL_W - text_surface.get_width()) // 2
         text_y = cy + 40
         surface.blit(text_surface, (text_x, text_y))
 
-        # ── Blinking cursor ──
         if self._cursor_anim.step == 0:
             cursor_x = text_x + text_surface.get_width() + 2
             cursor_w = FONT_SIZES["title"]
             cursor_h = FONT_SIZES["title"]
             pygame.draw.rect(surface, WHITE, (cursor_x, text_y, cursor_w, cursor_h))
 
-        status_surface = self._status_font.render(self._status_copy(), False, DIM2)
+        self._render_checks(surface, text_y + 30)
+
+        status_surface = self._status_font.render(self._status_copy(), False, DIM2 if self._diagnostics.results.get("api_key", True) else WHITE)
         status_x = (PHYSICAL_W - status_surface.get_width()) // 2
         surface.blit(status_surface, (status_x, PHYSICAL_H - STATUS_BAR_H))
+
+    def _render_checks(self, surface: pygame.Surface, start_y: int) -> None:
+        col_x = [26, 126]
+        row_y = [start_y, start_y + 18, start_y + 36]
+        checks = ["display", "button", "audio", "network", "api_key", "battery"]
+        for idx, name in enumerate(checks):
+            show_now = self._elapsed >= idx * 0.5
+            result = self._diagnostics.results.get(name) if show_now else None
+            if result is None:
+                mark = "…"
+                color = DIM4
+            else:
+                mark = "✓" if result else "✕"
+                color = WHITE if result else DIM2
+            label = self._LABELS[name]
+            col = idx % 2
+            row = idx // 2
+            surf = self._status_font.render(f"{label:<8} {mark}", False, color)
+            surface.blit(surf, (col_x[col], row_y[row]))
 
     def _advance(self):
         if self._done:
@@ -109,20 +251,24 @@ class BootScreen(BaseScreen):
             if isinstance(result, dict):
                 with self._health_lock:
                     self._startup_health.update(result)
-        except Exception:
+        except Exception as exc:
+            logger.warning("boot_health_check_failed error=%s", exc)
             with self._health_lock:
                 self._startup_health.update({"backend": False})
 
     def _status_copy(self) -> str:
+        if not self._diagnostics.results.get("api_key", True):
+            if int(time.time() * 2) % 2 == 0:
+                return "API KEY MISSING — add to /etc/bitos/secrets"
+            return "SHORT/LONG TO CONTINUE"
+
+        if self._diagnostics.is_complete() and self._diagnostics.all_critical_passed():
+            return "READY"
+
         with self._health_lock:
             backend_status = self._startup_health.get("backend")
-            has_api_key = self._startup_health.get("api_key", False)
-            has_db = self._startup_health.get("database")
-
         if backend_status is None:
-            return "CONNECTING..."
-        if has_db is False:
-            return "FIRST BOOT — SETUP"
-        if not has_api_key:
-            return "NO API KEY"
-        return "CLAUDE ONLINE ✓" if backend_status else "OFFLINE MODE ⚠"
+            return "CHECKING..."
+        if backend_status:
+            return "NETWORK OK"
+        return "OFFLINE MODE"

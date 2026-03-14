@@ -1,4 +1,4 @@
-.PHONY: dev-server dev-device dev-preview dev-both run-dev run-server run-both verify-hw run-pi run-pi-server install ssh ssh-pi start stop restart status logs logs-device logs-server db-web vnc push deploy ship setup-offline-ai
+.PHONY: dev-server dev-device dev-preview dev-both run-dev run-server run-both verify-hw run-pi run-pi-server install ssh ssh-pi start stop restart status logs logs-device logs-server db-web vnc push deploy ship setup-offline-ai flash
 
 install:
 	pip install -r requirements.txt
@@ -94,3 +94,6 @@ run-pi-server:
 setup-offline-ai:
 	ssh pi@bitos "bash ~/bitos/scripts/setup/06_offline_ai.sh"
 ssh: ssh-pi
+
+flash:
+	@bash scripts/flash_sd.sh

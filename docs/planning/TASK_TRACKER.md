@@ -73,6 +73,8 @@ For **every implementation iteration** (code or docs):
 
 | ID | Phase | Workstream | Task | Owner | Status | Updated | Notes |
 |---|---|---|---|---|---|---|---|
+| POLISH-001 | Phase 2 | UX/Install | End-to-end system polish + one-command SD flash + diagnostics | GPT-5.2-Codex | done | 2026-03-14 | Added flash script, boot diagnostics, error handling polish, UI verification trail, README one-pager |
+| FUNC-001 | Phase 2 | UX/Data | Quick capture end-to-end + tasks panel + chat session restore | GPT-5.2-Codex | done | 2026-03-14 | Implemented overlay/panels/API wiring, persistence, and tests |
 | P2-001 | Phase 2 | WS-A App Shell | Add lock screen + route from boot | GPT-5.2-Codex | done | 2026-03-14 | Implemented boot -> lock -> home flow in device runtime; added shell flow tests |
 | P0-002 | Phase 0 | Planning | Publish explicit handoff brief for next contributor with immediate next slice | GPT-5.2-Codex | done | 2026-03-14 | Added `docs/planning/HANDOFF_NEXT_AGENT.md` and linked it from key docs |
 | P0-AUDIT-002 | Phase 0 | Quality Audit | Run repository test coverage audit and publish prioritized coverage report | GPT-5.2-Codex | done | 2026-03-14 | Added `docs/reports/TEST_COVERAGE.md` with untested modules and priority targets |

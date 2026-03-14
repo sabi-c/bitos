@@ -1,6 +1,11 @@
 # BITOS Quick Commands
 
-## From your Mac (after first boot)
+## From your Mac
+
+### First setup
+make flash        prepare SD card cloud-init on macOS
+
+## After first boot
 
 ### Daily use
 make status       check if services running

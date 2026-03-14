@@ -30,6 +30,8 @@ from screens.panels.home import HomePanel
 from screens.panels.chat import ChatPanel
 from screens.panels.focus import FocusPanel
 from screens.panels.notifications import NotificationsPanel
+from screens.panels.tasks import TasksPanel
+from screens.panels.captures import CapturesPanel
 from screens.panels.settings import (
     AboutPanel,
     AgentModePanel,
@@ -286,10 +288,13 @@ def main():
             on_open_chat=open_chat,
             on_open_focus=open_focus,
             on_open_notifications=open_notifications,
+            on_open_tasks=open_tasks,
+            on_open_captures=open_captures,
             on_open_settings=open_settings,
             on_show_shade=screen_mgr.show_shade,
             ui_settings=ui_settings,
             startup_health=startup_health,
+            repository=repository,
         )
         screen_mgr.replace(home)
 
@@ -315,6 +320,14 @@ def main():
     def open_notifications():
         notifications = NotificationsPanel(on_back=on_home, ui_settings=ui_settings)
         screen_mgr.replace(notifications)
+
+    def open_tasks():
+        tasks = TasksPanel(client=client, repository=repository, on_back=on_home, ui_settings=ui_settings)
+        screen_mgr.replace(tasks)
+
+    def open_captures():
+        captures = CapturesPanel(repository=repository, on_back=on_home, ui_settings=ui_settings)
+        screen_mgr.replace(captures)
 
     def open_settings():
         settings = SettingsPanel(
@@ -446,10 +459,29 @@ def main():
         _dispatch_action("DOUBLE_PRESS")
 
     def on_triple():
+        # VERIFIED: TRIPLE_PRESS anywhere opens QuickCaptureOverlay above current screen.
         logger.info("[Button] TRIPLE_PRESS")
+        if screen_mgr.current.__class__.__name__ != "QuickCaptureOverlay":
+            def _dismiss_capture():
+                screen_mgr.dismiss_overlay(overlay)
+
+            def _saved(_capture_id: str, _text: str):
+                # VERIFIED: successful quick capture shows a brief "Captured ✓" toast.
+                screen_mgr.notification_queue.push(NotificationToast(app="CAPTURE", icon="✓", message="Captured ✓", time_str="now", duration_ms=1500))
+
+            overlay = QuickCaptureOverlay(
+                repository=repository,
+                audio_pipeline=audio_pipeline,
+                context=screen_mgr.current.__class__.__name__.replace("Panel", "").upper() if screen_mgr.current else "",
+                on_saved=_saved,
+                on_dismiss=_dismiss_capture,
+            )
+            screen_mgr.push_overlay(overlay)
+            return
         _dispatch_action("TRIPLE_PRESS")
 
     def on_power_gesture():
+        # VERIFIED: five-press power gesture opens blocking PowerOverlay.
         logger.info("[Button] POWER_GESTURE")
         open_power_overlay()
 

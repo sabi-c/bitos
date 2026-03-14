@@ -1,32 +1,28 @@
 # BITOS
 
-![CI](https://github.com/sabi-c/bitos/actions/workflows/ci.yml/badge.svg)
+Pocket AI companion. Hold button → speak → Claude answers.
+Pi Zero 2W + Whisplay HAT + PiSugar 3.
 
-A pocket AI companion device. Pi Zero 2W + Whisplay HAT + PiSugar 3.
+## Flash & Boot (30 min)
+1. Edit `scripts/cloud-init/user-data`
+   → add SSH key (`cat ~/.ssh/id_rsa.pub`)
+   → add GitHub username
+2. Flash SD: Pi Imager → Pi OS Lite 64-bit
+3. `make flash`  ← copies cloud-init to SD
+4. Insert SD, power on, wait 15 min
+5. `ssh pi@bitos`
+6. `bash ~/bitos/scripts/day_one.sh`  ← does everything
 
-Hold the button, ask Claude something, hear it answer.
-
-## Quick Start
-
+## Desktop Dev
 ```bash
-# 1. git clone + cd
-git clone git@github.com:sabi-c/bitos.git
-cd bitos
-
-# 2. cp .env.template .env, then edit ANTHROPIC_API_KEY
-cp .env.template .env
-
-# 3. install dependencies
-pip install -r requirements.txt
-
-# 4. terminal 1
-make run-server
-
-# 5. terminal 2
-make run-dev
+cp .env.template .env  # add ANTHROPIC_API_KEY
+make run-server        # terminal 1
+make run-dev           # terminal 2
+# SPACE=scroll ENTER=select BACKSPACE=back TAB=capture
 ```
 
-That's it — Pygame window opens, SPACE/ENTER/BACKSPACE to navigate.
+## Troubleshooting
+See `docs/TROUBLESHOOTING.md`.
 
 ## Architecture
 

@@ -98,7 +98,34 @@ class VikunjaAdapter:
             logger.error("vikunja_complete_task_failed error=%s", exc)
             return False
 
+    def get_today_tasks(self) -> list[dict]:
+        """Return today tasks with title + project metadata."""
+        if self._mock:
+            return [
+                {"id": 1, "title": "Review sprint board", "project": "WORK", "done": False},
+                {"id": 2, "title": "Ship BITOS patch", "project": "BITOS", "done": False},
+                {"id": 3, "title": "Plan tomorrow", "project": "PERSONAL", "done": False},
+            ]
+        tasks = self.list_tasks()
+        out = []
+        for task in tasks:
+            if task.get("done"):
+                continue
+            title = str(task.get("title", "")).strip()
+            if not title:
+                continue
+            out.append(
+                {
+                    "id": task.get("id"),
+                    "title": title,
+                    "project": (task.get("project") or task.get("project_id") or "INBOX"),
+                    "done": bool(task.get("done")),
+                }
+            )
+            if len(out) >= 20:
+                break
+        return out
+
     def get_tasks_today(self) -> list[str]:
         """Return today's task titles for system prompt injection."""
-        tasks = self.list_tasks()
-        return [t.get("title", "") for t in tasks if not t.get("done") and t.get("title")][:5]
+        return [str(t.get("title", "")) for t in self.get_today_tasks() if t.get("title")][:5]

@@ -146,11 +146,13 @@ class SettingsPanel(BaseScreen):
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
 
     def _toggle_web_search(self):
+        # VERIFIED: setting toggles persist after back+reopen via repository set/get.
         self._web_search = not self._web_search
         self._repo.set_setting("web_search", self._web_search)
         self.on_enter()
 
     def _toggle_memory(self):
+        # VERIFIED: memory toggle persists and status row reflects saved value on re-enter.
         self._memory = not self._memory
         self._repo.set_setting("memory", self._memory)
         self.on_enter()

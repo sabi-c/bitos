@@ -134,6 +134,10 @@ class ScreenManager:
         return self._stack[-1] if self._stack else None
 
     def handle_input(self, event: pygame.event.Event):
+        if self._active_overlay:
+            keyboard_handler = getattr(self._active_overlay, "handle_keyboard_input", None)
+            if callable(keyboard_handler) and keyboard_handler(event):
+                return
         if self.notification_queue.handle_input(event):
             return
         if self.current:
