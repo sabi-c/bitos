@@ -138,7 +138,7 @@ class ChatPanel(BaseScreen):
             surface.blit(text_surface, (4, msg_y))
             msg_y += self._line_height
 
-        # ── Streaming indicator / retry hint ──
+        # ── Streaming indicator / retry hint + queue debug status ──
         if self._is_streaming:
             dots = "." * ((pygame.time.get_ticks() // 400) % 4)
             indicator = self._font_small.render(dots, False, DIM3)
@@ -146,6 +146,12 @@ class ChatPanel(BaseScreen):
         elif self._can_retry():
             hint = self._font_small.render("R/LONG: retry", False, DIM1)
             surface.blit(hint, (4, max_y - 8))
+
+        queue_status = self._queue_status_copy()
+        if queue_status:
+            queue_surface = self._font_small.render(queue_status, False, DIM2)
+            queue_x = max(96, PHYSICAL_W - queue_surface.get_width() - 4)
+            surface.blit(queue_surface, (queue_x, max_y - 8))
 
         # ── Input bar ──
         input_y = PHYSICAL_H - 18
@@ -275,3 +281,23 @@ class ChatPanel(BaseScreen):
         if current:
             lines.append(current)
         return lines or [""]
+
+    def _queue_status_copy(self) -> str:
+        """Compact queue/dead-letter debug status for tiny-screen visibility."""
+        if not self._repository:
+            return ""
+        try:
+            metrics = self._repository.queue_metrics()
+            queue_depth = int(metrics.get("queue_depth", 0))
+            dead = int(metrics.get("dead_letter", 0))
+            copy = f"q:{queue_depth} d:{dead}"
+            if dead <= 0:
+                return copy
+
+            dead_letters = self._repository.queue_list_dead_letters(limit=1)
+            if dead_letters and dead_letters[0].get("last_error"):
+                reason = str(dead_letters[0]["last_error"]).replace("_", "-")[:8]
+                return f"{copy} {reason}"
+            return copy
+        except Exception:
+            return ""

@@ -25,21 +25,24 @@ This document is a practical takeover brief for the next implementation contribu
 
 ## 2) Immediate next implementation target
 
-## P3-001/P3-002 — Adapter contracts + outbound queue baseline
+## P3-006 — Runtime worker loop integration + adapter wiring
 
-P2-005 reliability UX is now complete in chat (status banner, normalized errors, retry affordance).
+P3-005 baseline is now complete:
+- ChatPanel now renders compact queue/dead-letter status (`q:<depth> d:<count>`) on-device.
+- Latest dead-letter reason is surfaced in short tiny-screen-safe copy.
+- Added focused tests for queue status copy with/without repository wiring.
 
-Deliver the Phase 3 integration foundation:
-1. Introduce domain adapter interfaces for task/message/email/calendar operations.
-2. Add a local outbound command queue with retry policy and dead-letter visibility.
-3. Keep screen/UI code adapter-driven (no provider-specific calls in panels).
-4. Add minimal observability hooks (queue depth, retry attempts, failed command reasons).
+Deliver the next Phase 3 slice:
+1. Run `OutboundCommandWorker.process_once()` periodically from device runtime loop.
+2. Wire runtime-selected adapters into worker construction (mock/echo adapter allowed initially).
+3. Keep worker processing non-blocking and bounded per frame/tick.
+4. Emit concise logs when commands move to retrying or dead-letter states.
 
 ### Suggested acceptance checks
-- Queue accepts and persists commands while provider implementation is mocked/offline.
-- Retryable failures are retried and eventually succeed when provider recovers.
-- Non-retryable failures become visible dead-letter items with a concise reason.
-- Existing tests remain green and new queue/adapter tests are added.
+- Enqueued command is processed without manual trigger when runtime loop is active.
+- Retryable worker failures transition to retrying and later succeed when adapter recovers.
+- Dead-letter count increments on non-retryable failures and appears in chat debug status.
+- Existing tests remain green and new runtime-loop tests are added.
 
 ---
 

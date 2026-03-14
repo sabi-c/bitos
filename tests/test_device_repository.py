@@ -16,6 +16,38 @@ class DeviceRepositoryTests(unittest.TestCase):
             repo.initialize()
             self.assertEqual(repo.get_schema_version(), LATEST_SCHEMA_VERSION)
 
+
+    def test_initialize_migrates_v1_database_to_v2(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "bitos.db"
+            import sqlite3
+
+            conn = sqlite3.connect(db_path)
+            conn.execute("CREATE TABLE schema_version(version INTEGER NOT NULL)")
+            conn.execute("INSERT INTO schema_version(version) VALUES (1)")
+            conn.execute("""
+                CREATE TABLE sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT,
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL
+                )
+            """)
+            conn.commit()
+            conn.close()
+
+            repo = DeviceRepository(db_path=str(db_path))
+            repo.initialize()
+
+            self.assertEqual(repo.get_schema_version(), LATEST_SCHEMA_VERSION)
+
+            conn = sqlite3.connect(db_path)
+            row = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='outbound_commands'"
+            ).fetchone()
+            conn.close()
+            self.assertIsNotNone(row)
+
     def test_session_and_message_persistence(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = DeviceRepository(db_path=str(Path(tmp) / "bitos.db"))
