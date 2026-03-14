@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BITOS · FOCUS + MAIL + MSGS + MUSIC + NOTIFICATIONS</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;image-rendering:pixelated;transition:none!important;animation-timing-function:steps(1)!important}
+body{background:#080808;color:#fff;font-family:'Press Start 2P',monospace;padding:40px 36px;line-height:1}
+.pg-title{font-size:16px;letter-spacing:.04em;margin-bottom:6px}
+.pg-sub{font-size:6px;color:#222;letter-spacing:.1em;margin-bottom:48px}
+.sec-title{font-size:9px;letter-spacing:.08em;color:#333;margin-bottom:20px;padding-bottom:8px;border-bottom:1px solid #111}
+.divider{border:none;border-top:2px solid #111;margin:52px 0}
+.row-wrap{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start}
+
+/* ── DEVICE SHELL ── */
+.device-wrap{display:flex;flex-direction:column;align-items:center;gap:10px}
+.device-lbl{font-size:5px;color:#222;letter-spacing:.1em;text-align:center;line-height:1.8}
+.device{background:#0d0d0d;border:3px solid #2a2a2a;padding:8px 8px 14px;display:flex;flex-direction:column;align-items:center;gap:8px}
+.screen{width:240px;height:280px;background:#000;border:2px solid #555;position:relative;overflow:hidden;font-family:‘Press Start 2P’,monospace}
+.home-btn{width:32px;height:5px;background:#1a1a1a;border:1px solid #222}
+
+/* ── SHARED PRIMITIVES ── */
+.view{position:absolute;inset:0;display:none;flex-direction:column;background:#000}
+.view.active{display:flex}
+.sbar{height:18px;background:#fff;color:#000;display:flex;align-items:center;justify-content:space-between;padding:0 6px;font-size:6px;letter-spacing:.06em;flex-shrink:0;border-bottom:2px solid #fff}
+.sbar.dark{background:#000;color:#fff;border-bottom-color:#333}
+.kh{font-size:4px;color:#111;text-align:center;padding:2px 6px;letter-spacing:.06em;flex-shrink:0;border-top:1px solid #0a0a0a}
+.inv-hdr{background:#fff;color:#000;padding:7px 8px;font-size:7px;letter-spacing:.06em;flex-shrink:0;border-bottom:2px solid #fff;display:flex;justify-content:space-between;align-items:center}
+.scroll-body{flex:1;overflow:auto}
+.scroll-body::-webkit-scrollbar{display:none}
+.row{display:flex;align-items:center;gap:7px;padding:8px 8px;font-size:7px;letter-spacing:.04em;border-bottom:1px solid #0a0a0a;cursor:pointer;color:#555}
+.row:last-child{border-bottom:none}
+.row.focused{background:#fff;color:#000}
+.row .arr{font-size:6px;flex-shrink:0;color:#333}
+.row.focused .arr{color:#666}
+.row .meta{margin-left:auto;font-size:5px;color:#333;flex-shrink:0}
+.row.focused .meta{color:#666}
+.row .rsub{font-size:5px;color:#222;margin-top:2px;letter-spacing:.04em;display:block}
+.row.focused .rsub{color:#666}
+.row-lbl{flex:1}
+.bcur{display:inline-block;width:5px;height:9px;background:#fff;animation:bcu .8s steps(1) infinite;vertical-align:bottom}
+@keyframes bcu{0%,100%{opacity:1}50%{opacity:0}}
+.pbar{height:5px;border:1px solid #fff;background:#000}
+.pfill{height:100%;background:#fff}
+.ldbar{height:5px;border:1px solid #fff;background:#000;overflow:hidden}
+.ldfill{height:100%;width:20%;background:#fff;animation:lda 1.6s steps(8) infinite}
+@keyframes lda{0%{transform:translateX(-100%)}100%{transform:translateX(600%)}}
+.btn-row{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+.ctrl-btn{border:2px solid #333;padding:5px 10px;font-size:5px;color:#555;cursor:pointer;letter-spacing:.06em;font-family:‘Press Start 2P’,monospace;background:#000}
+.ctrl-btn:hover{border-color:#fff;color:#fff}
+.state-disp{font-size:5px;color:#1a1a1a;text-align:center;letter-spacing:.06em;margin-top:4px}
+.sett-section{padding:4px 8px;font-size:5px;color:#1a1a1a;letter-spacing:.12em;background:#050505;border-bottom:1px solid #080808;border-top:1px solid #080808;flex-shrink:0}
+
+/* ── NOTIFICATION TOAST (absolute, sits above everything) ── */
+.notif-toast{position:absolute;top:0;left:0;right:0;z-index:100;display:flex;flex-direction:column;transform:translateY(-100%);background:#fff;color:#000;border-bottom:2px solid #fff}
+.notif-toast.visible{transform:translateY(0)}
+.nt-bar{display:flex;align-items:center;gap:6px;padding:4px 7px}
+.nt-icon{font-size:8px;flex-shrink:0;width:14px;text-align:center}
+.nt-body{flex:1;min-width:0}
+.nt-app{font-size:4px;letter-spacing:.1em;color:#666;margin-bottom:2px}
+.nt-msg{font-size:6px;letter-spacing:.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nt-time{font-size:4px;color:#888;flex-shrink:0}
+.nt-prog{height:2px;background:#ccc;transition:none}
+.nt-prog-fill{height:100%;background:#000;width:0}
+
+/* ── FOCUS: POMODORO ── */
+.pomo-display{padding:14px 10px 10px;text-align:center;flex-shrink:0}
+.pomo-time{font-size:36px;letter-spacing:.04em;line-height:1;margin-bottom:6px}
+.pomo-phase{font-size:5px;color:#555;letter-spacing:.1em;margin-bottom:10px}
+.pomo-prog{height:5px;border:1px solid #fff;background:#000;margin:0 10px 6px}
+.pomo-dots{display:flex;justify-content:center;gap:5px;margin-bottom:0}
+.pomo-dot{width:8px;height:8px;border:2px solid #333}
+.pomo-dot.done{background:#fff;border-color:#fff}
+.pomo-ctrl{display:flex;border-top:2px solid #fff;flex-shrink:0}
+.pomo-btn{flex:1;border:none;border-right:2px solid #333;padding:9px;font-size:6px;font-family:‘Press Start 2P’,monospace;background:#000;color:#555;cursor:pointer;letter-spacing:.04em}
+.pomo-btn:last-child{border-right:none}
+.pomo-btn.active,.pomo-btn:hover{background:#fff;color:#000}
+.break-mode .pomo-display,.break-mode .pomo-ctrl,.break-mode .pomo-dots,.break-mode .pomo-phase{filter:invert(1)}
+.break-mode .sbar{background:#000;color:#fff;border-color:#333}
+
+/* ── WORLD CLOCKS ── */
+.clk-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;flex:1}
+.clk-cell{border-right:1px solid #111;border-bottom:1px solid #111;padding:8px 6px;display:flex;flex-direction:column;align-items:center;gap:4px}
+.clk-cell:nth-child(2n){border-right:none}
+.clk-cell:nth-child(3),.clk-cell:nth-child(4){border-bottom:none}
+.clk-city{font-size:5px;color:#333;letter-spacing:.08em}
+.clk-time{font-size:14px;letter-spacing:.04em}
+.clk-ampm{font-size:5px;color:#555;letter-spacing:.06em}
+.clk-date{font-size:4px;color:#222;letter-spacing:.04em}
+
+/* ── STOPWATCH ── */
+.sw-display{padding:14px 10px;text-align:center;border-bottom:2px solid #fff;flex-shrink:0}
+.sw-time{font-size:24px;letter-spacing:.04em;line-height:1;margin-bottom:6px}
+.sw-ms{font-size:12px;color:#555}
+.sw-ctrl{display:flex;border-bottom:1px solid #333;flex-shrink:0}
+.sw-btn{flex:1;border:none;border-right:2px solid #333;padding:8px;font-size:6px;font-family:‘Press Start 2P’,monospace;background:#000;color:#555;cursor:pointer}
+.sw-btn:last-child{border-right:none}
+.sw-btn.active,.sw-btn:hover{background:#fff;color:#000}
+.sw-lap{display:flex;justify-content:space-between;padding:6px 8px;font-size:6px;color:#444;border-bottom:1px solid #0a0a0a;letter-spacing:.04em}
+.sw-lap.best{color:#fff}
+.sw-lap.worst{color:#f44}
+.sw-lap-n{color:#333;flex-shrink:0}
+
+/* ── MAIL ── */
+.email-row{padding:8px 8px;border-bottom:1px solid #0a0a0a;cursor:pointer}
+.email-row.focused{background:#fff;color:#000}
+.email-row.unread .em-from{color:#fff}
+.email-row.focused.unread .em-from{color:#000}
+.em-r1{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px}
+.em-from{font-size:7px;color:#aaa;letter-spacing:.04em}
+.em-time{font-size:5px;color:#333}
+.em-subj{font-size:6px;color:#555;letter-spacing:.03em;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.email-row.unread .em-subj{color:#aaa}
+.email-row.focused .em-from,.email-row.focused .em-time,.email-row.focused .em-subj,.email-row.focused .em-prev{color:#000!important}
+.em-prev{font-size:5px;color:#222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.03em}
+.email-row.unread::before{content:’’;position:absolute;left:3px;top:50%;transform:translateY(-50%);width:3px;height:3px;background:#fff}
+.email-row.focused.unread::before{background:#000}
+.email-row{position:relative}
+
+/* EMAIL DETAIL */
+.email-detail-hdr{padding:8px;border-bottom:2px solid #fff;flex-shrink:0}
+.email-detail-from{font-size:7px;letter-spacing:.04em;margin-bottom:3px}
+.email-detail-subj{font-size:6px;color:#aaa;letter-spacing:.03em;margin-bottom:2px}
+.email-detail-time{font-size:5px;color:#333;letter-spacing:.04em}
+.email-body{flex:1;padding:8px;font-size:6px;color:#888;line-height:2;letter-spacing:.03em;overflow:auto}
+.email-body::-webkit-scrollbar{display:none}
+.email-actions-bar{display:flex;border-top:2px solid #fff;flex-shrink:0}
+.em-act{flex:1;border:none;border-right:2px solid #333;padding:8px;font-size:6px;font-family:‘Press Start 2P’,monospace;background:#000;color:#555;cursor:pointer}
+.em-act:last-child{border-right:none}
+.em-act.focused,.em-act:hover{background:#fff;color:#000}
+
+/* COMPOSE */
+.comp-field{display:flex;align-items:center;gap:7px;padding:7px 8px;border-bottom:1px solid #111;flex-shrink:0}
+.comp-lbl{font-size:5px;color:#333;letter-spacing:.08em;min-width:22px;flex-shrink:0}
+.comp-val{flex:1;font-size:6px;color:#aaa;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.comp-val.active{color:#fff}
+.comp-body{flex:1;padding:8px;font-size:6px;color:#888;line-height:2;letter-spacing:.03em;border-bottom:2px solid #333}
+.comp-cur{font-size:6px;color:#fff;letter-spacing:.04em;margin-top:4px}
+
+/* ── MESSAGES ── */
+.sms-row{padding:8px 8px;border-bottom:1px solid #0a0a0a;cursor:pointer;display:flex;align-items:flex-start;gap:7px;position:relative}
+.sms-row.focused{background:#fff;color:#000}
+.sms-av{width:28px;height:28px;border:2px solid #333;display:flex;align-items:center;justify-content:center;font-size:7px;flex-shrink:0}
+.sms-row.focused .sms-av{border-color:#000}
+.sms-body{flex:1;min-width:0}
+.sms-r1{display:flex;justify-content:space-between;margin-bottom:2px}
+.sms-name{font-size:7px;color:#aaa;letter-spacing:.04em}
+.sms-row.unread .sms-name{color:#fff}
+.sms-row.focused .sms-name{color:#000!important}
+.sms-t{font-size:5px;color:#333}
+.sms-prev{font-size:5px;color:#222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.03em}
+.sms-row.unread .sms-prev{color:#666}
+.sms-row.focused .sms-prev{color:#666!important}
+.sms-dot{width:5px;height:5px;background:#fff;flex-shrink:0;margin-top:6px}
+.sms-row.focused .sms-dot{background:#000}
+
+/* SMS THREAD */
+.sms-msg{display:flex;gap:4px;align-items:flex-end;padding:3px 6px}
+.sms-msg.me{flex-direction:row-reverse}
+.sms-bbl{border:2px solid #fff;padding:4px 5px;font-size:6px;line-height:1.6;max-width:160px}
+.sms-bbl.me{background:#fff;color:#000}
+.sms-inp-bar{height:28px;border-top:2px solid #fff;display:flex;flex-shrink:0}
+.sms-inp{flex:1;background:transparent;border:none;color:#fff;font-family:‘Press Start 2P’,monospace;font-size:5px;padding:4px 6px;outline:none}
+.sms-inp::placeholder{color:#1a1a1a}
+.sms-send{width:28px;border-left:2px solid #fff;background:#000;color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.sms-send:hover{background:#fff;color:#000}
+
+/* ── MUSIC ── */
+.ml-tabs{display:flex;border-bottom:2px solid #fff;flex-shrink:0}
+.ml-tab{flex:1;padding:7px 4px;font-size:5px;color:#444;letter-spacing:.06em;text-align:center;cursor:pointer;border-right:1px solid #333}
+.ml-tab:last-child{border-right:none}
+.ml-tab.active{background:#fff;color:#000}
+.ml-row{display:flex;align-items:center;gap:7px;padding:8px 8px;font-size:6px;letter-spacing:.04em;border-bottom:1px solid #0a0a0a;cursor:pointer;color:#555}
+.ml-row.focused{background:#fff;color:#000}
+.ml-row.playing{color:#fff}
+.ml-art{width:26px;height:26px;border:2px solid #333;display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0}
+.ml-row.focused .ml-art{border-color:#000}
+.ml-info{flex:1;min-width:0}
+.ml-track{margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ml-artist{font-size:5px;color:#333;letter-spacing:.04em}
+.ml-row.focused .ml-artist{color:#666}
+.ml-dur{font-size:5px;color:#333;flex-shrink:0}
+.ml-row.focused .ml-dur{color:#666}
+.now-bar{border-top:2px solid #fff;padding:7px 8px;display:flex;align-items:center;gap:7px;flex-shrink:0}
+.np-art{width:36px;height:36px;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.np-art.spin{animation:spin 2s steps(8) infinite}
+@keyframes spin{0%{transform:rotate(0)}100%{transform:rotate(360deg)}}
+.np-info{flex:1;min-width:0}
+.np-track{font-size:6px;letter-spacing:.04em;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.np-artist{font-size:5px;color:#444;letter-spacing:.04em}
+.np-ctrls{display:flex;gap:3px}
+.np-btn{border:2px solid #fff;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:7px;cursor:pointer;color:#888}
+.np-btn:hover,.np-btn.playing{color:#fff}
+.np-btn.playing:hover{background:#fff;color:#000}
+
+/* FULL NOW PLAYING */
+.full-np-art{width:100px;height:100px;border:3px solid #fff;display:flex;align-items:center;justify-content:center;font-size:40px;margin:0 auto}
+.full-np-art.spin{animation:spin 2s steps(8) infinite}
+.scrub{height:5px;border:1px solid #fff;background:#000;margin:0 10px 4px;cursor:pointer}
+.scrub-fill{height:100%;background:#fff}
+.scrub-times{display:flex;justify-content:space-between;padding:0 10px;font-size:5px;color:#444;letter-spacing:.04em;margin-bottom:8px}
+.full-ctrls{display:flex;justify-content:center;gap:8px;padding:0 10px}
+.full-btn{border:2px solid #fff;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer;color:#888}
+.full-btn.play{width:40px;height:40px;font-size:16px;color:#fff}
+.full-btn:hover,.full-btn.play:hover{background:#fff;color:#000}
+
+/* ── NOTIFICATION DESIGN KIT ── */
+.notif-kit{max-width:900px}
+.nk-row{display:flex;flex-wrap:wrap;gap:20px;margin-bottom:24px}
+.nk-item{border:2px solid #fff;overflow:hidden;width:280px}
+.nk-hdr{background:#fff;color:#000;padding:5px 10px;font-size:6px;letter-spacing:.06em;border-bottom:2px solid #fff;display:flex;justify-content:space-between}
+.nk-toast{background:#fff;color:#000;display:flex;align-items:center;gap:7px;padding:6px 8px;border-bottom:1px solid #ccc}
+.nk-toast-icon{font-size:9px;flex-shrink:0;width:14px;text-align:center}
+.nk-toast-body{flex:1;min-width:0}
+.nk-toast-app{font-size:4px;letter-spacing:.1em;color:#666;margin-bottom:2px}
+.nk-toast-msg{font-size:7px;letter-spacing:.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nk-toast-time{font-size:4px;color:#999;flex-shrink:0}
+.nk-prog{height:2px;background:#ddd}
+.nk-prog-fill{height:100%;background:#000}
+.nk-note{padding:6px 8px;font-size:5px;color:#444;letter-spacing:.06em;line-height:1.8;border-top:1px solid #eee}
+.notif-shade{border:2px solid #fff;width:280px;overflow:hidden}
+.ns-hdr{background:#fff;color:#000;padding:6px 8px;font-size:7px;letter-spacing:.06em;border-bottom:2px solid #fff;display:flex;justify-content:space-between;align-items:center}
+.ns-clear{font-size:5px;color:#555;border:1px solid #555;padding:1px 5px;cursor:pointer}
+.ns-row{padding:8px 8px;border-bottom:1px solid #0a0a0a;cursor:pointer;position:relative}
+.ns-row.new{border-left:3px solid #fff}
+.ns-row:hover{background:#080808}
+.ns-app{font-size:4px;color:#333;letter-spacing:.1em;margin-bottom:3px;display:flex;align-items:center;gap:4px}
+.ns-app-dot{width:4px;height:4px;border-radius:50%;background:#555}
+.ns-app-dot.mail{background:#D85A30}
+.ns-app-dot.sms{background:#1D9E75}
+.ns-app-dot.task{background:#BA7517}
+.ns-app-dot.claude{background:#7F77DD}
+.ns-msg{font-size:6px;color:#888;letter-spacing:.03em;line-height:1.7}
+.ns-row.new .ns-msg{color:#aaa}
+.ns-time{font-size:4px;color:#222;letter-spacing:.04em;margin-top:3px}
+</style>
+
+</head>
+<body>
+
+<div class="pg-title">BITOS · FOCUS + MAIL + MSGS + MUSIC + NOTIFICATIONS</div>
+<div class="pg-sub">4 FLOW SIMULATORS · FULL NOTIFICATION DESIGN KIT · 240×280PX</div>
+
+<!-- ════════════════════════════
+     SIMULATORS
+════════════════════════════ -->
+
+<div class="sec-title">01 · LIVE SIMULATORS · SPACE=SHORT · ENTER=LONG · BACKSPACE=BACK</div>
+
+<div class="row-wrap">
+
+<!-- ══════ DEVICE A · FOCUS ══════ -->
+
+<div class="device-wrap" id="DA">
+  <div class="device-lbl">FOCUS · POMODORO + CLOCKS + STOPWATCH</div>
+  <div class="device">
+    <div class="screen" id="scrA">
+
+```
+  <!-- FOCUS PANEL -->
+  <div class="view active" id="A_panel">
+    <div class="sbar dark"><span>← DBL</span><span>FOCUS</span><span id="At">--:--</span></div>
+    <div class="inv-hdr">LAST SESSION <span style="font-size:5px;color:#555">WORK · 1/4</span></div>
+    <div style="padding:10px 8px;border-bottom:2px solid #fff;text-align:center;flex-shrink:0">
+      <div style="font-size:24px;letter-spacing:.04em;margin-bottom:4px">25:00</div>
+      <div style="font-size:5px;color:#333;letter-spacing:.1em">READY TO START</div>
+    </div>
+    <div class="scroll-body" id="A_plist">
+      <div class="row focused" data-i="0"><span class="arr">▶</span><span class="row-lbl">START POMODORO</span></div>
+      <div class="row" data-i="1"><span class="arr">▶</span><span class="row-lbl">WORLD CLOCKS</span></div>
+      <div class="row" data-i="2"><span class="arr">▶</span><span class="row-lbl">STOPWATCH</span></div>
+    </div>
+    <div class="kh">SHORT:NEXT · LONG:OPEN · DBL:BACK</div>
+  </div>
+
+  <!-- POMODORO -->
+  <div class="view" id="A_pomo">
+    <div class="sbar dark" id="A_pomobar"><span>← DBL</span><span>FOCUS</span><span id="A_pomosess">1/4</span></div>
+    <div id="A_pomodisp" class="pomo-display">
+      <div style="font-size:5px;color:#555;letter-spacing:.1em;margin-bottom:4px" id="A_pomophase">WORK SESSION</div>
+      <div class="pomo-time" id="A_pomotime">25:00</div>
+      <div class="pomo-prog"><div class="pfill" id="A_pomoprog" style="width:0%"></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:4px;color:#1a1a1a;margin-bottom:8px"><span>0%</span><span id="A_pomoeta">DONE: --:--</span></div>
+      <div class="pomo-dots" id="A_pomo_dots">
+        <div class="pomo-dot done"></div><div class="pomo-dot"></div><div class="pomo-dot"></div><div class="pomo-dot"></div>
+      </div>
+    </div>
+    <div class="pomo-ctrl">
+      <div class="pomo-btn" id="A_pomobtn" onclick="A_pomoToggle()">START</div>
+      <div class="pomo-btn" onclick="A_pomoSkip()">SKIP ▶</div>
+      <div class="pomo-btn" onclick="A_pomoReset()">RESET</div>
+    </div>
+    <div class="kh">SHORT:START/STOP · LONG:SKIP · DBL:BACK</div>
+  </div>
+
+  <!-- WORLD CLOCKS -->
+  <div class="view" id="A_clocks">
+    <div class="sbar"><span>← DBL</span><span>WORLD CLOCKS</span><span></span></div>
+    <div class="clk-grid">
+      <div class="clk-cell">
+        <div class="clk-city">LOS ANGELES</div>
+        <canvas id="clkLA" width="52" height="52"></canvas>
+        <div class="clk-time" id="clkLAt">--:--</div>
+        <div class="clk-ampm" id="clkLAap">--</div>
+        <div class="clk-date" id="clkLAd">---</div>
+      </div>
+      <div class="clk-cell">
+        <div class="clk-city">NEW YORK</div>
+        <canvas id="clkNY" width="52" height="52"></canvas>
+        <div class="clk-time" id="clkNYt">--:--</div>
+        <div class="clk-ampm" id="clkNYap">--</div>
+        <div class="clk-date" id="clkNYd">---</div>
+      </div>
+      <div class="clk-cell">
+        <div class="clk-city">LONDON</div>
+        <canvas id="clkLN" width="52" height="52"></canvas>
+        <div class="clk-time" id="clkLNt">--:--</div>
+        <div class="clk-ampm" id="clkLNap">--</div>
+        <div class="clk-date" id="clkLNd">---</div>
+      </div>
+      <div class="clk-cell">
+        <div class="clk-city">TOKYO</div>
+        <canvas id="clkTK" width="52" height="52"></canvas>
+        <div class="clk-time" id="clkTKt">--:--</div>
+        <div class="clk-ampm" id="clkTKap">--</div>
+        <div class="clk-date" id="clkTKd">---</div>
+      </div>
+    </div>
+    <div class="kh">DBL:BACK</div>
+  </div>
+
+  <!-- STOPWATCH -->
+  <div class="view" id="A_sw">
+    <div class="sbar"><span>← DBL</span><span>STOPWATCH</span><span></span></div>
+    <div class="sw-display">
+      <div class="sw-time" id="A_swt">00:00</div>
+      <div class="sw-ms" id="A_swms">.000</div>
+    </div>
+    <div class="sw-ctrl">
+      <div class="sw-btn active" id="A_swbtn" onclick="swToggle()">START</div>
+      <div class="sw-btn" onclick="swLap()">LAP</div>
+      <div class="sw-btn" onclick="swReset()">RESET</div>
+    </div>
+    <div class="scroll-body" id="A_laps"><div style="font-size:5px;color:#1a1a1a;text-align:center;padding:10px;letter-spacing:.06em">PRESS LAP TO RECORD</div></div>
+    <div class="kh">SHORT:START/STOP · LONG:LAP · DBL:BACK</div>
+  </div>
+
+  <!-- NOTIFICATION TOAST -->
+  <div class="notif-toast" id="A_toast">
+    <div class="nt-bar">
+      <div class="nt-icon" id="A_ti">◈</div>
+      <div class="nt-body">
+        <div class="nt-app" id="A_ta">APP</div>
+        <div class="nt-msg" id="A_tm">Notification message here</div>
+      </div>
+      <div class="nt-time" id="A_tt">NOW</div>
+    </div>
+    <div class="nt-prog"><div class="nt-prog-fill" id="A_tp"></div></div>
+  </div>
+
+</div>
+<div class="home-btn"></div>
+```
+
+  </div>
+  <div class="btn-row">
+    <div class="ctrl-btn" onclick="A_short()">SHORT</div>
+    <div class="ctrl-btn" onclick="A_long()">LONG</div>
+    <div class="ctrl-btn" onclick="A_back()">BACK</div>
+  </div>
+  <div class="btn-row" style="margin-top:4px">
+    <div class="ctrl-btn" onclick="fireNotif('A','mail','✉','MAIL','Joaquin: RE: NIKE HOUSE INVOICE','9:44')">MAIL NOTIF</div>
+    <div class="ctrl-btn" onclick="fireNotif('A','sms','◈','MESSAGES','Anthony: did u fix the camino lol','NOW')">SMS NOTIF</div>
+    <div class="ctrl-btn" onclick="fireNotif('A','claude','◎','CLAUDE','I have a thought about your Tender Fest pitch...','NOW')">AI NOTIF</div>
+    <div class="ctrl-btn" onclick="fireNotif('A','task','☑','TASKS','Invoice Joaquin — due today','9:00')">TASK NOTIF</div>
+  </div>
+  <div class="state-disp" id="A_st">focus panel</div>
+</div>
+
+<!-- ══════ DEVICE B · MAIL ══════ -->
+
+<div class="device-wrap" id="DB">
+  <div class="device-lbl">MAIL · INBOX + DETAIL + COMPOSE</div>
+  <div class="device">
+    <div class="screen" id="scrB">
+
+```
+  <!-- MAIL PANEL -->
+  <div class="view active" id="B_panel">
+    <div class="sbar dark"><span>← DBL</span><span>MAIL</span><span style="border:1px solid #fff;padding:0 3px;font-size:5px">3</span></div>
+    <div class="inv-hdr">INBOX PREVIEW</div>
+    <div class="scroll-body" id="B_plist">
+      <div class="email-row unread focused" data-i="0">
+        <div class="em-r1"><span class="em-from">JOAQUIN · SSS</span><span class="em-time">9:44</span></div>
+        <div class="em-subj">RE: NIKE HOUSE INVOICE</div>
+        <div class="em-prev">Got your W-9, need the day rate breakdown...</div>
+      </div>
+      <div class="email-row unread" data-i="1">
+        <div class="em-r1"><span class="em-from">OVATION TRAVEL</span><span class="em-time">8:30</span></div>
+        <div class="em-subj">LAX→JFK MAR 18 ITINERARY</div>
+        <div class="em-prev">PDF ticket confirmation attached...</div>
+      </div>
+      <div class="email-row unread" data-i="2">
+        <div class="em-r1"><span class="em-from">BEN WOLIN</span><span class="em-time">YEST.</span></div>
+        <div class="em-subj">HYPNOTIST DOC — CASTING UPDATE</div>
+        <div class="em-prev">3 new contacts responded...</div>
+      </div>
+      <div class="email-row" data-i="3">
+        <div class="em-r1"><span class="em-from">ANTHROPIC</span><span class="em-time">MON</span></div>
+        <div class="em-subj">SONNET 4.6 RELEASE NOTES</div>
+        <div class="em-prev">New capabilities in latest model...</div>
+      </div>
+      <div class="row" data-i="4" style="border-top:2px solid #333;margin-top:2px"><span class="arr">▶</span><span class="row-lbl">OPEN FULL INBOX</span></div>
+      <div class="row" data-i="5"><span class="arr">▶</span><span class="row-lbl">COMPOSE EMAIL</span></div>
+    </div>
+    <div class="kh">SHORT:NEXT · LONG:OPEN · DBL:BACK</div>
+  </div>
+
+  <!-- EMAIL DETAIL -->
+  <div class="view" id="B_detail">
+    <div class="sbar"><span>← DBL</span><span>MAIL</span><span></span></div>
+    <div class="email-detail-hdr">
+      <div class="email-detail-from">JOAQUIN · SOMETHING SPECIAL STUDIOS</div>
+      <div class="email-detail-subj">RE: NIKE HOUSE FINAL INVOICE</div>
+      <div class="email-detail-time">TODAY 9:44 AM</div>
+    </div>
+    <div class="email-body">
+      HEY SEB,<br><br>
+      GOT YOUR W-9, EVERYTHING LOOKS GOOD.<br><br>
+      CAN YOU SEND OVER THE DAY RATE BREAKDOWN? NEED IT ITEMIZED FOR THE CLIENT.<br><br>
+      - PRE-PRO DAYS<br>
+      - ON-SITE DAYS<br>
+      - OT IF ANY<br><br>
+      ALSO DO YOU HAVE THE VENDOR RECEIPTS FROM VALET?<br><br>
+      THANKS<br>
+      JOAQUIN
+    </div>
+    <div class="email-actions-bar" id="B_acts">
+      <div class="em-act focused" data-i="0">REPLY</div>
+      <div class="em-act" data-i="1">FORWARD</div>
+      <div class="em-act" data-i="2">★</div>
+      <div class="em-act" data-i="3" style="color:#f44">DEL</div>
+    </div>
+    <div class="kh">SHORT:NEXT · LONG:ACTION · DBL:BACK</div>
+  </div>
+
+  <!-- FULL INBOX -->
+  <div class="view" id="B_inbox">
+    <div class="sbar"><span>← DBL</span><span>INBOX</span><span style="border:1px solid #fff;padding:0 3px;font-size:5px">4</span></div>
+    <div style="display:flex;border-bottom:2px solid #333;flex-shrink:0">
+      <div style="flex:1;padding:5px 4px;font-size:5px;text-align:center;background:#fff;color:#000">ALL</div>
+      <div style="flex:1;padding:5px 4px;font-size:5px;text-align:center;color:#444;border-left:1px solid #333">UNREAD</div>
+      <div style="flex:1;padding:5px 4px;font-size:5px;text-align:center;color:#444;border-left:1px solid #333">★ STAR</div>
+    </div>
+    <div class="scroll-body" id="B_ilist">
+      <div class="email-row unread focused" data-i="0">
+        <div class="em-r1"><span class="em-from">JOAQUIN · SSS</span><span class="em-time">9:44</span></div>
+        <div class="em-subj">RE: NIKE HOUSE INVOICE</div>
+      </div>
+      <div class="email-row unread" data-i="1">
+        <div class="em-r1"><span class="em-from">OVATION TRAVEL</span><span class="em-time">8:30</span></div>
+        <div class="em-subj">LAX→JFK MAR 18 ITINERARY</div>
+      </div>
+      <div class="email-row unread" data-i="2">
+        <div class="em-r1"><span class="em-from">BEN WOLIN</span><span class="em-time">YEST.</span></div>
+        <div class="em-subj">HYPNOTIST DOC — CASTING</div>
+      </div>
+      <div class="email-row" data-i="3">
+        <div class="em-r1"><span class="em-from">ANTHROPIC</span><span class="em-time">MON</span></div>
+        <div class="em-subj">SONNET 4.6 RELEASE NOTES</div>
+      </div>
+      <div class="email-row" data-i="4">
+        <div class="em-r1"><span class="em-from">MEOW WOLF HR</span><span class="em-time">FRI</span></div>
+        <div class="em-subj">GM POSITION — FOLLOW UP</div>
+      </div>
+    </div>
+    <div class="kh">SHORT:NEXT · LONG:OPEN · DBL:BACK</div>
+  </div>
+
+  <!-- COMPOSE -->
+  <div class="view" id="B_compose">
+    <div class="sbar"><span>← DBL</span><span>COMPOSE</span><span></span></div>
+    <div class="comp-field"><span class="comp-lbl">TO</span><span class="comp-val active">joaquin@sss.com</span></div>
+    <div class="comp-field"><span class="comp-lbl">CC</span><span class="comp-val">---</span></div>
+    <div class="comp-field"><span class="comp-lbl">RE</span><span class="comp-val">RE: NIKE HOUSE FINAL INVOICE</span></div>
+    <div class="comp-body">
+      HI JOAQUIN,<br><br>
+      HERE'S THE BREAKDOWN:<br><br>
+      PRE-PRO: $650 × 3 = $1,950<br>
+      ON-SITE: $750 × 4 = $3,000<br>
+      TOTAL: $4,950<br><br>
+      VENDOR RECEIPTS TO FOLLOW.<br><br>
+      SEB<span class="bcur"></span>
+    </div>
+    <div style="display:flex;border-top:2px solid #fff;flex-shrink:0">
+      <div class="row focused" style="flex:1;border-bottom:none;justify-content:center;border-right:2px solid #333">SEND ▶</div>
+      <div class="row" style="flex:1;border-bottom:none;justify-content:center;color:#555">DISCARD</div>
+    </div>
+    <div class="kh">SHORT:FIELDS · LONG:SEND · DBL:BACK</div>
+  </div>
+
+  <!-- NOTIFICATION TOAST -->
+  <div class="notif-toast" id="B_toast">
+    <div class="nt-bar">
+      <div class="nt-icon" id="B_ti">◈</div>
+      <div class="nt-body"><div class="nt-app" id="B_ta">APP</div><div class="nt-msg" id="B_tm">Notification</div></div>
+      <div class="nt-time" id="B_tt">NOW</div>
+    </div>
+    <div class="nt-prog"><div class="nt-prog-fill" id="B_tp"></div></div>
+  </div>
+
+</div>
+<div class="home-btn"></div>
+```
+
+  </div>
+  <div class="btn-row">
+    <div class="ctrl-btn" onclick="B_short()">SHORT</div>
+    <div class="ctrl-btn" onclick="B_long()">LONG</div>
+    <div class="ctrl-btn" onclick="B_back()">BACK</div>
+  </div>
+  <div class="btn-row" style="margin-top:4px">
+    <div class="ctrl-btn" onclick="fireNotif('B','sms','◈','MESSAGES','Joaquin: Can you call me?','NOW')">SMS NOTIF</div>
+    <div class="ctrl-btn" onclick="fireNotif('B','claude','◎','CLAUDE','Heads up: your flight is in 4 days','NOW')">AI NOTIF</div>
+    <div class="ctrl-btn" onclick="fireNotif('B','task','☑','REMINDER','Call Ben Wolin — 2:00 PM today','1:45')">REMINDER</div>
+  </div>
+  <div class="state-disp" id="B_st">mail panel</div>
+</div>
+
+<!-- ══════ DEVICE C · MESSAGES ══════ -->
+
+<div class="device-wrap" id="DC">
+  <div class="device-lbl">MESSAGES · SMS THREADS + CONVERSATION</div>
+  <div class="device">
+    <div class="screen" id="scrC">
+
+```
+  <!-- MESSAGES PANEL -->
+  <div class="view active" id="C_panel">
+    <div class="sbar dark"><span>← DBL</span><span>MESSAGES</span><span style="border:1px solid #fff;padding:0 3px;font-size:5px">2</span></div>
+    <div class="inv-hdr">THREADS</div>
+    <div class="scroll-body" id="C_plist">
+      <div class="sms-row unread focused" data-i="0">
+        <div class="sms-av">JQ</div>
+        <div class="sms-body">
+          <div class="sms-r1"><span class="sms-name">JOAQUIN</span><span class="sms-t">9:51</span></div>
+          <div class="sms-prev">Can you call me re: overtime rate?</div>
+        </div>
+        <div class="sms-dot"></div>
+      </div>
+      <div class="sms-row unread" data-i="1">
+        <div class="sms-av">AN</div>
+        <div class="sms-body">
+          <div class="sms-r1"><span class="sms-name">ANTHONY</span><span class="sms-t">8:14</span></div>
+          <div class="sms-prev">Yo did u fix the El Camino lol</div>
+        </div>
+        <div class="sms-dot"></div>
+      </div>
+      <div class="sms-row" data-i="2">
+        <div class="sms-av">BW</div>
+        <div class="sms-body">
+          <div class="sms-r1"><span class="sms-name">BEN W.</span><span class="sms-t">YEST.</span></div>
+          <div class="sms-prev">Casting went great. Debrief Fri?</div>
+        </div>
+      </div>
+      <div class="sms-row" data-i="3">
+        <div class="sms-av">MO</div>
+        <div class="sms-body">
+          <div class="sms-r1"><span class="sms-name">MOM</span><span class="sms-t">MON</span></div>
+          <div class="sms-prev">Call me when you get a chance 💙</div>
+        </div>
+      </div>
+      <div class="row" data-i="4" style="border-top:2px solid #333;margin-top:2px"><span class="arr">▶</span><span class="row-lbl">NEW MESSAGE</span></div>
+    </div>
+    <div class="kh">SHORT:NEXT · LONG:OPEN · DBL:BACK</div>
+  </div>
+
+  <!-- THREAD: JOAQUIN -->
+  <div class="view" id="C_thread">
+    <div class="sbar"><span>← DBL</span><span id="C_thread_name">JOAQUIN</span><span></span></div>
+    <div class="scroll-body" id="C_msgs" style="padding:4px 0">
+      <div class="sms-msg me"><div class="sms-bbl me">HEY, JUST CONFIRMED THE W-9 WAS FILED.</div></div>
+      <div class="sms-msg"><div class="sms-bbl">COOL. ALSO CAN YOU SEND THE FINAL HOURS BREAKDOWN?</div></div>
+      <div class="sms-msg me"><div class="sms-bbl me">YEAH I'LL EMAIL IT TODAY.</div></div>
+      <div class="sms-msg"><div class="sms-bbl">CAN YOU CALL ME RE: OVERTIME RATE?<span class="bcur"></span></div></div>
+    </div>
+    <div class="sms-inp-bar">
+      <input class="sms-inp" placeholder="REPLY..." />
+      <div class="sms-send" onclick="this.textContent='✓';setTimeout(()=>this.textContent='▶',700)">▶</div>
+    </div>
+    <div class="kh">HOLD:VOICE · SHORT:OPTIONS · DBL:BACK</div>
+  </div>
+
+  <!-- NEW MESSAGE -->
+  <div class="view" id="C_new">
+    <div class="sbar dark"><span>← DBL</span><span>NEW MESSAGE</span><span></span></div>
+    <div class="comp-field" style="flex-shrink:0"><span class="comp-lbl">TO</span><span class="comp-val active">SEARCH CONTACTS...<span class="bcur"></span></span></div>
+    <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end">
+      <div style="padding:8px;font-size:6px;color:#222;letter-spacing:.06em;text-align:center">NO MESSAGES YET</div>
+    </div>
+    <div class="sms-inp-bar">
+      <input class="sms-inp" placeholder="TYPE MESSAGE..." />
+      <div class="sms-send">▶</div>
+    </div>
+    <div class="kh">SHORT:SELECT CONTACT · LONG:SEND · DBL:BACK</div>
+  </div>
+
+  <!-- NOTIFICATION TOAST -->
+  <div class="notif-toast" id="C_toast">
+    <div class="nt-bar">
+      <div class="nt-icon" id="C_ti">◈</div>
+      <div class="nt-body"><div class="nt-app" id="C_ta">APP</div><div class="nt-msg" id="C_tm">Notification</div></div>
+      <div class="nt-time" id="C_tt">NOW</div>
+    </div>
+    <div class="nt-prog"><div class="nt-prog-fill" id="C_tp"></div></div>
+  </div>
+
+</div>
+<div class="home-btn"></div>
+```
+
+  </div>
+  <div class="btn-row">
+    <div class="ctrl-btn" onclick="C_short()">SHORT</div>
+    <div class="ctrl-btn" onclick="C_long()">LONG</div>
+    <div class="ctrl-btn" onclick="C_back()">BACK</div>
+  </div>
+  <div class="btn-row" style="margin-top:4px">
+    <div class="ctrl-btn" onclick="fireNotif('C','mail','✉','MAIL','Ovation Travel: Your itinerary is ready','8:30')">MAIL NOTIF</div>
+    <div class="ctrl-btn" onclick="fireNotif('C','sms','◈','MESSAGES','Anthony: bro the car is on fire 🔥','NOW')">NEW SMS</div>
+    <div class="ctrl-btn" onclick="fireNotif('C','claude','◎','CLAUDE','Quick thought: follow up with Ben before 5pm','NOW')">AI NOTIF</div>
+  </div>
+  <div class="state-disp" id="C_st">messages panel</div>
+</div>
+
+<!-- ══════ DEVICE D · MUSIC ══════ -->
+
+<div class="device-wrap" id="DD">
+  <div class="device-lbl">MUSIC · LIBRARY + NOW PLAYING + QUEUE</div>
+  <div class="device">
+    <div class="screen" id="scrD">
+
+```
+  <!-- MUSIC PANEL -->
+  <div class="view active" id="D_panel">
+    <div class="sbar dark"><span>← DBL</span><span>MUSIC</span><span style="font-size:6px;color:#555">♪</span></div>
+    <div class="now-bar">
+      <div class="np-art spin">♫</div>
+      <div class="np-info">
+        <div class="np-track">NO TENDER LEFT BEHIND</div>
+        <div class="np-artist">TENDER FEST OST</div>
+        <div style="width:100%;height:3px;border:1px solid #fff;background:#000;margin-top:4px"><div style="height:100%;width:38%;background:#fff"></div></div>
+      </div>
+      <div class="np-ctrls">
+        <div class="np-btn">◀</div>
+        <div class="np-btn playing">▶</div>
+        <div class="np-btn">▶▶</div>
+      </div>
+    </div>
+    <div class="scroll-body" id="D_plist">
+      <div class="row focused" data-i="0"><span class="arr">▶</span><span class="row-lbl">MUSIC LIBRARY</span></div>
+      <div class="row" data-i="1"><span class="arr">▶</span><span class="row-lbl">NOW PLAYING</span></div>
+      <div class="row" data-i="2"><span class="arr">▶</span><span class="row-lbl">QUEUE</span></div>
+      <div class="row" data-i="3"><span class="arr">▶</span><span class="row-lbl">PLAYLISTS</span></div>
+    </div>
+    <div class="kh">SHORT:NEXT · LONG:OPEN · DBL:BACK</div>
+  </div>
+
+  <!-- LIBRARY -->
+  <div class="view" id="D_lib">
+    <div class="sbar"><span>← DBL</span><span>LIBRARY</span><span></span></div>
+    <div class="ml-tabs">
+      <div class="ml-tab active" id="D_tab0" onclick="D_setTab(0)">SONGS</div>
+      <div class="ml-tab" id="D_tab1" onclick="D_setTab(1)">ARTISTS</div>
+      <div class="ml-tab" id="D_tab2" onclick="D_setTab(2)">ALBUMS</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-bottom:1px solid #111;flex-shrink:0">
+      <span style="font-size:8px;color:#444">⌕</span>
+      <span style="font-size:5px;color:#1a1a1a;letter-spacing:.06em">SEARCH MUSIC...</span>
+    </div>
+    <div class="scroll-body" id="D_llist">
+      <div style="padding:4px 8px;font-size:5px;color:#1a1a1a;letter-spacing:.1em;background:#050505;border-bottom:1px solid #080808">TENDER FEST OST</div>
+      <div class="ml-row focused playing" data-i="0">
+        <div class="ml-art">♫</div>
+        <div class="ml-info"><div class="ml-track">NO TENDER LEFT BEHIND</div><div class="ml-artist">TENDER FEST OST</div></div>
+        <div class="ml-dur">3:42</div>
+      </div>
+      <div class="ml-row" data-i="1">
+        <div class="ml-art">♩</div>
+        <div class="ml-info"><div class="ml-track">THE DIPPING POINT</div><div class="ml-artist">TENDER FEST OST</div></div>
+        <div class="ml-dur">4:11</div>
+      </div>
+      <div class="ml-row" data-i="2">
+        <div class="ml-art">♩</div>
+        <div class="ml-info"><div class="ml-track">SAUCE ON MY MIND</div><div class="ml-artist">TENDER FEST OST</div></div>
+        <div class="ml-dur">3:28</div>
+      </div>
+      <div class="ml-row" data-i="3">
+        <div class="ml-art">♩</div>
+        <div class="ml-info"><div class="ml-track">CRISPY DREAM</div><div class="ml-artist">TENDER FEST OST</div></div>
+        <div class="ml-dur">5:02</div>
+      </div>
+      <div style="padding:4px 8px;font-size:5px;color:#1a1a1a;letter-spacing:.1em;background:#050505;border-bottom:1px solid #080808;border-top:1px solid #0a0a0a">RECENT PLAYS</div>
+      <div class="ml-row" data-i="4">
+        <div class="ml-art">♩</div>
+        <div class="ml-info"><div class="ml-track">TAKE FIVE</div><div class="ml-artist">DAVE BRUBECK</div></div>
+        <div class="ml-dur">5:24</div>
+      </div>
+      <div class="ml-row" data-i="5">
+        <div class="ml-art">♩</div>
+        <div class="ml-info"><div class="ml-track">SO WHAT</div><div class="ml-artist">MILES DAVIS</div></div>
+        <div class="ml-dur">9:22</div>
+      </div>
+    </div>
+    <div class="now-bar" style="padding:5px 8px">
+      <div class="np-art" style="width:28px;height:28px;font-size:12px">♫</div>
+      <div class="np-info"><div class="np-track" style="font-size:5px">NO TENDER LEFT BEHIND</div><div class="np-artist">TENDER FEST OST · ♪ PLAYING</div></div>
+      <div class="np-ctrls">
+        <div class="np-btn" style="width:18px;height:18px;font-size:6px">▶</div>
+      </div>
+    </div>
+    <div class="kh">SHORT:NEXT · LONG:PLAY · DBL:BACK</div>
+  </div>
+
+  <!-- FULL NOW PLAYING -->
+  <div class="view" id="D_np">
+    <div class="sbar dark"><span>← DBL</span><span>NOW PLAYING</span><span></span></div>
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:10px">
+      <div class="full-np-art spin" id="D_npart">♫</div>
+      <div style="text-align:center;padding:0 8px">
+        <div style="font-size:9px;letter-spacing:.04em;margin-bottom:4px">NO TENDER LEFT BEHIND</div>
+        <div style="font-size:6px;color:#444;letter-spacing:.04em">TENDER FEST OST</div>
+      </div>
+    </div>
+    <div style="flex-shrink:0">
+      <div class="scrub" onclick="scrubClick(event,this)"><div class="scrub-fill" id="D_scrub" style="width:38%"></div></div>
+      <div class="scrub-times"><span id="D_elapsed">1:24</span><span>3:42</span></div>
+      <div class="full-ctrls">
+        <div class="full-btn" title="shuffle">⇄</div>
+        <div class="full-btn">◀◀</div>
+        <div class="full-btn play" id="D_playbtn" onclick="D_togglePlay()">▶</div>
+        <div class="full-btn">▶▶</div>
+        <div class="full-btn" title="repeat">↻</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;padding:8px 10px">
+        <span style="font-size:9px;color:#444">♪</span>
+        <div style="flex:1;height:4px;border:1px solid #fff;background:#000;cursor:pointer" onclick="volClick(event,this)">
+          <div style="height:100%;width:70%;background:#fff" id="D_vol"></div>
+        </div>
+        <span style="font-size:5px;color:#444" id="D_volpct">70%</span>
+      </div>
+    </div>
+    <div class="kh">SHORT:NEXT TRACK · LONG:PAUSE · DBL:BACK</div>
+  </div>
+
+  <!-- QUEUE -->
+  <div class="view" id="D_queue">
+    <div class="sbar"><span>← DBL</span><span>QUEUE</span><span>4</span></div>
+    <div style="padding:5px 8px;font-size:5px;color:#1a1a1a;letter-spacing:.1em;background:#050505;border-bottom:1px solid #080808;flex-shrink:0">NOW PLAYING</div>
+    <div class="ml-row playing" style="color:#fff;background:#111;flex-shrink:0">
+      <div class="ml-art" style="border-color:#fff">♫</div>
+      <div class="ml-info"><div class="ml-track">NO TENDER LEFT BEHIND</div><div class="ml-artist">1:24 / 3:42</div></div>
+      <div class="ml-dur" style="color:#555">▶</div>
+    </div>
+    <div style="padding:5px 8px;font-size:5px;color:#1a1a1a;letter-spacing:.1em;background:#050505;border-bottom:1px solid #080808;flex-shrink:0">UP NEXT</div>
+    <div class="scroll-body" id="D_qlist">
+      <div class="ml-row focused" data-i="0">
+        <div style="font-size:7px;color:#333;min-width:14px;text-align:center;flex-shrink:0">1</div>
+        <div class="ml-art">♩</div>
+        <div class="ml-info"><div class="ml-track">THE DIPPING POINT</div><div class="ml-artist">TENDER FEST OST</div></div>
+        <div class="ml-dur">4:11</div>
+      </div>
+      <div class="ml-row" data-i="1">
+        <div style="font-size:7px;color:#333;min-width:14px;text-align:center;flex-shrink:0">2</div>
+        <div class="ml-art">♩</div>
+        <div class="ml-info"><div class="ml-track">SAUCE ON MY MIND</div><div class="ml-artist">TENDER FEST OST</div></div>
+        <div class="ml-dur">3:28</div>
+      </div>
+      <div class="ml-row" data-i="2">
+        <div style="font-size:7px;color:#333;min-width:14px;text-align:center;flex-shrink:0">3</div>
+        <div class="ml-art">♩</div>
+        <div class="ml-info"><div class="ml-track">CRISPY DREAM</div><div class="ml-artist">TENDER FEST OST</div></div>
+        <div class="ml-dur">5:02</div>
+      </div>
+    </div>
+    <div class="kh">SHORT:NEXT · LONG:PLAY FROM HERE · DBL:BACK</div>
+  </div>
+
+  <!-- NOTIFICATION TOAST -->
+  <div class="notif-toast" id="D_toast">
+    <div class="nt-bar">
+      <div class="nt-icon" id="D_ti">◈</div>
+      <div class="nt-body"><div class="nt-app" id="D_ta">APP</div><div class="nt-msg" id="D_tm">Notification</div></div>
+      <div class="nt-time" id="D_tt">NOW</div>
+    </div>
+    <div class="nt-prog"><div class="nt-prog-fill" id="D_tp"></div></div>
+  </div>
+
+</div>
+<div class="home-btn"></div>
+```
+
+  </div>
+  <div class="btn-row">
+    <div class="ctrl-btn" onclick="D_short()">SHORT</div>
+    <div class="ctrl-btn" onclick="D_long()">LONG</div>
+    <div class="ctrl-btn" onclick="D_back()">BACK</div>
+  </div>
+  <div class="btn-row" style="margin-top:4px">
+    <div class="ctrl-btn" onclick="fireNotif('D','mail','✉','MAIL','Ben Wolin: Hypnotist casting update','NOW')">MAIL NOTIF</div>
+    <div class="ctrl-btn" onclick="fireNotif('D','task','☑','TASKS','Tender Fest brainstorm — 3pm','2:45')">REMINDER</div>
+    <div class="ctrl-btn" onclick="fireNotif('D','claude','◎','CLAUDE','3 tasks overdue. Want a quick rundown?','NOW')">AI NOTIF</div>
+  </div>
+  <div class="state-disp" id="D_st">music panel</div>
+</div>
+
+</div><!-- /row-wrap -->
+
+<div class="divider"></div>
+
+<!-- ════════════════════════════
+     NOTIFICATION DESIGN KIT
+════════════════════════════ -->
+
+<div class="sec-title">02 · NOTIFICATION DESIGN KIT · ALL TYPES + STATES</div>
+
+<div class="notif-kit">
+
+  <!-- TOAST TYPES -->
+
+  <div style="font-size:6px;color:#333;letter-spacing:.1em;margin-bottom:12px">TOAST NOTIFICATIONS · OVERLAY ON ANY SCREEN · 5S AUTO-DISMISS</div>
+  <div class="nk-row">
+
+```
+<div class="nk-item">
+  <div class="nk-hdr">MAIL <span style="font-size:5px;color:#D85A30">● NEW EMAIL</span></div>
+  <div class="nk-toast">
+    <div class="nk-toast-icon" style="color:#D85A30">✉</div>
+    <div class="nk-toast-body">
+      <div class="nk-toast-app">MAIL · FROM JOAQUIN</div>
+      <div class="nk-toast-msg">RE: NIKE HOUSE FINAL INVOICE</div>
+    </div>
+    <div class="nk-toast-time">9:44</div>
+  </div>
+  <div class="nk-prog"><div class="nk-prog-fill" style="width:60%"></div></div>
+  <div class="nk-note">SHORT: dismiss · LONG: open inbox · auto-dismisses 5s</div>
+</div>
+
+<div class="nk-item">
+  <div class="nk-hdr">SMS <span style="font-size:5px;color:#1D9E75">● NEW MESSAGE</span></div>
+  <div class="nk-toast">
+    <div class="nk-toast-icon" style="color:#1D9E75">◈</div>
+    <div class="nk-toast-body">
+      <div class="nk-toast-app">MESSAGES · ANTHONY</div>
+      <div class="nk-toast-msg">Yo did u fix the El Camino lol</div>
+    </div>
+    <div class="nk-toast-time">NOW</div>
+  </div>
+  <div class="nk-prog"><div class="nk-prog-fill" style="width:30%"></div></div>
+  <div class="nk-note">SHORT: dismiss · LONG: open thread · auto-dismisses 5s</div>
+</div>
+
+<div class="nk-item">
+  <div class="nk-hdr">TASK / REMINDER <span style="font-size:5px;color:#BA7517">● DUE</span></div>
+  <div class="nk-toast">
+    <div class="nk-toast-icon" style="color:#BA7517">☑</div>
+    <div class="nk-toast-body">
+      <div class="nk-toast-app">TASKS · DUE TODAY</div>
+      <div class="nk-toast-msg">Invoice Joaquin — overdue</div>
+    </div>
+    <div class="nk-toast-time">9:00</div>
+  </div>
+  <div class="nk-prog"><div class="nk-prog-fill" style="width:90%"></div></div>
+  <div class="nk-note">SHORT: dismiss · LONG: open task · stays until dismissed</div>
+</div>
+
+<div class="nk-item">
+  <div class="nk-hdr">AI AGENT <span style="font-size:5px;color:#7F77DD">● PROACTIVE</span></div>
+  <div class="nk-toast">
+    <div class="nk-toast-icon" style="color:#7F77DD">◎</div>
+    <div class="nk-toast-body">
+      <div class="nk-toast-app">CLAUDE · PROACTIVE</div>
+      <div class="nk-toast-msg">Quick thought on your Tender Fest pitch</div>
+    </div>
+    <div class="nk-toast-time">NOW</div>
+  </div>
+  <div class="nk-prog"><div class="nk-prog-fill" style="width:15%"></div></div>
+  <div class="nk-note">SHORT: dismiss · LONG: open chat with context loaded · 5s</div>
+</div>
+```
+
+  </div>
+
+  <!-- NOTIFICATION SHADE (full expanded view) -->
+
+  <div style="font-size:6px;color:#333;letter-spacing:.1em;margin-bottom:12px">NOTIFICATION SHADE · DOUBLE PRESS FROM HOME · SHOWS ALL PENDING</div>
+  <div class="nk-row">
+
+```
+<div class="notif-shade">
+  <div class="ns-hdr">NOTIFICATIONS <div class="ns-clear" onclick="this.closest('.notif-shade').querySelectorAll('.ns-row').forEach(r=>r.remove())">CLEAR ALL</div></div>
+  <div class="ns-row new" onclick="this.classList.remove('new')">
+    <div class="ns-app"><div class="ns-app-dot claude"></div>CLAUDE · NOW</div>
+    <div class="ns-msg">Quick thought on your Tender Fest pitch — the sauce theme has legs. Want to brainstorm?</div>
+    <div class="ns-time">JUST NOW</div>
+  </div>
+  <div class="ns-row new" onclick="this.classList.remove('new')">
+    <div class="ns-app"><div class="ns-app-dot sms"></div>MESSAGES · JOAQUIN</div>
+    <div class="ns-msg">Can you call me re: the overtime rate thing?</div>
+    <div class="ns-time">9:51 AM</div>
+  </div>
+  <div class="ns-row new" onclick="this.classList.remove('new')">
+    <div class="ns-app"><div class="ns-app-dot mail"></div>MAIL · OVATION TRAVEL</div>
+    <div class="ns-msg">Your itinerary · LAX→JFK MAR 18 is ready</div>
+    <div class="ns-time">8:30 AM</div>
+  </div>
+  <div class="ns-row new" onclick="this.classList.remove('new')">
+    <div class="ns-app"><div class="ns-app-dot task"></div>TASKS · OVERDUE</div>
+    <div class="ns-msg">Invoice Joaquin — was due yesterday</div>
+    <div class="ns-time">8:00 AM</div>
+  </div>
+  <div class="ns-row" onclick="this.classList.remove('new')">
+    <div class="ns-app"><div class="ns-app-dot claude"></div>CLAUDE · MORNING BRIEF</div>
+    <div class="ns-msg">Good morning. 3 tasks today, 1 meeting, flight in 4 days.</div>
+    <div class="ns-time">8:00 AM</div>
+  </div>
+  <div class="ns-row" onclick="this.classList.remove('new')">
+    <div class="ns-app"><div class="ns-app-dot mail"></div>MAIL · BEN WOLIN</div>
+    <div class="ns-msg">Hypnotist doc casting update — Dr. Harrington confirmed</div>
+    <div class="ns-time">YESTERDAY</div>
+  </div>
+</div>
+
+<!-- AI AGENT NOTIF TYPES breakdown -->
+<div style="border:2px solid #1a1a1a;padding:14px;width:360px">
+  <div style="font-size:6px;color:#2a2a2a;letter-spacing:.1em;margin-bottom:12px">CLAUDE PROACTIVE NOTIFICATION TYPES</div>
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <div style="border:1px solid #1a1a1a;padding:8px">
+      <div style="font-size:5px;color:#7F77DD;letter-spacing:.1em;margin-bottom:4px">DAILY BRIEF · 8:00 AM</div>
+      <div style="font-size:6px;color:#444;line-height:1.8;letter-spacing:.04em">"Good morning. 3 tasks due today, 1 SSS meeting, your flight to JFK is in 4 days."</div>
+    </div>
+    <div style="border:1px solid #1a1a1a;padding:8px">
+      <div style="font-size:5px;color:#7F77DD;letter-spacing:.1em;margin-bottom:4px">PROACTIVE THOUGHT · TRIGGERED</div>
+      <div style="font-size:6px;color:#444;line-height:1.8;letter-spacing:.04em">"Quick thought on your Tender Fest pitch — the sauce theme has legs. Want to explore?"</div>
+    </div>
+    <div style="border:1px solid #1a1a1a;padding:8px">
+      <div style="font-size:5px;color:#7F77DD;letter-spacing:.1em;margin-bottom:4px">TASK NUDGE · CONTEXT-AWARE</div>
+      <div style="font-size:6px;color:#444;line-height:1.8;letter-spacing:.04em">"Invoice Joaquin is overdue. Want me to draft it from the day rate notes?"</div>
+    </div>
+    <div style="border:1px solid #1a1a1a;padding:8px">
+      <div style="font-size:5px;color:#7F77DD;letter-spacing:.1em;margin-bottom:4px">REMINDER ASSIST · TIME-BASED</div>
+      <div style="font-size:6px;color:#444;line-height:1.8;letter-spacing:.04em">"Ben call is in 15 min. Your notes from last time: Dr. Harrington, casting sheet."</div>
+    </div>
+  </div>
+</div>
+
+<!-- NOTIF RULES -->
+<div style="border:2px solid #1a1a1a;padding:14px;width:240px">
+  <div style="font-size:6px;color:#2a2a2a;letter-spacing:.1em;margin-bottom:12px">NOTIFICATION RULES</div>
+  <div style="font-size:5px;color:#1a1a1a;letter-spacing:.06em;line-height:2.8;display:flex;flex-direction:column;gap:0">
+    <div><span style="color:#fff">PRIORITY</span> — AI &gt; TASK OVERDUE &gt; SMS &gt; MAIL</div>
+    <div><span style="color:#fff">STACKING</span> — max 3 queued, oldest first</div>
+    <div><span style="color:#fff">DISMISSAL</span> — SHORT press or 5s auto</div>
+    <div><span style="color:#fff">OPEN APP</span> — LONG press to jump</div>
+    <div><span style="color:#fff">BADGE</span> — count on sidebar item</div>
+    <div><span style="color:#fff">SHADE</span> — DBL press from any screen</div>
+    <div><span style="color:#fff">DO NOT DISTURB</span> — toggle in settings</div>
+    <div><span style="color:#fff">AI FREQUENCY</span> — max 3 proactive/day</div>
+  </div>
+</div>
+```
+
+  </div>
+</div>
+
+<script>
+/* ════ UTILS ════ */
+function sv(scrId,viewId){document.querySelectorAll('#'+scrId+' .view').forEach(v=>v.classList.remove('active'));document.getElementById(viewId)?.classList.add('active');}
+function fl(listId,idx){const rows=document.querySelectorAll('#'+listId+' [data-i]');rows.forEach((r,i)=>r.classList.toggle('focused',i===idx));if(rows[idx])rows[idx].scrollIntoView({block:'nearest'});return rows.length;}
+function flash(el,ms=120){if(!el)return;const prevBg=el.style.background,prevC=el.style.color;el.style.background='#fff';el.style.color='#000';setTimeout(()=>{el.style.background=prevBg;el.style.color=prevC;},ms);}
+function st(id,txt){const e=document.getElementById(id);if(e)e.textContent=txt;}
+
+/* ════ NOTIFICATION SYSTEM ════ */
+const toastQueues={};
+function fireNotif(dev,type,icon,app,msg,time){
+  const toast=document.getElementById(dev+'_toast');
+  const icons={mail:'#D85A30',sms:'#1D9E75',task:'#BA7517',claude:'#7F77DD'};
+  if(!toast)return;
+  document.getElementById(dev+'_ti').textContent=icon;
+  document.getElementById(dev+'_ti').style.color=icons[type]||'#fff';
+  document.getElementById(dev+'_ta').textContent=app;
+  document.getElementById(dev+'_tm').textContent=msg;
+  document.getElementById(dev+'_tt').textContent=time;
+  toast.classList.add('visible');
+  // progress bar animation
+  const prog=document.getElementById(dev+'_tp');
+  if(prog){prog.style.width='0%';let pct=0;const pi=setInterval(()=>{pct+=2;prog.style.width=pct+'%';if(pct>=100){clearInterval(pi);toast.classList.remove('visible');prog.style.width='0%';}},100);}
+}
+
+/* ════ CLOCK ════ */
+function tick(){const n=new Date();const t=String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0');['At','Bt','Ct','Dt'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent=t;});}
+tick();setInterval(tick,1000);
+
+/* ════ WORLD CLOCKS ════ */
+const CZ=[{id:'LA',tz:'America/Los_Angeles'},{id:'NY',tz:'America/New_York'},{id:'LN',tz:'Europe/London'},{id:'TK',tz:'Asia/Tokyo'}];
+const DAYS=['SUN','MON','TUE','WED','THU','FRI','SAT'],MONS=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+function drawClk(id,h,m,s){const c=document.getElementById('clk'+id);if(!c)return;c.width=52;c.height=52;const ctx=c.getContext('2d');ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,52,52);ctx.strokeStyle='#444';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(26,26,23,0,Math.PI*2);ctx.stroke();for(let i=0;i<12;i++){const a=i*Math.PI/6;ctx.beginPath();ctx.moveTo(26+20*Math.sin(a),26-20*Math.cos(a));ctx.lineTo(26+23*Math.sin(a),26-23*Math.cos(a));ctx.strokeStyle='#333';ctx.lineWidth=1;ctx.stroke();}const ha=(h%12+m/60)*Math.PI/6;ctx.beginPath();ctx.moveTo(26,26);ctx.lineTo(26+12*Math.sin(ha),26-12*Math.cos(ha));ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();const ma=(m+s/60)*Math.PI/30;ctx.beginPath();ctx.moveTo(26,26);ctx.lineTo(26+18*Math.sin(ma),26-18*Math.cos(ma));ctx.strokeStyle='#fff';ctx.lineWidth=1.5;ctx.stroke();const sa=s*Math.PI/30;ctx.beginPath();ctx.moveTo(26,26);ctx.lineTo(26+21*Math.sin(sa),26-21*Math.cos(sa));ctx.strokeStyle='#aaa';ctx.lineWidth=1;ctx.stroke();}
+function updateClocks(){CZ.forEach(z=>{const n=new Date(new Date().toLocaleString('en-US',{timeZone:z.tz}));const h=n.getHours(),m=n.getMinutes(),s=n.getSeconds();drawClk(z.id,h,m,s);const h12=h%12||12;st('clk'+z.id+'t',String(h12).padStart(2,'0')+':'+String(m).padStart(2,'0'));st('clk'+z.id+'ap',h>=12?'PM':'AM');st('clk'+z.id+'d',DAYS[n.getDay()]+' '+n.getDate()+' '+MONS[n.getMonth()]);})}
+updateClocks();setInterval(updateClocks,1000);
+
+/* ════ POMODORO ════ */
+let pomoRun=false,pomoSec=25*60,pomoTotal=25*60,pomoBreak=false,pomoRound=1,pomoInt=null;
+function pomoFmt(s){return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
+function pomoRender(){
+  st('A_pomotime',pomoFmt(pomoSec));
+  const pct=Math.round((1-pomoSec/pomoTotal)*100);
+  const pf=document.getElementById('A_pomoprog');if(pf)pf.style.width=pct+'%';
+  st('A_pomophase',pomoBreak?'SHORT BREAK':'WORK SESSION');
+  st('A_pomosess',(pomoBreak?'BREAK':'WORK')+' · '+pomoRound+'/4');
+  const eta=new Date(Date.now()+pomoSec*1000);
+  const etas=String(eta.getHours()%12||12).padStart(2,'0')+':'+String(eta.getMinutes()).padStart(2,'0');
+  st('A_pomoeta',pct+'% · DONE '+etas);
+  const pw=document.getElementById('A_pomo_dots');
+  if(pw){pw.querySelectorAll('.pomo-dot').forEach((d,i)=>d.classList.toggle('done',i<pomoRound));}
+  const view=document.getElementById('A_pomo');
+  if(view)view.classList.toggle('break-mode',pomoBreak);
+}
+function A_pomoToggle(){pomoRun=!pomoRun;st('A_pomobtn',pomoRun?'PAUSE':'RESUME');if(pomoRun&&!pomoInt){pomoInt=setInterval(()=>{if(!pomoRun)return;pomoSec--;if(pomoSec<=0){pomoBreak=!pomoBreak;pomoTotal=pomoBreak?5*60:25*60;pomoSec=pomoTotal;if(!pomoBreak)pomoRound=Math.min(4,pomoRound+1);}pomoRender();},1000);};}
+function A_pomoSkip(){pomoBreak=!pomoBreak;pomoTotal=pomoBreak?5*60:25*60;pomoSec=pomoTotal;if(!pomoBreak)pomoRound=Math.min(4,pomoRound+1);pomoRender();}
+function A_pomoReset(){clearInterval(pomoInt);pomoInt=null;pomoRun=false;pomoSec=25*60;pomoTotal=25*60;pomoBreak=false;pomoRound=1;st('A_pomobtn','START');pomoRender();}
+pomoRender();
+
+/* ════ STOPWATCH ════ */
+let swRun=false,swMs=0,swInt2=null,swLaps=[],swBest=-1,swWorst=-1,swLast=0;
+function swFmt(){const t=Math.floor(swMs/10);return String(Math.floor(t/6000)).padStart(2,'0')+':'+String(Math.floor((t%6000)/100)).padStart(2,'0');}
+function swRender(){st('A_swt',swFmt());st('A_swms','.'+String(swMs%100).padStart(2,'0')+'0');}
+function swToggle(){swRun=!swRun;const b=document.getElementById('A_swbtn');if(b)b.textContent=swRun?'STOP':'START';if(b)b.classList.toggle('active',swRun);if(swRun)swInt2=setInterval(()=>{swMs++;swRender();},10);else clearInterval(swInt2);}
+function swLap(){if(!swRun)return;const l=swMs-swLast;swLast=swMs;swLaps.unshift(l);if(swBest<0||l<swBest)swBest=l;if(swWorst<0||l>swWorst)swWorst=l;const c=document.getElementById('A_laps');c.innerHTML=swLaps.map((lap,i)=>`<div class="sw-lap${lap===swBest?' best':lap===swWorst?' worst':''}"><span class="sw-lap-n">LAP ${swLaps.length-i}</span><span>${String(Math.floor(lap/600000)).padStart(2,'0')}:${String(Math.floor((lap%600000)/10000)).padStart(2,'0')}.${String(Math.floor((lap%10000)/100)).padStart(2,'0')}</span></div>`).join('');}
+function swReset(){clearInterval(swInt2);swRun=false;swMs=0;swLaps=[];swBest=-1;swWorst=-1;swLast=0;const b=document.getElementById('A_swbtn');if(b){b.textContent='START';b.classList.remove('active');}swRender();const c=document.getElementById('A_laps');c.innerHTML='<div style="font-size:5px;color:#1a1a1a;text-align:center;padding:10px;letter-spacing:.06em">PRESS LAP TO RECORD</div>';}
+
+/* ════ DEVICE A: FOCUS ════ */
+let As='panel',Ai=0;
+function A_short(){
+  if(As==='panel'){Ai=(Ai+1)%3;fl('A_plist',Ai);}
+  else if(As==='pomo'){A_pomoToggle();}
+  else if(As==='sw'){swToggle();}
+}
+function A_long(){
+  if(As==='panel'){
+    if(Ai===0){As='pomo';sv('scrA','A_pomo');st('A_st','pomodoro');}
+    else if(Ai===1){As='clocks';sv('scrA','A_clocks');st('A_st','world clocks');}
+    else{As='sw';sv('scrA','A_sw');st('A_st','stopwatch');}
+  } else if(As==='pomo'){A_pomoSkip();}
+  else if(As==='sw'){swLap();}
+}
+function A_back(){if(As!=='panel'){As='panel';sv('scrA','A_panel');Ai=0;fl('A_plist',0);st('A_st','focus panel');}}
+
+/* ════ DEVICE B: MAIL ════ */
+let Bs='panel',Bi=0,Bai=0,Bii=0;
+function B_short(){
+  if(Bs==='panel'){Bi=(Bi+1)%6;fl('B_plist',Bi);}
+  else if(Bs==='detail'){Bai=(Bai+1)%4;fl('B_acts',Bai);}
+  else if(Bs==='inbox'){Bii=(Bii+1)%5;fl('B_ilist',Bii);}
+}
+function B_long(){
+  if(Bs==='panel'){
+    if(Bi<=3){Bs='detail';sv('scrB','B_detail');Bai=0;fl('B_acts',0);st('B_st','email detail');}
+    else if(Bi===4){Bs='inbox';sv('scrB','B_inbox');Bii=0;fl('B_ilist',0);st('B_st','full inbox');}
+    else{Bs='compose';sv('scrB','B_compose');st('B_st','compose');}
+  } else if(Bs==='detail'){
+    const rows=document.querySelectorAll('#B_acts [data-i]');flash(rows[Bai]);
+    setTimeout(()=>{Bs='panel';sv('scrB','B_panel');Bi=0;fl('B_plist',0);st('B_st','mail panel');},200);
+  } else if(Bs==='inbox'){
+    const rows=document.querySelectorAll('#B_ilist [data-i]');flash(rows[Bii]);
+    setTimeout(()=>{Bs='detail';sv('scrB','B_detail');st('B_st','email detail');},200);
+  }
+}
+function B_back(){
+  if(Bs==='detail'||Bs==='inbox'||Bs==='compose'){Bs='panel';sv('scrB','B_panel');Bi=0;fl('B_plist',0);st('B_st','mail panel');}
+}
+
+/* ════ DEVICE C: MESSAGES ════ */
+let Cs='panel',Ci=0;
+function C_short(){
+  if(Cs==='panel'){Ci=(Ci+1)%5;fl('C_plist',Ci);}
+}
+function C_long(){
+  if(Cs==='panel'){
+    if(Ci<4){Cs='thread';sv('scrC','C_thread');st('C_st','thread view');
+      const names=['JOAQUIN','ANTHONY','BEN W.','MOM'];st('C_thread_name',names[Ci]||'THREAD');
+    } else {Cs='new';sv('scrC','C_new');st('C_st','new message');}
+  }
+}
+function C_back(){
+  if(Cs!=='panel'){Cs='panel';sv('scrC','C_panel');Ci=0;fl('C_plist',0);st('C_st','messages panel');}
+}
+
+/* ════ DEVICE D: MUSIC ════ */
+let Ds='panel',Di=0,Dli=0,Dqi=0,Dplaying=true;
+function D_setTab(i){[0,1,2].forEach(n=>{const t=document.getElementById('D_tab'+n);if(t)t.classList.toggle('active',n===i);});}
+function D_togglePlay(){Dplaying=!Dplaying;const b=document.getElementById('D_playbtn');const art=document.getElementById('D_npart');if(b)b.textContent=Dplaying?'▶':'■';if(art)art.classList.toggle('spin',Dplaying);}
+function scrubClick(e,el){const r=el.getBoundingClientRect();const p=Math.round((e.clientX-r.left)/r.width*100);const f=document.getElementById('D_scrub');if(f)f.style.width=p+'%';const m=Math.floor(p*222/100),s=m%60;st('D_elapsed',Math.floor(m/60)+':'+String(s).padStart(2,'0'));}
+function volClick(e,el){const r=el.getBoundingClientRect();const p=Math.round((e.clientX-r.left)/r.width*100);const f=document.getElementById('D_vol');if(f)f.style.width=p+'%';st('D_volpct',p+'%');}
+function D_short(){
+  if(Ds==='panel'){Di=(Di+1)%4;fl('D_plist',Di);}
+  else if(Ds==='lib'){Dli=(Dli+1)%6;fl('D_llist',Dli);}
+  else if(Ds==='np'){D_togglePlay();}
+  else if(Ds==='queue'){Dqi=(Dqi+1)%3;fl('D_qlist',Dqi);}
+}
+function D_long(){
+  if(Ds==='panel'){
+    if(Di===0){Ds='lib';sv('scrD','D_lib');Dli=0;fl('D_llist',0);st('D_st','library');}
+    else if(Di===1){Ds='np';sv('scrD','D_np');st('D_st','now playing');}
+    else if(Di===2){Ds='queue';sv('scrD','D_queue');Dqi=0;fl('D_qlist',0);st('D_st','queue');}
+    else{Ds='lib';sv('scrD','D_lib');st('D_st','playlists');}
+  } else if(Ds==='lib'){
+    const rows=document.querySelectorAll('#D_llist [data-i]');flash(rows[Dli]);
+    setTimeout(()=>{Ds='np';sv('scrD','D_np');st('D_st','now playing');},200);
+  } else if(Ds==='np'){D_togglePlay();}
+}
+function D_back(){
+  if(Ds!=='panel'){Ds='panel';sv('scrD','D_panel');Di=0;fl('D_plist',0);st('D_st','music panel');}
+}
+
+/* ════ KEYBOARD (all devices) ════ */
+document.addEventListener('keydown',e=>{
+  if(['INPUT','TEXTAREA'].includes(document.activeElement.tagName))return;
+  if(e.key===' '){e.preventDefault();A_short();B_short();C_short();D_short();}
+  if(e.key==='Enter'){e.preventDefault();A_long();B_long();C_long();D_long();}
+  if(e.key==='Backspace'||e.key==='Escape'){e.preventDefault();A_back();B_back();C_back();D_back();}
+});
+</script>
+
+</body>
+</html>
