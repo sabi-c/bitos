@@ -10,6 +10,8 @@ class StatusState:
         self.battery_pct = 84
         self.charging = False
         self.ai_online = True
+        self.imessage_status = "unknown"
+        self.imessage_unread = 0
 
     def update(self, **kwargs):
         with self._lock:
