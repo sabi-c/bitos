@@ -127,9 +127,10 @@ For **every implementation iteration** (code or docs):
 | P5-012d | Phase 5 | WS-H Companion | companion/js/crypto.js — AES-GCM encrypt | GPT-5.2-Codex | done | 2026-03-14 | Shipped AES-GCM payload encryption parity for WiFi provisioning. |
 | P5-012e | Phase 5 | WS-H Companion | companion/pair.html — full pairing flow | GPT-5.2-Codex | done | 2026-03-14 | `companion/pair.html` shipped for end-to-end pairing flow. |
 | P5-012f | Phase 5 | WS-H Companion | Render/GitHub Pages deploy workflow | unassigned | todo | 2026-03-14 | Planned companion hosting pipeline |
-| P6-001 | Phase 6 | WS-I Resilience | 5-press graceful shutdown + state save | GPT-5.2-Codex | done | 2026-03-14 | Implemented power gesture shutdown path with state-save safeguards. |
-| P6-002 | Phase 6 | WS-I Resilience | Offline mode UI states + status bar indicators | GPT-5.2-Codex | done | 2026-03-14 | Implemented offline/error chat states and status indicators for degraded mode. |
-| P6-003 | Phase 6 | WS-I Resilience | Pomodoro state persistence across reboots | GPT-5.2-Codex | done | 2026-03-14 | Added focus timer state restore path across restart cycles. |
+| P6-001 | Phase 6 | WS-I Resilience | 5-press graceful shutdown + state save | unassigned | todo | 2026-03-14 | Planned resilience improvement |
+| P6-002 | Phase 6 | WS-I Resilience | Offline mode UI states + status bar indicators | unassigned | todo | 2026-03-14 | Planned offline UX hardening |
+| P6-003 | Phase 6 | WS-I Resilience | Pomodoro state persistence across reboots | GPT-5.2-Codex | done | 2026-03-14 | Added FocusPanel save/restore persistence and shutdown wiring to store active state before runtime state write. |
+| CONV-001 | Phase 4 | WS-F Conversation UX | Starter prompts for empty chat sessions | GPT-5.2-Codex | done | 2026-03-14 | Added template rows with short-press cycle and long-press send behavior for zero-message sessions. |
 | P6-004 | Phase 6 | WS-I Resilience | Request signing on device→server calls (SD-004) | unassigned | todo | 2026-03-14 | Security alignment task |
 | P6-005 | Phase 6 | WS-I Resilience | Append-only audit log for tier-2 actions (SD-006) | unassigned | todo | 2026-03-14 | Security accountability task |
 | P6-006 | Phase 6 | WS-I Resilience | Anthropic API certificate pinning (SD-009) | unassigned | todo | 2026-03-14 | Security hardening task |

@@ -2,6 +2,7 @@
 BITOS Chat Panel (Phase 2 — reliability UX)
 Text input via keyboard/button, streaming response rendered line-by-line.
 """
+import json
 import threading
 
 import pygame
@@ -22,6 +23,26 @@ from display.theme import merge_runtime_ui_settings, load_ui_font, ui_line_heigh
 from client.api import BackendClient, BackendChatError
 from audio import AudioPipeline
 from storage.repository import DeviceRepository
+
+
+DEFAULT_TEMPLATES = [
+    {
+        "label": "MORNING BRIEF",
+        "message": "Quick rundown: my tasks today, anything time-sensitive, and what I should focus on first.",
+    },
+    {
+        "label": "TENDER FEST",
+        "message": "Let's brainstorm Tender Fest. Current directions: No Tender Left Behind, sauce themes, Heinz sponsor angle. What should we explore?",
+    },
+    {
+        "label": "QUICK TASK",
+        "message": "What are my most urgent tasks right now? Which one first and why?",
+    },
+    {
+        "label": "HACKER MODE",
+        "message": "What's the most important thing to fix or build in BITOS right now?",
+    },
+]
 
 
 class ChatPanel(BaseScreen):
@@ -60,6 +81,8 @@ class ChatPanel(BaseScreen):
         self._last_failed_message: str | None = None
         self._last_error_retryable = False
         self._session_id = None
+        self._template_index = 0
+        self._templates = list(DEFAULT_TEMPLATES)
 
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
         self._font = load_ui_font("body", self._ui_settings)
@@ -67,6 +90,14 @@ class ChatPanel(BaseScreen):
         self._line_height = ui_line_height(self._font, self._ui_settings)
 
         if self._repository:
+            raw = self._repository.get_setting("chat_templates", None)
+            if raw:
+                try:
+                    loaded = json.loads(raw)
+                    if isinstance(loaded, list):
+                        self._templates = loaded
+                except Exception:
+                    pass
             self._session_id, restored = self._repository.load_latest_session_messages()
             if restored:
                 with self._messages_lock:
@@ -98,7 +129,15 @@ class ChatPanel(BaseScreen):
             self._input_text += event.unicode
 
     def handle_action(self, action: str):
+        if self._showing_templates() and action == "SHORT_PRESS":
+            if self._templates:
+                self._template_index = (self._template_index + 1) % len(self._templates)
+            return
+
         if action == "LONG_PRESS":
+            if self._showing_templates() and self._templates:
+                self._send_template_message(self._templates[self._template_index])
+                return
             if self._can_retry():
                 self._retry_last_failed()
             else:
@@ -135,13 +174,16 @@ class ChatPanel(BaseScreen):
             for line in lines:
                 visible_lines.append((line, color))
 
-        start = max(0, len(visible_lines) - int((max_y - msg_y) / self._line_height) - self._scroll_offset)
-        for line_text, color in visible_lines[start:]:
-            if msg_y > max_y:
-                break
-            text_surface = self._font.render(line_text, False, color)
-            surface.blit(text_surface, (4, msg_y))
-            msg_y += self._line_height
+        if self._showing_templates():
+            msg_y = self._render_templates(surface=surface, start_y=msg_y, max_y=max_y)
+        else:
+            start = max(0, len(visible_lines) - int((max_y - msg_y) / self._line_height) - self._scroll_offset)
+            for line_text, color in visible_lines[start:]:
+                if msg_y > max_y:
+                    break
+                text_surface = self._font.render(line_text, False, color)
+                surface.blit(text_surface, (4, msg_y))
+                msg_y += self._line_height
 
         # ── Streaming indicator / retry hint + queue debug status ──
         if self._is_streaming:
@@ -213,6 +255,13 @@ class ChatPanel(BaseScreen):
 
         thread = threading.Thread(target=self._stream_response, args=(text,), daemon=True)
         thread.start()
+
+    def _send_template_message(self, template: dict) -> None:
+        message = str(template.get("message", "")).strip()
+        if not message:
+            return
+        self._input_text = message
+        self._send_message()
 
     def _retry_last_failed(self):
         if not self._last_failed_message or self._is_streaming:
@@ -303,6 +352,23 @@ class ChatPanel(BaseScreen):
         if current:
             lines.append(current)
         return lines or [""]
+
+    def _showing_templates(self) -> bool:
+        return not self._messages and bool(self._templates)
+
+    def _render_templates(self, surface: pygame.Surface, start_y: int, max_y: int) -> int:
+        y = start_y
+        for idx, template in enumerate(self._templates):
+            if y > max_y:
+                break
+            label = str(template.get("label", "TEMPLATE"))
+            color = WHITE if idx == self._template_index else DIM2
+            text_surface = self._font.render(label, False, color)
+            surface.blit(text_surface, (4, y))
+            hint_surface = self._font_small.render("LONG: SEND", False, DIM3)
+            surface.blit(hint_surface, (PHYSICAL_W - hint_surface.get_width() - 4, y + 1))
+            y += self._line_height
+        return y
 
 
     def get_active_compose_target(self) -> str | None:

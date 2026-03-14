@@ -10,7 +10,7 @@ from screens.base import BaseScreen
 class ScreenManager:
     """Manages a stack of screens. Top screen receives render + input."""
 
-    def __init__(self, notification_queue: NotificationQueue | None = None):
+    def __init__(self, notification_queue: NotificationQueue | None = None, status_state=None):
         self._stack: list[BaseScreen] = []
         self._flash_frames = 0
         self.notification_queue = notification_queue or NotificationQueue()
@@ -18,6 +18,11 @@ class ScreenManager:
         self._passkey_overlay: PasskeyOverlay | None = None
         self._active_overlay = None
         self._device_status_char = None
+        self._status_state = status_state
+        try:
+            self._status_font = pygame.font.Font(tokens.FONT_PATH, tokens.FONT_SIZES["small"])
+        except Exception:
+            self._status_font = pygame.font.SysFont("monospace", tokens.FONT_SIZES["small"])
 
     def push(self, screen: BaseScreen):
         if self._stack:
@@ -148,4 +153,16 @@ class ScreenManager:
         surface.fill(BLACK)
         if self.current:
             self.current.render(surface)
+        self._render_status_bar(surface)
         self.render_overlay(surface)
+
+    def _render_status_bar(self, surface: pygame.Surface) -> None:
+        if self._status_state is None:
+            return
+        left = self._status_state.bar_left()
+        right = self._status_state.bar_right()
+        left_surface = self._status_font.render(left, False, WHITE)
+        right_surface = self._status_font.render(right, False, WHITE)
+        y = 2
+        surface.blit(left_surface, (4, y))
+        surface.blit(right_surface, (tokens.PHYSICAL_W - right_surface.get_width() - 4, y))

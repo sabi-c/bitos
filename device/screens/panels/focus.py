@@ -1,6 +1,9 @@
 """BITOS Focus panel with button-first timer controls."""
 from __future__ import annotations
 
+import json
+import time
+
 import pygame
 
 from display.theme import load_ui_font, merge_runtime_ui_settings
@@ -12,16 +15,21 @@ from screens.components import NavItem, VerticalNavController
 class FocusPanel(BaseScreen):
     """Minimal focus timer experience for Phase 4 shell breadth."""
 
-    def __init__(self, on_back=None, ui_settings: dict | None = None, duration_seconds: int = 25 * 60):
+    def __init__(self, on_back=None, ui_settings: dict | None = None, duration_seconds: int = 25 * 60, repository=None):
         self._on_back = on_back
+        self._repository = repository
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
         self._font_title = load_ui_font("title", self._ui_settings)
         self._font_body = load_ui_font("body", self._ui_settings)
         self._font_small = load_ui_font("small", self._ui_settings)
 
         self._default_duration = max(60, int(duration_seconds))
-        self._remaining_seconds = self._default_duration
-        self._is_running = False
+        self._total_seconds = self._default_duration
+        self._elapsed_seconds = 0
+        self._remaining_seconds = self._total_seconds
+        self._running = False
+        self._session_number = 1
+        self._is_break = False
         self._countdown_accum = 0.0
 
         self._nav = VerticalNavController(
@@ -52,7 +60,7 @@ class FocusPanel(BaseScreen):
             self._nav.move(-1)
 
     def update(self, dt: float):
-        if not self._is_running:
+        if not self._running:
             return
 
         self._countdown_accum += max(0.0, dt)
@@ -62,8 +70,9 @@ class FocusPanel(BaseScreen):
         self._countdown_accum -= elapsed
 
         self._remaining_seconds = max(0, self._remaining_seconds - elapsed)
+        self._elapsed_seconds = max(0, self._total_seconds - self._remaining_seconds)
         if self._remaining_seconds <= 0:
-            self._is_running = False
+            self._running = False
 
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
@@ -77,8 +86,8 @@ class FocusPanel(BaseScreen):
         timer_x = (PHYSICAL_W - timer_surface.get_width()) // 2
         surface.blit(timer_surface, (timer_x, 48))
 
-        mode = "RUNNING" if self._is_running else "PAUSED"
-        mode_surface = self._font_small.render(mode, False, DIM1 if self._is_running else DIM2)
+        mode = "RUNNING" if self._running else "PAUSED"
+        mode_surface = self._font_small.render(mode, False, DIM1 if self._running else DIM2)
         mode_x = (PHYSICAL_W - mode_surface.get_width()) // 2
         surface.blit(mode_surface, (mode_x, 68))
 
@@ -97,10 +106,40 @@ class FocusPanel(BaseScreen):
         hint = self._font_small.render("SEL SHORT • BACK MENU", False, DIM3)
         surface.blit(hint, (8, PHYSICAL_H - 14))
 
+    def save_state(self) -> None:
+        if not self._running or not self._repository:
+            return
+        state = {
+            "running": True,
+            "elapsed_s": self._elapsed_seconds,
+            "total_s": self._total_seconds,
+            "session_num": getattr(self, "_session_number", 1),
+            "is_break": getattr(self, "_is_break", False),
+            "saved_at": time.time(),
+        }
+        self._repository.set_setting("pomodoro_state", json.dumps(state))
 
-    def restore_state(self, remaining_seconds: int, is_running: bool):
+    def restore_state(self, state: dict | None = None, *, remaining_seconds: int | None = None, is_running: bool | None = None):
+        if state is not None:
+            age = time.time() - state.get("saved_at", 0)
+            if not state.get("running") or age > 3600:
+                return
+            self._elapsed_seconds = max(0, int(state.get("elapsed_s", 0) + age))
+            self._total_seconds = max(60, int(state.get("total_s", self._default_duration)))
+            self._remaining_seconds = max(0, self._total_seconds - self._elapsed_seconds)
+            self._running = self._remaining_seconds > 0
+            self._session_number = int(state.get("session_num", self._session_number))
+            self._is_break = bool(state.get("is_break", self._is_break))
+            self._countdown_accum = 0.0
+            return
+
+        if remaining_seconds is None:
+            remaining_seconds = self._default_duration
+        running = bool(is_running)
         self._remaining_seconds = max(0, int(remaining_seconds))
-        self._is_running = bool(is_running and self._remaining_seconds > 0)
+        self._total_seconds = max(self._remaining_seconds, self._default_duration)
+        self._elapsed_seconds = max(0, self._total_seconds - self._remaining_seconds)
+        self._running = bool(running and self._remaining_seconds > 0)
         self._countdown_accum = 0.0
 
     @property
@@ -109,17 +148,21 @@ class FocusPanel(BaseScreen):
 
     @property
     def is_running(self) -> bool:
-        return self._is_running
+        return self._running
 
     def _toggle_running(self):
         if self._remaining_seconds <= 0:
-            self._remaining_seconds = self._default_duration
-        self._is_running = not self._is_running
+            self._total_seconds = self._default_duration
+            self._elapsed_seconds = 0
+            self._remaining_seconds = self._total_seconds
+        self._running = not self._running
 
     def _reset_timer(self):
-        self._is_running = False
+        self._running = False
         self._countdown_accum = 0.0
-        self._remaining_seconds = self._default_duration
+        self._total_seconds = self._default_duration
+        self._elapsed_seconds = 0
+        self._remaining_seconds = self._total_seconds
 
     def _go_back(self):
         if self._on_back:
@@ -135,8 +178,8 @@ class FocusPanel(BaseScreen):
         if not items:
             return
         start_item = items[0]
-        label = "PAUSE" if self._is_running else "START"
-        status = "LIVE" if self._is_running else "READY"
+        label = "PAUSE" if self._running else "START"
+        status = "LIVE" if self._running else "READY"
         items[0] = NavItem(
             key=start_item.key,
             label=label,

@@ -1,28 +1,102 @@
 # BITOS Handoff Notes (Next Agent)
 
-## What was built
-Full pre-hardware sprint complete. All Phase 4-6 core features shipped and tested. CI green. Device arrives today.
+This document is a practical takeover brief for the next implementation contributor.
 
-## Hardware bring-up sequence
-1. Flash SD (Pi OS Lite 64-bit, Pi Imager)
-2. `cp scripts/cloud-init/user-data /Volumes/bootfs/user-data`
-3. Power on, wait 15 min
-4. `ssh pi@bitos`
-5. `python scripts/verify_hardware.py`
-6. `sudo nano /etc/bitos/secrets` → add `ANTHROPIC_API_KEY`
-7. `sudo systemctl start bitos`
-8. Hold button, speak, hear response
+## 1) Current state snapshot
 
-## If something breaks
-- Display blank: `sudo raspi-config nonint do_spi 0 && sudo reboot`
-- No audio: `cd ~/whisplay && sudo bash install.sh`
-- Button dead: check `GPIO.BOARD` pin 11 reads 0 when pressed
-- Claude offline: check `/etc/bitos/secrets` has valid API key
+Pre-hardware sprints complete. Device arriving today.
+Next: hardware bring-up via FIRST_BOOT.md.
+Run scripts/verify_hardware.py first on Pi.
 
-## After hardware confirmed working
-Next priorities:
-1. UI spec gaps (see `docs/reports/UI_SPEC_GAPS.md`)
-   Use Claude Code for surgical screen-by-screen fixes
-2. P5-012f — deploy companion to custom domain
-3. P7-001 — Piper TTS offline fallback
-4. P8-001 — Global workspace (makes Claude feel like it knows you)
+
+### Completed in this branch sequence
+- Phase 2 shell progression: boot → lock → home flow.
+- Button-first navigation in Home + reusable nav primitives (`NavItem`, `VerticalNavController`).
+- Local SQLite persistence scaffold (`DeviceRepository`) with schema versioning.
+- Chat session persistence + startup hydration in `ChatPanel`.
+- Provider-agnostic server LLM bridge with runtime selection:
+  - `anthropic`
+  - `openai`
+  - `openclaw`
+  - `nanoclaw`
+  - `echo` (deterministic local/test fallback)
+
+### Important architectural direction
+- UI/screen code should stay provider-agnostic.
+- Model/runtime integration belongs behind the server bridge contract.
+- Domain actions (tasks/messages/email/calendar) should be added as adapter contracts + queued execution, not direct UI calls.
+
+---
+
+## 2) Immediate next implementation target
+
+
+### Documentation sweep completed (P0-DOCS-2)
+- Audited markdown footprint (`docs/`, `scripts/`, repo root) and confirmed missing docs were restored.
+- Added committed planning/spec docs:
+  - `docs/planning/COMPANION_APP.md`
+  - `docs/planning/FIRST_BOOT.md`
+  - `docs/BLUETOOTH_NETWORK_SPEC.md`
+  - `docs/BACKEND_SPEC.md`
+- Updated README docs index to include the new planning/spec references.
+
+## P5-012 — Companion PWA implementation slices
+
+Built this sprint: completed P0-DOCS-3 plus P5-010/P5-011a/b/c/d. Added NetworkManager priority helper + setup script, QR overlay infrastructure, boot no-network QR setup flow, Settings→Companion App QR pairing row, and read-only `DEVICE_INFO` BLE characteristic wiring. Docs/roadmap/tracker were synchronized with expanded P5-P10 backlog and explicit security/development plans.
+
+Read first next iteration:
+1. `docs/planning/TASK_TRACKER.md`
+2. `docs/BLUETOOTH_NETWORK_SPEC.md` and `docs/planning/COMPANION_APP.md`
+3. `device/overlays/qr_code.py`, `device/bluetooth/network_manager.py`, and `device/main.py`
+
+Most important thing to know: preserve strict auth boundaries and schema parity — keep `WIFI_CONFIG`/`KEYBOARD_INPUT` protected by session tokens, and ensure upcoming companion JS HMAC/AES implementations match Python exactly before enabling real provisioning writes.
+
+Deliver the next Phase 5 slice:
+1. Implement P5-012a/b/c/d companion web assets (`setup.html`, BLE/auth/crypto JS parity).
+2. Keep `BITOS_BLUETOOTH=mock` and `BITOS_WIFI=mock` paths deterministic for desktop tests.
+3. Maintain QR flow compatibility with `BITOS_COMPANION_URL` and URL versioning (`v=1`).
+4. Keep companion protocol docs aligned with payload/schema changes.
+
+### Suggested acceptance checks
+- Protected characteristic writes fail fast on invalid session token.
+- Device status notify loop starts/stops cleanly and does not block shutdown.
+- Keyboard routing updates active compose field on chat and safely no-ops otherwise.
+- Full `pytest -q` remains green.
+
+---
+
+## 3) Integration plan after P2-005
+
+### P3 adapter baseline (recommended order)
+1. Introduce domain adapter interfaces:
+   - `TaskAdapter`
+   - `MessageAdapter`
+   - `EmailAdapter`
+   - `CalendarAdapter`
+2. Add local command queue with retries/dead-letter visibility.
+3. Add permission/confirmation UX for write operations.
+4. Keep each provider/runtime implementation behind adapter boundaries.
+
+### Why this order
+- Preserves lightweight UI iteration speed.
+- Enables OpenClaw/NanoClaw/API-key providers without rewiring screens.
+- Makes reliability/observability work reusable across domains.
+
+---
+
+## 4) Operational guidance for next agent
+
+- Update `docs/planning/TASK_TRACKER.md` before coding and after coding.
+- If scope/sequence shifts, also update:
+  - `ROADMAP.md`
+  - `docs/planning/IMPLEMENTATION_PLAN_NEXT.md`
+- Keep commits scoped to one vertical slice when possible (easier rollback).
+- Prefer adding focused tests per slice (`tests/test_*.py`) and run full discover before handoff.
+
+---
+
+## 5) Known implementation caveats
+
+- `OpenAICompatibleBridge` currently performs non-streaming completion then chunks text for SSE compatibility; true upstream streaming can be added later if needed.
+- Some older tracker iteration rows still use `pending` commit placeholders from historical entries; preserve history but keep new entries fully resolved.
+- Keep tiny-screen constraints in mind when adding error copy (short, actionable, low-noise text).
