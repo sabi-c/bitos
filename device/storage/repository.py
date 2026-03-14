@@ -154,6 +154,47 @@ class DeviceRepository:
             return None, []
         return latest, self.list_messages(latest)
 
+
+    def get_setting(self, key: str, default=None):
+        with closing(self._connect()) as conn:
+            row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+            if not row:
+                return default
+            raw = str(row["value"])
+
+        if isinstance(default, bool):
+            return raw.strip().lower() in {"1", "true", "yes", "on"}
+        if isinstance(default, int):
+            try:
+                return int(raw)
+            except ValueError:
+                return default
+        if isinstance(default, float):
+            try:
+                return float(raw)
+            except ValueError:
+                return default
+        return raw
+
+    def set_setting(self, key: str, value) -> None:
+        stored = value
+        if isinstance(value, bool):
+            stored = "true" if value else "false"
+        elif not isinstance(value, str):
+            stored = str(value)
+
+        now = time.time()
+        with closing(self._connect()) as conn:
+            conn.execute(
+                """
+                INSERT INTO settings(key, value, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+                """,
+                (key, str(stored), now),
+            )
+            conn.commit()
+
     def queue_enqueue_command(self, domain: str, operation: str, payload: str, max_attempts: int = 3) -> int:
         now = time.time()
         with closing(self._connect()) as conn:

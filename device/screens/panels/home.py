@@ -10,8 +10,18 @@ from screens.components import NavItem, VerticalNavController
 class HomePanel(BaseScreen):
     """Home panel with focusable sidebar entries and action routing."""
 
-    def __init__(self, on_open_chat=None, ui_settings: dict | None = None):
+    def __init__(
+        self,
+        on_open_chat=None,
+        on_open_focus=None,
+        on_open_notifications=None,
+        on_open_settings=None,
+        ui_settings: dict | None = None,
+    ):
         self._on_open_chat = on_open_chat
+        self._on_open_focus = on_open_focus
+        self._on_open_notifications = on_open_notifications
+        self._on_open_settings = on_open_settings
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
         self._font_title = load_ui_font("title", self._ui_settings)
         self._font_body = load_ui_font("body", self._ui_settings)
@@ -19,9 +29,9 @@ class HomePanel(BaseScreen):
         self._nav = VerticalNavController(
             [
                 NavItem(key="chat", label="CHAT", status="READY", action=self._open_chat),
-                NavItem(key="focus", label="FOCUS", status="SOON", enabled=False),
-                NavItem(key="tasks", label="TASKS", status="SOON", enabled=False),
-                NavItem(key="settings", label="SETTINGS", status="SOON", enabled=False),
+                NavItem(key="focus", label="FOCUS", status="READY", action=self._open_focus),
+                NavItem(key="notifs", label="NOTIFS", status="READY", action=self._open_notifications),
+                NavItem(key="settings", label="SETTINGS", status="READY", action=self._open_settings),
             ]
         )
 
@@ -70,3 +80,14 @@ class HomePanel(BaseScreen):
         if self._on_open_chat:
             self._on_open_chat()
 
+    def _open_focus(self):
+        if self._on_open_focus:
+            self._on_open_focus()
+
+    def _open_notifications(self):
+        if self._on_open_notifications:
+            self._on_open_notifications()
+
+    def _open_settings(self):
+        if self._on_open_settings:
+            self._on_open_settings()

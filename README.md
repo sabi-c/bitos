@@ -84,6 +84,15 @@ The architecture direction is to keep UI and providers decoupled via adapters an
 
 This allows routing to API-key providers or local agent runtimes (OpenClaw/NanoClaw) without rewriting screens.
 
+### Outbound Worker Runtime (Phase 3)
+
+The device loop now runs a bounded outbound worker pump each frame cadence to process queued task/message/email/calendar actions without blocking render/input.
+
+- Adapter mode is configurable via `BITOS_ADAPTER_MODE`:
+  - `echo` (default): local deterministic success adapter for simulator/dev
+  - `disabled`: intentionally unavailable adapter to exercise retry/dead-letter behavior
+- Queue transitions to `retrying` and `dead_letter` emit concise runtime logs for observability.
+
 ## Extending Navigation
 
 For button-first menu screens, use the shared navigation primitives in `device/screens/components/nav.py`:
@@ -93,11 +102,13 @@ For button-first menu screens, use the shared navigation primitives in `device/s
 
 This keeps new pages lightweight: define items, render rows, and map selected actions to screen transitions.
 
+Phase 4 started with a `FocusPanel` timer shell wired from Home (`FOCUS`) using the same navigation primitives and tiny-screen copy constraints. NotificationsPanel and SettingsPanel routes are wired from Home (`NOTIFS`, `SETTINGS`), and Settings is now persistence-wired (toggles + model/agent/sleep/about detail screens). NotificationToast overlay infrastructure is also integrated in `ScreenManager` for above-screen transient alerts.
+
 ## Next Handoff Package
 
 If handing implementation to a new contributor/agent, start here:
 
-- `docs/planning/HANDOFF_NEXT_AGENT.md` — current state + immediate execution plan (P2-005 first)
+- `docs/planning/HANDOFF_NEXT_AGENT.md` — current state + immediate execution plan for the next iteration
 - `docs/planning/TASK_TRACKER.md` — canonical backlog/status updates
 - `docs/planning/IMPLEMENTATION_PLAN_NEXT.md` — sequencing and acceptance criteria
 

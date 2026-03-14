@@ -57,26 +57,50 @@ class Phase2ShellFlowTests(unittest.TestCase):
         self.assertTrue(opened["called"])
 
     def test_home_navigation_focus_and_activation(self):
-        opened = {"called": 0}
+        opened = {"chat": 0, "focus": 0, "notifs": 0, "settings": 0}
 
         def on_open_chat():
-            opened["called"] += 1
+            opened["chat"] += 1
 
-        home = HomePanel(on_open_chat=on_open_chat)
+        def on_open_focus():
+            opened["focus"] += 1
+
+        def on_open_notifications():
+            opened["notifs"] += 1
+
+        def on_open_settings():
+            opened["settings"] += 1
+
+        home = HomePanel(
+            on_open_chat=on_open_chat,
+            on_open_focus=on_open_focus,
+            on_open_notifications=on_open_notifications,
+            on_open_settings=on_open_settings,
+        )
 
         # Default focus is CHAT and should activate.
         home.handle_action("SHORT_PRESS")
-        self.assertEqual(opened["called"], 1)
+        self.assertEqual(opened["chat"], 1)
 
-        # Move focus to FOCUS (placeholder), selecting should not open chat.
+        # Move focus to FOCUS and activate.
         home.handle_action("DOUBLE_PRESS")
         home.handle_action("SHORT_PRESS")
-        self.assertEqual(opened["called"], 1)
+        self.assertEqual(opened["focus"], 1)
 
-        # Triple press should wrap backwards to CHAT and activate again.
+        # Move focus to NOTIFS and activate.
+        home.handle_action("DOUBLE_PRESS")
+        home.handle_action("SHORT_PRESS")
+        self.assertEqual(opened["notifs"], 1)
+
+        # Move focus to SETTINGS and activate.
+        home.handle_action("DOUBLE_PRESS")
+        home.handle_action("SHORT_PRESS")
+        self.assertEqual(opened["settings"], 1)
+
+        # Triple press should wrap backwards to NOTIFS and activate.
         home.handle_action("TRIPLE_PRESS")
         home.handle_action("SHORT_PRESS")
-        self.assertEqual(opened["called"], 2)
+        self.assertEqual(opened["notifs"], 2)
 
     def test_home_keyboard_nav_changes_focus(self):
         opened = {"called": 0}

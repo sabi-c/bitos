@@ -1,7 +1,10 @@
 """BITOS Screen Manager: stack + simple route transitions."""
 import pygame
-from screens.base import BaseScreen
+
+import display.tokens as tokens
 from display.tokens import BLACK, WHITE
+from overlays import NotificationQueue
+from screens.base import BaseScreen
 
 
 class ScreenManager:
@@ -10,6 +13,7 @@ class ScreenManager:
     def __init__(self):
         self._stack: list[BaseScreen] = []
         self._flash_frames = 0
+        self.notification_queue = NotificationQueue()
 
     def push(self, screen: BaseScreen):
         if self._stack:
@@ -41,16 +45,24 @@ class ScreenManager:
         return self._stack[-1] if self._stack else None
 
     def handle_input(self, event: pygame.event.Event):
+        if self.notification_queue.handle_input(event):
+            return
         if self.current:
             self.current.handle_input(event)
 
     def handle_action(self, action: str):
+        if self.notification_queue.handle_input(action):
+            return
         if self.current:
             self.current.handle_action(action)
 
     def update(self, dt: float):
+        self.notification_queue.tick(int(max(0.0, dt) * 1000))
         if self.current:
             self.current.update(dt)
+
+    def render_overlay(self, surface: pygame.Surface):
+        self.notification_queue.render(surface, tokens)
 
     def render(self, surface: pygame.Surface):
         if self._flash_frames > 0:
@@ -61,3 +73,4 @@ class ScreenManager:
         surface.fill(BLACK)
         if self.current:
             self.current.render(surface)
+        self.render_overlay(surface)
