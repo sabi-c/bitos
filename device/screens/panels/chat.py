@@ -13,14 +13,16 @@ from display.tokens import (
 from display.animator import blink_cursor
 from display.theme import merge_runtime_ui_settings, load_ui_font, ui_line_height
 from client.api import BackendClient
+from storage.repository import DeviceRepository
 
 
 class ChatPanel(BaseScreen):
     """Simplified chat: keyboard input → streaming Claude response."""
 
-    def __init__(self, client: BackendClient, ui_settings: dict | None = None):
+    def __init__(self, client: BackendClient, ui_settings: dict | None = None, repository: DeviceRepository | None = None):
         self._client = client
         self._cursor_anim = blink_cursor()
+        self._repository = repository
 
         # State
         self._input_text = ""
@@ -32,6 +34,11 @@ class ChatPanel(BaseScreen):
         self._font = load_ui_font("body", self._ui_settings)
         self._font_small = load_ui_font("small", self._ui_settings)
         self._line_height = ui_line_height(self._font, self._ui_settings)
+
+        if self._repository:
+            self._session_id, restored = self._repository.load_latest_session_messages()
+            if restored:
+                self._messages = [{"role": m["role"], "text": m["text"]} for m in restored]
 
     def update(self, dt: float):
         self._cursor_anim.update(dt)
@@ -112,6 +119,10 @@ class ChatPanel(BaseScreen):
             return
 
         self._messages.append({"role": "user", "text": text})
+        if self._repository:
+            if self._session_id is None:
+                self._session_id = self._repository.create_session(title=text[:24])
+            self._repository.add_message(self._session_id, "user", text)
         self._input_text = ""
         self._is_streaming = True
         self._scroll_offset = 0
@@ -128,8 +139,14 @@ class ChatPanel(BaseScreen):
             for chunk in self._client.chat(message):
                 response_text += chunk
                 self._messages[-1]["text"] = response_text
+
+            if self._repository and self._session_id is not None:
+                self._repository.add_message(self._session_id, "assistant", response_text)
         except Exception as e:
-            self._messages.append({"role": "assistant", "text": f"[error: {e}]"})
+            error_text = f"[error: {e}]"
+            self._messages.append({"role": "assistant", "text": error_text})
+            if self._repository and self._session_id is not None:
+                self._repository.add_message(self._session_id, "assistant", error_text)
         finally:
             self._is_streaming = False
 

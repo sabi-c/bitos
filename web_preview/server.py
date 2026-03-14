@@ -82,6 +82,7 @@ if __name__ == "__main__":
     from screens.panels.home import HomePanel
     from screens.panels.chat import ChatPanel
     from client.api import BackendClient
+    from storage.repository import DeviceRepository
 
     # Init
     os.environ["SDL_VIDEODRIVER"] = "dummy"  # Headless pygame
@@ -92,6 +93,8 @@ if __name__ == "__main__":
     button = ButtonHandler()
     screen_mgr = ScreenManager()
     client = BackendClient()
+    repository = DeviceRepository()
+    repository.initialize()
 
     ui_settings = None
     try:
@@ -101,7 +104,7 @@ if __name__ == "__main__":
         print(f"[Preview] UI settings unavailable, using defaults ({exc})")
 
     def open_chat():
-        screen_mgr.replace(ChatPanel(client, ui_settings=ui_settings))
+        screen_mgr.replace(ChatPanel(client, ui_settings=ui_settings, repository=repository))
 
     def on_unlock():
         screen_mgr.replace(HomePanel(on_open_chat=open_chat, ui_settings=ui_settings))

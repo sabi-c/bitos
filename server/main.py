@@ -2,14 +2,14 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-import anthropic
-import json
 
-from config import ANTHROPIC_API_KEY, MODEL_NAME, UI_SETTINGS_FILE
+from config import UI_SETTINGS_FILE
 from ui_settings import UISettingsStore, UISettingsValidationError
+from llm_bridge import create_llm_bridge, to_sse_data
 
-app = FastAPI(title="BITOS Server", version="0.2.0")
+app = FastAPI(title="BITOS Server", version="0.3.0")
 settings_store = UISettingsStore(UI_SETTINGS_FILE)
+llm_bridge = create_llm_bridge()
 
 app.add_middleware(
     CORSMiddleware,
@@ -23,7 +23,8 @@ app.add_middleware(
 async def health():
     return {
         "status": "ok",
-        "model": MODEL_NAME,
+        "provider": llm_bridge.provider,
+        "model": llm_bridge.model,
         "settings_file": UI_SETTINGS_FILE,
     }
 
@@ -55,41 +56,34 @@ async def update_ui_settings(request: Request):
 
 @app.post("/chat")
 async def chat(request: Request):
-    """Stream a Claude response as SSE."""
+    """Stream model response from the active LLM bridge as SSE."""
     body = await request.json()
     message = body.get("message", "")
 
     if not message:
         return {"error": "No message provided"}
 
-    if not ANTHROPIC_API_KEY:
-        return {"error": "ANTHROPIC_API_KEY not configured"}
-
     def stream_response():
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-
-        with client.messages.stream(
-            model=MODEL_NAME,
-            max_tokens=1024,
-            messages=[{"role": "user", "content": message}],
-            system="You are BITOS, a helpful pocket AI companion. Keep responses concise — you're rendering on a tiny 240×280 pixel screen. Be direct and useful.",
-        ) as stream:
-            for text in stream.text_stream:
-                yield f"data: {json.dumps({'text': text})}\n\n"
+        for text in llm_bridge.stream_text(message):
+            yield to_sse_data(text)
 
         yield "data: [DONE]\n\n"
 
-    return StreamingResponse(
-        stream_response(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-        },
-    )
+    try:
+        return StreamingResponse(
+            stream_response(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            },
+        )
+    except Exception as exc:
+        return {"error": str(exc)}
 
 
 if __name__ == "__main__":
     import uvicorn
     from config import SERVER_HOST, SERVER_PORT
+
     uvicorn.run(app, host=SERVER_HOST, port=SERVER_PORT)

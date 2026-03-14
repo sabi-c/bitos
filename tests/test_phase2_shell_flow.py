@@ -56,6 +56,48 @@ class Phase2ShellFlowTests(unittest.TestCase):
         home.handle_action("SHORT_PRESS")
         self.assertTrue(opened["called"])
 
+    def test_home_navigation_focus_and_activation(self):
+        opened = {"called": 0}
+
+        def on_open_chat():
+            opened["called"] += 1
+
+        home = HomePanel(on_open_chat=on_open_chat)
+
+        # Default focus is CHAT and should activate.
+        home.handle_action("SHORT_PRESS")
+        self.assertEqual(opened["called"], 1)
+
+        # Move focus to FOCUS (placeholder), selecting should not open chat.
+        home.handle_action("DOUBLE_PRESS")
+        home.handle_action("SHORT_PRESS")
+        self.assertEqual(opened["called"], 1)
+
+        # Triple press should wrap backwards to CHAT and activate again.
+        home.handle_action("TRIPLE_PRESS")
+        home.handle_action("SHORT_PRESS")
+        self.assertEqual(opened["called"], 2)
+
+    def test_home_keyboard_nav_changes_focus(self):
+        opened = {"called": 0}
+
+        def on_open_chat():
+            opened["called"] += 1
+
+        home = HomePanel(on_open_chat=on_open_chat)
+
+        down = pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_DOWN})
+        enter = pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_RETURN})
+        up = pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_UP})
+
+        home.handle_input(down)
+        home.handle_input(enter)
+        self.assertEqual(opened["called"], 0)
+
+        home.handle_input(up)
+        home.handle_input(enter)
+        self.assertEqual(opened["called"], 1)
+
     def test_screen_manager_forwards_button_action(self):
         class ActionScreen:
             def __init__(self):
