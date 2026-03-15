@@ -24,6 +24,7 @@ from storage.repository import DeviceRepository
 
 class SettingsPanel(BaseScreen):
     """Button-first settings panel with persisted values and long-press actions."""
+    _owns_status_bar = True
 
     def __init__(
         self,
@@ -254,6 +255,7 @@ class SettingsPanel(BaseScreen):
 
 
 class ModelPickerPanel(BaseScreen):
+    _owns_status_bar = True
     OPTIONS = [
         ("SONNET 4.6", "claude-sonnet-4-6"),
         ("OPUS 4.6", "claude-opus-4-6"),
@@ -351,6 +353,7 @@ class ModelPickerPanel(BaseScreen):
 
 
 class AgentModePanel(BaseScreen):
+    _owns_status_bar = True
     OPTIONS = ["producer", "clown", "monk", "hacker", "storyteller", "director"]
     SUBTITLES = {
         "producer": "Operations \u00b7 coordination",
@@ -440,6 +443,7 @@ class AgentModePanel(BaseScreen):
 
 class SleepTimerPanel(BaseScreen):
     """Stub detail view that shows current timeout and allows returning."""
+    _owns_status_bar = True
 
     def __init__(self, repository: DeviceRepository, on_back=None, ui_settings: dict | None = None):
         self._repo = repository
@@ -450,10 +454,10 @@ class SleepTimerPanel(BaseScreen):
         self._font_body = load_ui_font("body", self._ui_settings)
         self._font_small = load_ui_font("small", self._ui_settings)
         self._font_hint = load_ui_font("hint", self._ui_settings)
-        self._timeout = int(self._repo.get_setting("sleep_timeout_seconds", default=60))
+        self._timeout = int(self._repo.get_setting("sleep_timeout_seconds", default=60) or 60)
 
     def on_enter(self):
-        self._timeout = int(self._repo.get_setting("sleep_timeout_seconds", default=60))
+        self._timeout = int(self._repo.get_setting("sleep_timeout_seconds", default=60) or 60)
 
     def handle_action(self, action: str):
         if action == "DOUBLE_PRESS" and self._on_back:
@@ -483,6 +487,7 @@ class SleepTimerPanel(BaseScreen):
 
 
 class AboutPanel(BaseScreen):
+    _owns_status_bar = True
     def __init__(self, on_back=None, ui_settings: dict | None = None):
         self._on_back = on_back
 

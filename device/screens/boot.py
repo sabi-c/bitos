@@ -10,6 +10,8 @@ import logging
 
 import pygame
 
+logger = logging.getLogger(__name__)
+
 from screens.base import BaseScreen
 from display.tokens import (
     BLACK,
@@ -174,6 +176,11 @@ class BootScreen(BaseScreen):
             self._diagnostics.ensure_critical_results()
             if self._diagnostics.all_critical_passed():
                 self._advance()
+
+    def handle_action(self, action: str):
+        if not self._done:
+            logger.info("[Boot] action=%s → advance", action)
+            self._advance()
 
     def handle_input(self, event: pygame.event.Event):
         if self._done:

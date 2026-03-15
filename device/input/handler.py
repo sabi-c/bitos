@@ -34,6 +34,12 @@ CLICK_TIMEOUT_S = 0.300
 POWER_PRESS_COUNT = 5
 POWER_WINDOW_S = 1.200
 
+# Back-compat aliases used internally
+DEBOUNCE_MIN = DEBOUNCE_S
+SHORT_THRESHOLD = LONG_PRESS_S
+DOUBLE_WINDOW = CLICK_TIMEOUT_S
+TRIPLE_WINDOW = CLICK_TIMEOUT_S
+
 
 class ButtonHandler:
     """Detect button gestures from raw press/release events."""

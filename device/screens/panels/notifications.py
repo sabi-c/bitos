@@ -20,6 +20,7 @@ from screens.components import NavItem, VerticalNavController
 
 class NotificationsPanel(BaseScreen):
     """Tiny-screen notifications placeholder with safe empty-state copy."""
+    _owns_status_bar = True
 
     def __init__(self, on_back=None, ui_settings: dict | None = None):
         self._on_back = on_back

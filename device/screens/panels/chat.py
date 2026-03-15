@@ -50,6 +50,7 @@ DEFAULT_TEMPLATES = [
 
 class ChatPanel(BaseScreen):
     """Chat panel with reliability status and retry controls."""
+    _owns_status_bar = True
 
     STATUS_CONNECTED = "connected"
     STATUS_RETRYING = "retrying"
