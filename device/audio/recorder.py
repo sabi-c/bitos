@@ -9,7 +9,6 @@ import wave
 from dataclasses import dataclass
 from pathlib import Path
 
-import numpy as np
 
 
 logger = logging.getLogger(__name__)
@@ -76,12 +75,18 @@ class AudioRecorder:
         if sample_width != SAMPLE_WIDTH_BYTES:
             raise RuntimeError(f"unsupported sample width: {sample_width}")
 
-        data = np.frombuffer(frames, dtype=np.int16)
-        if channels == 2:
-            stereo = data.reshape(-1, 2)
-            mono = stereo.mean(axis=1).astype(np.int16)
+        sample_count = len(frames) // SAMPLE_WIDTH_BYTES
+        if sample_count == 0:
+            mono_frames = b""
+        elif channels == 2:
+            data = memoryview(frames).cast("h")
+            mono_samples = bytearray()
+            for i in range(0, len(data), 2):
+                mixed = int((int(data[i]) + int(data[i + 1])) / 2.0)
+                mono_samples.extend(int(mixed).to_bytes(2, byteorder="little", signed=True))
+            mono_frames = bytes(mono_samples)
         elif channels == 1:
-            mono = data
+            mono_frames = frames
         else:
             raise RuntimeError(f"unsupported channel count: {channels}")
 
@@ -89,5 +94,5 @@ class AudioRecorder:
             dst.setnchannels(1)
             dst.setsampwidth(SAMPLE_WIDTH_BYTES)
             dst.setframerate(rate)
-            dst.writeframes(mono.tobytes())
+            dst.writeframes(mono_frames)
         return output_path

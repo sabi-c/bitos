@@ -88,6 +88,9 @@ class TextToSpeech:
         if sample_width != 2:
             return
 
+        if in_rate == SAMPLE_RATE and in_channels == 2:
+            return
+
         audio = np.frombuffer(frames, dtype=np.int16)
         if in_channels == 2:
             stereo = audio.reshape(-1, 2)
