@@ -30,10 +30,15 @@ Type=simple
 User=pi
 WorkingDirectory=/home/pi/bitos
 EnvironmentFile=/etc/bitos/secrets
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=SDL_VIDEODRIVER=offscreen
+Environment=SDL_FBDEV=/dev/fb0
 Environment=BITOS_DISPLAY=st7789
 Environment=BITOS_AUDIO=hw:0
 Environment=BITOS_BUTTON=gpio
 Environment=SERVER_URL=http://localhost:8000
+Environment=WHISPLAY_DRIVER_PATH=/home/pi/Whisplay/Driver
+Environment=PYTHONPATH=/home/pi/bitos
 ExecStartPre=/bin/bash -c "until curl -sf http://localhost:8000/health; do sleep 1; done"
 ExecStart=/home/pi/bitos/.venv/bin/python -m device.main
 Restart=always
