@@ -1,3 +1,12 @@
+// DEPRECATED STUB — real implementation is in companion/js/ble.js
+// This file is kept only for backward compatibility with any direct imports.
+// pair.html and setup.html use js/ble.js.
+
+// Forward to real implementation if loaded
+if (typeof window !== 'undefined' && !window.BitosCompanion) {
+  console.warn('[ble.js] Stub loaded — ensure js/ble.js is loaded first');
+}
+
 class BitosCompanion {
   constructor() {
     this.device = null;

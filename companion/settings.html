@@ -75,7 +75,13 @@
   </div>
 
   <script>
-    const SERVER = sessionStorage.getItem('bitos_server') || 'http://bitos:8000';
+    const params = new URLSearchParams(location.search);
+    const SERVER = params.get('server')
+      || sessionStorage.getItem('bitos_server')
+      || 'http://bitos:8000';
+    if (params.get('server')) {
+      sessionStorage.setItem('bitos_server', params.get('server'));
+    }
 
     async function refreshStatus() {
       try {
