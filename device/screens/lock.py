@@ -3,7 +3,7 @@ import time
 import pygame
 
 from screens.base import BaseScreen
-from display.tokens import BLACK, WHITE, DIM3, HAIRLINE, PHYSICAL_W
+from display.tokens import BLACK, WHITE, DIM3, HAIRLINE, PHYSICAL_W, PHYSICAL_H
 from display.theme import merge_runtime_ui_settings, load_ui_font
 
 
@@ -35,18 +35,25 @@ class LockScreen(BaseScreen):
         now = time.localtime()
         clock_text = f"{now.tm_hour:02d}:{now.tm_min:02d}"
         clock = self._font_title.render(clock_text, False, WHITE)
-        clock_x = (PHYSICAL_W - clock.get_width()) // 2
-        surface.blit(clock, (clock_x, 86))
-
         device_name = self._font_body.render("BITOS", False, DIM3)
-        name_x = (PHYSICAL_W - device_name.get_width()) // 2
-        surface.blit(device_name, (name_x, 112))
-
-        pygame.draw.line(surface, HAIRLINE, (30, 146), (PHYSICAL_W - 30, 146))
-
         hint = self._font_small.render("PRESS TO UNLOCK", False, WHITE)
+
+        block_h = clock.get_height() + 8 + device_name.get_height() + 12 + 1 + 12 + hint.get_height()
+        start_y = max(56, (PHYSICAL_H - block_h) // 2)
+
+        clock_x = (PHYSICAL_W - clock.get_width()) // 2
+        surface.blit(clock, (clock_x, start_y))
+
+        name_y = start_y + clock.get_height() + 8
+        name_x = (PHYSICAL_W - device_name.get_width()) // 2
+        surface.blit(device_name, (name_x, name_y))
+
+        line_y = name_y + device_name.get_height() + 12
+        pygame.draw.line(surface, HAIRLINE, (30, line_y), (PHYSICAL_W - 30, line_y))
+
+        hint_y = line_y + 12
         hint_x = (PHYSICAL_W - hint.get_width()) // 2
-        surface.blit(hint, (hint_x, 160))
+        surface.blit(hint, (hint_x, hint_y))
 
     def _unlock(self):
         if self._is_unlocking:
