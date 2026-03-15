@@ -19,6 +19,7 @@ from display.tokens import (
     DIM2,
     DIM3,
     DIM4,
+    HAIRLINE,
     PHYSICAL_W,
     PHYSICAL_H,
     FONT_PATH,
@@ -162,6 +163,11 @@ class BootScreen(BaseScreen):
         except FileNotFoundError:
             self._status_font = pygame.font.SysFont("monospace", FONT_SIZES["small"])
 
+        try:
+            self._hint_font = pygame.font.Font(FONT_PATH, FONT_SIZES["hint"])
+        except FileNotFoundError:
+            self._hint_font = pygame.font.SysFont("monospace", FONT_SIZES["hint"])
+
         if self._health_check:
             threading.Thread(target=self._run_health_check, daemon=True).start()
 
@@ -193,47 +199,57 @@ class BootScreen(BaseScreen):
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
 
-        cx, cy = PHYSICAL_W // 2, PHYSICAL_H // 2 - 66
+        cx, cy = PHYSICAL_W // 2, PHYSICAL_H // 2 - 50
+        orb_radius = 28
         orb_size = 4
+        import math
 
-        orbs = [
-            (cx + 24, cy),
-            (cx + 17, cy - 17),
-            (cx, cy - 24),
-            (cx - 17, cy - 17),
-            (cx - 24, cy),
-            (cx - 17, cy + 17),
-            (cx, cy + 24),
-            (cx + 17, cy + 17),
-        ]
-        step = self._orb_anim.step % 8
-
+        # 4 orbiting pixel orbs (smooth rotation matching new panel style)
+        step = self._orb_anim.step
+        t = step * (math.pi / 4)  # 8 discrete positions
         orb_colors = [WHITE, DIM2, DIM3, DIM4]
         for i in range(4):
-            pos_idx = (step + i * 2) % 8
-            ox, oy = orbs[pos_idx]
+            angle = t + i * (math.pi / 2)
+            ox = int(cx + orb_radius * math.cos(angle))
+            oy = int(cy + orb_radius * math.sin(angle))
             color = orb_colors[i]
             pygame.draw.rect(surface, color, (ox - orb_size // 2, oy - orb_size // 2, orb_size, orb_size))
 
+        # Center dot
+        pygame.draw.rect(surface, DIM4, (cx - 2, cy - 2, 4, 4))
+        pygame.draw.rect(surface, WHITE, (cx - 1, cy - 1, 2, 2))
+
+        # "BITOS" title centered below orbs
         text_surface = self._font.render("BITOS", False, WHITE)
         text_x = (PHYSICAL_W - text_surface.get_width()) // 2
-        text_y = cy + 40
+        text_y = cy + orb_radius + 16
         surface.blit(text_surface, (text_x, text_y))
 
+        # Blinking block cursor after title
         if self._cursor_anim.step == 0:
             cursor_x = text_x + text_surface.get_width() + 2
-            cursor_w = 32
-            cursor_h = 32
+            cursor_h = self._font.get_height()
+            cursor_w = max(cursor_h // 2, 10)
             pygame.draw.rect(surface, WHITE, (cursor_x, text_y, cursor_w, cursor_h))
 
-        checks_start_y = text_y + self._font.get_height() + 8
+        # Version text below title
+        ver_surface = self._hint_font.render("v1.0 \u00b7 MONOCHROME AI DEVICE", False, HAIRLINE)
+        ver_x = (PHYSICAL_W - ver_surface.get_width()) // 2
+        ver_y = text_y + self._font.get_height() + 4
+        surface.blit(ver_surface, (ver_x, ver_y))
+
+        # Diagnostics grid below version
+        checks_start_y = ver_y + self._hint_font.get_height() + 8
         self._render_checks(surface, checks_start_y)
 
         self._render_api_key_warning(surface)
 
-        status_surface = self._status_font.render(self._status_copy(), False, DIM2 if self._diagnostics.results.get("api_key", True) else WHITE)
-        status_x = (PHYSICAL_W - status_surface.get_width()) // 2
-        surface.blit(status_surface, (status_x, PHYSICAL_H - STATUS_BAR_H))
+        # Bottom hint text
+        hint_text = self._status_copy()
+        hint_color = DIM3 if self._diagnostics.results.get("api_key", True) else WHITE
+        hint_surface = self._hint_font.render(hint_text, False, hint_color)
+        hint_x = (PHYSICAL_W - hint_surface.get_width()) // 2
+        surface.blit(hint_surface, (hint_x, PHYSICAL_H - STATUS_BAR_H + 4))
 
     def _render_api_key_warning(self, surface: pygame.Surface) -> None:
         if self._diagnostics.results.get("api_key", True):
@@ -246,22 +262,23 @@ class BootScreen(BaseScreen):
         surface.blit(warning, (warning_x, warning_y + 2))
 
     def _render_checks(self, surface: pygame.Surface, start_y: int) -> None:
-        col_x = [26, 126]
-        row_y = [start_y, start_y + 18, start_y + 36]
+        col_x = [20, 130]
+        row_gap = 16
+        row_y = [start_y + i * row_gap for i in range(3)]
         checks = ["display", "button", "audio", "network", "api_key", "battery"]
         for idx, name in enumerate(checks):
             show_now = self._elapsed >= idx * 0.5
             result = self._diagnostics.results.get(name) if show_now else None
             if result is None:
-                mark = "…"
-                color = DIM4
+                mark = "\u2026"
+                color = DIM3
             else:
-                mark = "✓" if result else "✕"
+                mark = "\u2713" if result else "\u2715"
                 color = WHITE if result else DIM2
             label = self._LABELS[name]
             col = idx % 2
             row = idx // 2
-            surf = self._status_font.render(f"{label:<8} {mark}", False, color)
+            surf = self._status_font.render(f"{label:<8}{mark}", False, color)
             surface.blit(surf, (col_x[col], row_y[row]))
 
     def _advance(self):
@@ -285,16 +302,16 @@ class BootScreen(BaseScreen):
     def _status_copy(self) -> str:
         if not self._diagnostics.results.get("api_key", True):
             if int(time.time() * 2) % 2 == 0:
-                return "API KEY MISSING — add to /etc/bitos/secrets"
-            return "SHORT/LONG TO CONTINUE"
+                return "API KEY MISSING"
+            return "TAP BUTTON TO CONTINUE"
 
         if self._diagnostics.is_complete() and self._diagnostics.all_critical_passed():
-            return "READY"
+            return "TAP BUTTON TO BOOT"
 
         with self._health_lock:
             backend_status = self._startup_health.get("backend")
         if backend_status is None:
             return "CHECKING..."
         if backend_status:
-            return "NETWORK OK"
+            return "TAP BUTTON TO BOOT"
         return "OFFLINE MODE"

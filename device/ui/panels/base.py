@@ -33,7 +33,7 @@ HDR_PAD_X = 8
 HDR_PAD_Y = 5
 
 # Separator
-SEP_COLOR = GRAY_1A
+SEP_COLOR = GRAY_0A
 
 
 class BasePanel:

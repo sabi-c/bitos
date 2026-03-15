@@ -1,16 +1,16 @@
 """CompositeScreen — full 240x280 layout with sidebar navigation.
 
 Extends BaseScreen so the old ScreenManager can push/pop it.
-Composes: StatusBar (20px top) | Sidebar (84px left) + RightPanel (156x246) | HintBar (14px bottom).
+Composes: StatusBar (20px top) | Sidebar (84px left) + RightPanel (156x248) | HintBar (12px bottom).
 
 ┌─────────────────────────────────┐ 0
 │         STATUS BAR (20px)       │
 ├──────────┬──────────────────────┤ 20
 │ SIDEBAR  │   RIGHT PANEL       │
-│  84px    │    156x246px        │
+│  84px    │    156x248px        │
 │          │  [panel.render()]   │
-├──────────┴──────────────────────┤ 266
-│      HINT BAR (14px)           │
+├──────────┴──────────────────────┤ 268
+│      HINT BAR (12px)           │
 └─────────────────────────────────┘ 280
 """
 
@@ -26,7 +26,7 @@ from device.screens.base import BaseScreen
 
 BLACK = (0, 0, 0)
 
-HINT_BAR_H = 14
+HINT_BAR_H = 12
 RIGHT_PANEL_H = PHYSICAL_H - STATUS_BAR_H - HINT_BAR_H  # 250
 
 
