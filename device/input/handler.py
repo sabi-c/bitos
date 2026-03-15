@@ -42,11 +42,21 @@ class ButtonHandler:
         self._callbacks: dict[ButtonEvent, list[Callable]] = {e: [] for e in ButtonEvent}
         self._keyboard_mode = os.environ.get("BITOS_BUTTON", "").lower() == "keyboard"
         self._active_screen_name_getter = active_screen_name_getter
-        self._state: int = 0
-        self._start_time: float = 0.0
+
+        # Physical state / edge timing.
+        self._pressed = False
+        self._press_time: float = 0.0
         self._last_edge_time: float = 0.0
         self._raw_pressed = False
+        self._long_emitted_for_press = False
+
+        # Multi-click classification window.
+        self._click_count = 0
+        self._click_deadline: float | None = None
+
+        # Power gesture tracking.
         self._power_press_times: list[float] = []
+
         self._board = None
         self._poll_board_state = True
 
@@ -86,16 +96,12 @@ class ButtonHandler:
             return
         self._last_edge_time = now
 
-        if self._state == 2:
-            self._state = 3
-            self._start_time = now
+        if self._pressed:
             return
 
-        if self._state != 0:
-            return
-
-        self._state = 1
-        self._start_time = now
+        self._pressed = True
+        self._press_time = now
+        self._long_emitted_for_press = False
         self._log_button_state(pressed=True)
 
         cutoff = now - POWER_WINDOW_S
@@ -103,7 +109,10 @@ class ButtonHandler:
         self._power_press_times.append(now)
         if len(self._power_press_times) >= POWER_PRESS_COUNT:
             self._power_press_times.clear()
-            self._state = 0
+            self._pressed = False
+            self._long_emitted_for_press = False
+            self._click_count = 0
+            self._click_deadline = None
             self._emit(ButtonEvent.POWER_GESTURE)
             return
 
@@ -113,29 +122,32 @@ class ButtonHandler:
         now = time.time()
         if now - self._last_edge_time < DEBOUNCE_S:
             return
-
-        if self._state == 0:
+        if not self._pressed:
             return
 
         self._last_edge_time = now
+        self._pressed = False
         self._log_button_state(pressed=False)
         self._emit(ButtonEvent.HOLD_END)
 
-        if self._state == 1:
-            self._state = 2
-            self._start_time = now
+        if self._long_emitted_for_press:
+            self._long_emitted_for_press = False
+            self._click_count = 0
+            self._click_deadline = None
             return
 
-        if self._state == 3:
-            self._state = 0
-            self._emit(ButtonEvent.DOUBLE_PRESS)
+        duration = now - self._press_time
+        if duration >= LONG_PRESS_S:
+            self._emit(ButtonEvent.LONG_PRESS)
+            self._click_count = 0
+            self._click_deadline = None
             return
 
-        if self._state == 4:
-            self._state = 0
-            return
-
-        self._state = 0
+        if self._click_deadline is None or now > self._click_deadline:
+            self._click_count = 1
+        else:
+            self._click_count = min(3, self._click_count + 1)
+        self._click_deadline = now + CLICK_TIMEOUT_S
 
     def update(self) -> None:
         now = time.time()
@@ -157,14 +169,21 @@ class ButtonHandler:
                 self._raw_pressed = False
                 self._on_release()
 
-        if self._state == 1:
-            if now - self._start_time >= LONG_PRESS_S:
-                self._state = 4
-                self._emit(ButtonEvent.LONG_PRESS)
-        elif self._state == 2:
-            if now - self._start_time >= CLICK_TIMEOUT_S:
-                self._state = 0
+        if self._pressed and not self._long_emitted_for_press and now - self._press_time >= LONG_PRESS_S:
+            self._long_emitted_for_press = True
+            self._click_count = 0
+            self._click_deadline = None
+            self._emit(ButtonEvent.LONG_PRESS)
+
+        if not self._pressed and self._click_deadline is not None and now >= self._click_deadline:
+            if self._click_count == 1:
                 self._emit(ButtonEvent.SHORT_PRESS)
+            elif self._click_count == 2:
+                self._emit(ButtonEvent.DOUBLE_PRESS)
+            elif self._click_count >= 3:
+                self._emit(ButtonEvent.TRIPLE_PRESS)
+            self._click_count = 0
+            self._click_deadline = None
 
     def _log_button_state(self, pressed: bool):
         if not logger.isEnabledFor(logging.DEBUG):
