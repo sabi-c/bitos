@@ -116,7 +116,7 @@ class ST7789Driver(DisplayDriver):
 
         from PIL import Image as PILImage
         black_image = PILImage.new("RGB", (self.WIDTH, self.HEIGHT), (0, 0, 0))
-        self._board.disp.image(black_image)
+        self._board.display.image(black_image)
         self._board.set_backlight(100)
 
     def get_surface(self) -> pygame.Surface:
@@ -125,7 +125,7 @@ class ST7789Driver(DisplayDriver):
         return self._surface
 
     def update(self):
-        """Convert pygame surface to PIL Image and push to board.disp."""
+        """Convert pygame surface to PIL Image and push to board.display."""
         if self._board is None or self._surface is None:
             return
         try:
@@ -139,7 +139,7 @@ class ST7789Driver(DisplayDriver):
     def display(self, frame):
         if self._board is None:
             raise RuntimeError("WhisPlayBoard unavailable: call init() before display()")
-        self._board.disp.image(frame)
+        self._board.display.image(frame)
 
     def set_brightness(self, level: int) -> None:
         """Set backlight level 0–100."""
