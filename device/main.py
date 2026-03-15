@@ -8,10 +8,8 @@ logging.basicConfig(
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     datefmt="%H:%M:%S",
 )
-import subprocess
 import time
 
-import httpx
 import pygame
 
 from display.driver import create_driver
@@ -19,35 +17,26 @@ import display.tokens as tokens
 from display.tokens import FPS
 from input.handler import ButtonEvent, create_button_handler
 from notifications import NotificationPoller
-from overlays import NotificationQueue, NotificationToast, QROverlay, QuickCaptureOverlay
-from overlays.power import PowerOverlay
+from overlays import NotificationQueue, NotificationToast, QROverlay
 from bluetooth import AuthManager, get_gatt_server
-from bluetooth.constants import PAIRING_MODE_TIMEOUT_SECONDS
 from bluetooth.characteristics import DeviceInfoCharacteristic, DeviceStatusCharacteristic, KeyboardInputCharacteristic, WiFiConfigCharacteristic, WiFiStatusCharacteristic
-from bluetooth.constants import build_pair_url, build_setup_url
+from bluetooth.constants import build_setup_url
 from bluetooth.network_manager import NetworkPriorityManager
 from bluetooth.wifi_manager import WiFiManager
 from audio import get_audio_pipeline
 from hardware import BatteryMonitor, LEDController, StatusPoller, StatusState, SystemMonitor
-from screens.manager import ScreenManager
+from ui.screen_manager import ScreenManager
 from screens.boot import BootScreen
-from screens.lock import LockScreen
-from screens.panels.home import HomePanel
-from screens.panels.chat import ChatPanel
-from screens.panels.focus import FocusPanel
-from screens.panels.notifications import NotificationsPanel
-from screens.panels.tasks import TasksPanel
-from screens.panels.messages import MessagesPanel
-from screens.panels.mail import MailPanel
-from screens.panels.captures import CapturesPanel
-from screens.panels.settings import (
-    AboutPanel,
-    AgentModePanel,
-    ModelPickerPanel,
-    SettingsPanel,
-    SleepTimerPanel,
-)
-from screens.subscreens.integration_detail import IntegrationDetailPanel
+from screens.lock_screen import LockScreen
+import screens.chat_screen  # register app
+import screens.tasks_screen  # register app
+import screens.focus_screen  # register app
+import screens.settings_screen  # register app
+import screens.notifications_screen  # register app
+import screens.messages_screen  # register app
+import screens.mail_screen  # register app
+import screens.captures_screen  # register app
+
 from client.api import BackendClient
 from storage.repository import DeviceRepository
 from integrations.adapters import create_runtime_adapter
@@ -87,24 +76,6 @@ def _restore_state() -> dict | None:
         return None
 
 
-def _save_runtime_state(screen_mgr: ScreenManager, timestamp: float, path: str = "/tmp/bitos_state.json") -> None:
-    state: dict[str, object] = {"timestamp": float(timestamp)}
-    current = screen_mgr.current
-
-    if current is not None and hasattr(current, "_session_id"):
-        state["session_id"] = getattr(current, "_session_id")
-
-    if current is not None and hasattr(current, "remaining_seconds") and hasattr(current, "is_running"):
-        state["pomodoro"] = {
-            "is_running": bool(getattr(current, "is_running", False)),
-            "remaining_seconds": int(getattr(current, "remaining_seconds", 0)),
-            "started_at": float(timestamp),
-        }
-
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(state, f)
-
-
 def _run_startup_health_check(client: BackendClient, repository: DeviceRepository, startup_health: dict) -> dict:
     startup_health["backend"] = client.health(timeout=2.0)
     try:
@@ -138,24 +109,6 @@ def _cancel_inflight_voice_recording(screen_mgr):
                 pipeline.stop_speaking()
         except Exception as exc:
             logger.warning("cancel_voice_failed error=%s", exc)
-
-
-def _request_backend_shutdown(client):
-    """Tell backend to save state before device shutdown."""
-    try:
-        client.health(timeout=1.0)
-    except Exception:
-        pass
-
-
-def _execute_power_action(action: str) -> None:
-    """Execute system power action."""
-    if action == "shutdown":
-        logger.info("[Power] Shutting down...")
-        subprocess.run(["sudo", "shutdown", "-h", "now"], check=False)
-    elif action == "reboot":
-        logger.info("[Power] Rebooting...")
-        subprocess.run(["sudo", "reboot"], check=False)
 
 
 def main():
@@ -293,123 +246,14 @@ def main():
         logger.warning("[BITOS] UI settings unavailable, using defaults (%s)", exc)
 
     restored_state = _restore_state()
-    restored_session_id = restored_state.get("session_id") if restored_state else None
-    restored_pomodoro = restored_state.get("pomodoro") if restored_state else None
-    focus_panel: FocusPanel | None = None
 
-    def open_chat():
-        chat = ChatPanel(client, ui_settings=ui_settings, repository=repository, audio_pipeline=audio_pipeline, led=led, on_back=on_home)
-        screen_mgr.replace(chat)
-
-    def on_home():
-        home = HomePanel(
-            on_open_chat=open_chat,
-            on_open_focus=open_focus,
-            on_open_notifications=open_notifications,
-            on_open_messages=open_messages,
-            on_open_mail=open_mail,
-            on_open_tasks=open_tasks,
-            on_open_captures=open_captures,
-            on_open_settings=open_settings,
-            on_show_shade=screen_mgr.show_shade,
-            ui_settings=ui_settings,
-            startup_health=startup_health,
-            repository=repository,
-            client=client,
-            status_state=status_state,
-        )
-        screen_mgr.replace(home)
-
-    def open_focus():
-        nonlocal focus_panel
-        focus = FocusPanel(on_back=on_home, ui_settings=ui_settings, repository=repository)
-
-        raw = repository.get_setting("pomodoro_state", None)
-        if raw:
-            try:
-                focus.restore_state(json.loads(raw))
-            except Exception:
-                pass
-
-        if restored_pomodoro and restored_pomodoro.get("is_running"):
-            started_at = float(restored_pomodoro.get("started_at", restored_state.get("timestamp", time.time()))) if restored_state else time.time()
-            elapsed = max(0, int(time.time() - started_at))
-            remaining = max(0, int(restored_pomodoro.get("remaining_seconds", focus.remaining_seconds)) - elapsed)
-            focus.restore_state(remaining_seconds=remaining, is_running=remaining > 0)
-        focus_panel = focus
-        screen_mgr.replace(focus)
-
-
-    def open_messages():
-        messages = MessagesPanel(client=client, battery_pct=battery_monitor.get_status().get("pct", 84), audio_pipeline=audio_pipeline, led=led, on_back=on_home, ui_settings=ui_settings)
-        screen_mgr.replace(messages)
-
-
-    def open_mail():
-        mail = MailPanel(client=client, battery_pct=battery_monitor.get_status().get("pct", 84), audio_pipeline=audio_pipeline, led=led, on_back=on_home, ui_settings=ui_settings)
-        screen_mgr.replace(mail)
-
-    def open_notifications():
-        notifications = NotificationsPanel(on_back=on_home, ui_settings=ui_settings)
-        screen_mgr.replace(notifications)
-
-    def open_tasks():
-        tasks = TasksPanel(client=client, repository=repository, on_back=on_home, ui_settings=ui_settings)
-        screen_mgr.replace(tasks)
-
-    def open_captures():
-        captures = CapturesPanel(repository=repository, on_back=on_home, ui_settings=ui_settings)
-        screen_mgr.replace(captures)
-
-    def open_settings():
-        settings = SettingsPanel(
-            repository=repository,
-            client=client,
-            on_back=on_home,
-            on_open_model_picker=open_model_picker,
-            on_open_agent_mode=open_agent_mode,
-            on_open_sleep_timer=open_sleep_timer,
-            on_open_about=open_about,
-            on_open_companion_app=open_companion_app,
-            get_ble_address=gatt_server.get_device_address,
-            on_set_discoverable=lambda enabled, timeout: gatt_server.set_discoverable(enabled, timeout),
-            on_push_overlay=screen_mgr.push_overlay,
-            on_dismiss_overlay=screen_mgr.dismiss_overlay,
-            ui_settings=ui_settings,
-            on_open_integration_detail=open_integration_detail,
-        )
-        screen_mgr.replace(settings)
-
-    def open_model_picker():
-        screen_mgr.replace(ModelPickerPanel(repository=repository, on_back=open_settings, ui_settings=ui_settings))
-
-    def open_agent_mode():
-        screen_mgr.replace(AgentModePanel(repository=repository, on_back=open_settings, ui_settings=ui_settings))
-
-    def open_sleep_timer():
-        screen_mgr.replace(SleepTimerPanel(repository=repository, on_back=open_settings, ui_settings=ui_settings))
-
-    def open_about():
-        screen_mgr.replace(AboutPanel(on_back=open_settings, ui_settings=ui_settings))
-
-    def open_integration_detail(integration_name: str, status_data: dict):
-        screen_mgr.replace(IntegrationDetailPanel(integration_name=integration_name, status_data=status_data, on_back=open_settings, ui_settings=ui_settings))
-
-    def open_companion_app():
-        ble_addr = gatt_server.get_device_address()
-        qr = QROverlay(
-            url=build_pair_url(ble_addr),
-            title="PAIR COMPANION APP",
-            subtitle="SCAN WITH YOUR PHONE",
-            on_dismiss=lambda: screen_mgr.dismiss_overlay(qr),
-        )
-        screen_mgr.push_overlay(qr)
-        gatt_server.set_discoverable(True, 120)
+    # Deprecated: legacy panel-based navigation functions were removed in favor of
+    # Screen + NavigationEvent routing via device/ui/screen_manager.py.
 
 
     def _enter_offline_mode():
         screen_mgr.dismiss_overlay()
-        lock = LockScreen(on_home=on_home, ui_settings=ui_settings)
+        lock = LockScreen()
         screen_mgr.replace(lock)
 
     def _show_setup_qr_if_needed():
@@ -436,7 +280,7 @@ def main():
         gatt_server.set_discoverable(True, timeout_s=120)
 
     def on_boot_complete():
-        lock = LockScreen(on_home=on_home, ui_settings=ui_settings)
+        lock = LockScreen()
         screen_mgr.replace(lock)
         _show_setup_qr_if_needed()
 
@@ -446,33 +290,6 @@ def main():
         on_boot_complete()
     else:
         screen_mgr.push(boot)
-
-    power_overlay: PowerOverlay | None = None
-
-    def close_power_overlay():
-        nonlocal power_overlay
-        power_overlay = None
-
-    def run_power_action(action: str):
-        nonlocal running
-        _cancel_inflight_voice_recording(screen_mgr)
-        _request_backend_shutdown(client)
-        if focus_panel is not None:
-            focus_panel.save_state()
-        _save_runtime_state(screen_mgr, time.time())
-        _execute_power_action(action)
-        running = False
-
-    def open_power_overlay():
-        nonlocal power_overlay
-        if power_overlay is not None:
-            return
-        _cancel_inflight_voice_recording(screen_mgr)
-        power_overlay = PowerOverlay(
-            on_shutdown=lambda: run_power_action("shutdown"),
-            on_reboot=lambda: run_power_action("reboot"),
-            on_cancel=close_power_overlay,
-        )
 
     screen_mgr.attach_device_status_characteristic(device_status_char)
 
@@ -484,57 +301,15 @@ def main():
     gatt_server.set_discoverable(False)
     device_status_char.start_periodic_updates(_collect_device_status, interval_s=30)
 
-    def _dispatch_action(action: str):
-        if power_overlay is not None:
-            power_overlay.handle_input(action)
-            return
-        screen_mgr.handle_action(action)
+    def _on_button(btn_event: ButtonEvent):
+        logger.info("[Button] %s", btn_event.name)
+        screen_mgr.handle_button_event(btn_event)
 
-    def on_short():
-        logger.info("[Button] SHORT_PRESS")
-        _dispatch_action("SHORT_PRESS")
-
-    def on_long():
-        logger.info("[Button] LONG_PRESS")
-        _dispatch_action("LONG_PRESS")
-
-    def on_double():
-        logger.info("[Button] DOUBLE_PRESS")
-        _dispatch_action("DOUBLE_PRESS")
-
-    def on_triple():
-        # VERIFIED: TRIPLE_PRESS anywhere opens QuickCaptureOverlay above current screen.
-        logger.info("[Button] TRIPLE_PRESS")
-        if screen_mgr.current.__class__.__name__ != "QuickCaptureOverlay":
-            def _dismiss_capture():
-                screen_mgr.dismiss_overlay(overlay)
-
-            def _saved(_capture_id: str, _text: str):
-                # VERIFIED: successful quick capture shows a brief "Captured ✓" toast.
-                screen_mgr.notification_queue.push(NotificationToast(app="CAPTURE", icon="✓", message="Captured ✓", time_str="now", duration_ms=1500))
-
-            overlay = QuickCaptureOverlay(
-                repository=repository,
-                client=client,
-                audio_pipeline=audio_pipeline,
-                context=screen_mgr.current.__class__.__name__.replace("Panel", "").upper() if screen_mgr.current else "",
-                on_saved=_saved,
-                on_dismiss=_dismiss_capture,
-            )
-            screen_mgr.push_overlay(overlay)
-            return
-        _dispatch_action("TRIPLE_PRESS")
-
-    def on_power_gesture():
-        # VERIFIED: five-press power gesture opens blocking PowerOverlay.
-        logger.info("[Button] POWER_GESTURE")
-        open_power_overlay()
-
-    button.on(ButtonEvent.SHORT_PRESS, on_short)
-    button.on(ButtonEvent.LONG_PRESS, on_long)
-    button.on(ButtonEvent.DOUBLE_PRESS, on_double)
-    button.on(ButtonEvent.TRIPLE_PRESS, on_triple)
-    button.on(ButtonEvent.POWER_GESTURE, on_power_gesture)
+    button.on(ButtonEvent.SHORT_PRESS, lambda: _on_button(ButtonEvent.SHORT_PRESS))
+    button.on(ButtonEvent.LONG_PRESS, lambda: _on_button(ButtonEvent.LONG_PRESS))
+    button.on(ButtonEvent.DOUBLE_PRESS, lambda: _on_button(ButtonEvent.DOUBLE_PRESS))
+    button.on(ButtonEvent.TRIPLE_PRESS, lambda: _on_button(ButtonEvent.TRIPLE_PRESS))
+    button.on(ButtonEvent.POWER_GESTURE, lambda: _on_button(ButtonEvent.POWER_GESTURE))
 
     clock = pygame.time.Clock()
     running = True
@@ -569,8 +344,6 @@ def main():
         surface = driver.get_surface()
         screen_mgr.update(dt)
         screen_mgr.render(surface)
-        if power_overlay:
-            power_overlay.render(surface, tokens)
         driver.update()
 
         clock.tick(FPS)
