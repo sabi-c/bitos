@@ -50,6 +50,7 @@ ensure_secret "ANTHROPIC_API_KEY" "sk-ant-..."
 ensure_secret "BITOS_DEVICE_TOKEN" "$DEVICE_TOKEN"
 ensure_secret "BITOS_PIN_HASH" "$PIN_HASH"
 ensure_secret "BITOS_BLE_SECRET" "$BLE_SECRET"
+ensure_secret "WHISPLAY_DRIVER_PATH" "/home/pi/Whisplay/Driver"
 
 echo "Secrets bootstrap complete: $SECRETS"
 echo "Generated (if missing): BITOS_DEVICE_TOKEN, BITOS_PIN_HASH (default PIN 0000), BITOS_BLE_SECRET"

@@ -4,9 +4,8 @@ import time
 
 import pygame
 
+from device.input.handler import ButtonEvent
 from device.screens.base import Screen
-from device.screens.nav import NavigationEvent
-from device.screens.registry import register_app
 from device.ui.fonts import get_font
 
 WHITE = (255, 255, 255)
@@ -15,11 +14,8 @@ DIM = (51, 51, 51)
 MID = (85, 85, 85)
 
 
-@register_app
 class ChatScreen(Screen):
     SCREEN_NAME = "CHAT"
-    MENU_ICON = "AI"
-    MENU_ORDER = 10
 
     def on_enter(self):
         self._quick_idx = 0
@@ -31,15 +27,15 @@ class ChatScreen(Screen):
         ]
         self._quick = ["Summarize", "Draft reply", "Create task", "Follow up"]
 
-    def handle_nav(self, event: str) -> bool:
-        if event == NavigationEvent.NEXT:
+    def handle_event(self, event):
+        if event == ButtonEvent.SHORT_PRESS:
             self._quick_idx = (self._quick_idx + 1) % len(self._quick)
             return True
-        if event == NavigationEvent.SELECT:
+        if event == ButtonEvent.LONG_PRESS:
             self._messages.append(("me", self._quick[self._quick_idx]))
             self._streaming = not self._streaming
             return True
-        return super().handle_nav(event)
+        return super().handle_event(event)
 
     def get_hint(self):
         return "[tap] replies  [hold] send  [2x] back"
@@ -47,6 +43,11 @@ class ChatScreen(Screen):
     def draw(self, surface: pygame.Surface):
         w, h = surface.get_size()
         surface.fill(BLACK)
+
+        msg_h = 150
+        quick_h = 58
+        input_h = 32
+
         y = 6
         for side, text in self._messages[-3:]:
             bubble_w = min(160, 30 + len(text) * 4)
@@ -54,8 +55,10 @@ class ChatScreen(Screen):
             is_me = side == "me"
             bx = w - bubble_w - 22 if is_me else 22
             avx = w - 18 if is_me else 6
+
             pygame.draw.rect(surface, WHITE, (avx, y + 5, 14, 14), 1)
             surface.blit(get_font(6).render("U" if is_me else "A", False, WHITE), (avx + 3, y + 10))
+
             if is_me:
                 pygame.draw.rect(surface, WHITE, (bx, y, bubble_w, bubble_h))
                 tcol = BLACK
@@ -64,22 +67,27 @@ class ChatScreen(Screen):
                 tcol = WHITE
             surface.blit(get_font(6).render(text[:32], False, tcol), (bx + 6, y + 10))
             y += bubble_h + 8
-        if self._streaming and y < 150:
+
+        if self._streaming and y < msg_h:
             dots = "." * (int(time.time() * 3) % 3 + 1)
             surface.blit(get_font(7).render(dots, False, MID), (24, y + 4))
-        qy = 150
+
+        qy = msg_h
         pygame.draw.line(surface, WHITE, (0, qy), (w, qy), 2)
-        chip_x, chip_y = 6, qy + 8
+        chip_x = 6
+        chip_y = qy + 8
         for i, label in enumerate(self._quick):
             chip_w = get_font(6).render(label, False, WHITE).get_width() + 10
             if chip_x + chip_w >= w - 6:
-                chip_x, chip_y = 6, chip_y + 18
-            col = WHITE if i == self._quick_idx else (34, 34, 34)
+                chip_x = 6
+                chip_y += 18
+            col = WHITE if i == self._quick_idx else (42, 42, 42)
             pygame.draw.rect(surface, col, (chip_x, chip_y, chip_w, 14), 2)
             tcol = WHITE if i == self._quick_idx else DIM
             surface.blit(get_font(6).render(label, False, tcol), (chip_x + 5, chip_y + 4))
             chip_x += chip_w + 5
-        iy = h - 32
+
+        iy = h - input_h
         pygame.draw.line(surface, WHITE, (0, iy), (w, iy), 3)
         pygame.draw.line(surface, WHITE, (w - 32, iy), (w - 32, h), 3)
         surface.blit(get_font(5).render("TYPE A REPLY...", False, DIM), (7, iy + 11))

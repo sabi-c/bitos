@@ -23,9 +23,13 @@ from bluetooth.characteristics import DeviceInfoCharacteristic, DeviceStatusChar
 from bluetooth.constants import build_setup_url
 from bluetooth.network_manager import NetworkPriorityManager
 from bluetooth.wifi_manager import WiFiManager
-from audio import get_audio_pipeline
-from hardware import BatteryMonitor, LEDController, StatusPoller, StatusState, SystemMonitor
-from ui.screen_manager import ScreenManager
+from device.ble.ble_service import BITOSBleService
+from device.ble.pairing_manager import PairingManager
+from audio.pipeline import get_audio_pipeline
+from hardware import StatusPoller, StatusState, SystemMonitor
+from power.battery import BatteryMonitor
+from power.leds import LEDController
+from screens.manager import ScreenManager
 from screens.boot import BootScreen
 from screens.lock_screen import LockScreen
 import screens.chat_screen  # register app
@@ -43,6 +47,8 @@ from integrations.adapters import create_runtime_adapter
 from integrations.queue import OutboundCommandQueue
 from integrations.runtime import OutboundWorkerRuntimeLoop
 from integrations.worker import OutboundCommandWorker
+from device.audio.voice_pipeline import VoicePipeline
+import device.screens.chat_screen  # triggers @register_app
 
 logger = logging.getLogger(__name__)
 
@@ -128,12 +134,36 @@ def main():
     led = LEDController(board=board)
     monitor = SystemMonitor(interval=30)
     battery_monitor = BatteryMonitor()
+    battery_monitor.start()
+    battery_monitor.configure_safe_shutdown(threshold_pct=5, delay_s=30)
+    led.idle()
     client = BackendClient()
     repository = DeviceRepository()
     repository.initialize()
     notification_queue = NotificationQueue(repository=repository)
     status_state = StatusState()
     screen_mgr = ScreenManager(notification_queue=notification_queue, status_state=status_state)
+
+    openai_key = os.getenv("OPENAI_API_KEY", "")
+
+    def ai_send_fn(text: str) -> str:
+        # Placeholder — replace with real Anthropic call later
+        import anthropic
+
+        client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
+        msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=300,
+            messages=[{"role": "user", "content": text}],
+        )
+        return msg.content[0].text
+
+    voice_pipeline = VoicePipeline(
+        openai_key=openai_key,
+        ai_send_fn=ai_send_fn,
+        voice_model=os.getenv("PIPER_VOICE_MODEL", "assets/voices/en_US-ryan-low.onnx"),
+    )
+    screen_mgr._voice_pipeline = voice_pipeline
 
     def _active_screen_name() -> str:
         current = screen_mgr.current
@@ -171,6 +201,40 @@ def main():
         )
 
     wifi_manager = WiFiManager()
+    ble_service = BITOSBleService()
+    pairing_mgr = PairingManager()
+
+    def on_ble_message(msg: dict):
+        message_type = msg.get("t")
+        if message_type == "msg":
+            logger.info("[BLE] chat message: %r", msg.get("body", ""))
+        elif message_type == "vol":
+            logger.info("[BLE] volume: %s", msg.get("v"))
+        else:
+            logger.info("[BLE] unhandled message: %s", msg)
+
+    def on_ble_connect():
+        led.connected()
+        logger.info("[BLE] phone connected")
+
+    def on_ble_disconnect():
+        logger.info("[BLE] phone disconnected")
+
+    def on_ancs_notification(notif: dict):
+        logger.info(
+            "[ANCS] iOS notif: %s — %s: %s",
+            notif.get("app", "?"),
+            notif.get("title", "?"),
+            notif.get("body", "?"),
+        )
+        if ble_service.is_connected:
+            ble_service.send(notif)
+
+    ble_service.on_message(on_ble_message)
+    ble_service.on_connect(on_ble_connect)
+    ble_service.on_disconnect(on_ble_disconnect)
+    pairing_mgr.on_notification(on_ancs_notification)
+
     network_manager = NetworkPriorityManager()
     status_poller = StatusPoller(status_state, client, battery_monitor, network_manager, led=led)
     wifi_status_char = WiFiStatusCharacteristic()
@@ -247,9 +311,100 @@ def main():
 
     restored_state = _restore_state()
 
-    # Deprecated: legacy panel-based navigation functions were removed in favor of
-    # Screen + NavigationEvent routing via device/ui/screen_manager.py.
+    def on_home():
+        home = HomePanel(
+            on_back=on_home,
+            on_open_chat=open_chat,
+            on_open_focus=open_focus,
+            on_open_tasks=open_tasks,
+            on_open_captures=open_captures,
+            on_open_notifications=open_notifications,
+            on_open_messages=open_messages,
+            on_open_mail=open_mail,
+            on_open_settings=open_settings,
+            on_show_shade=screen_mgr.show_shade,
+            repository=repository,
+            client=client,
+            status_state=status_state,
+            ui_settings=ui_settings,
+            startup_health=startup_health,
+        )
+        screen_mgr.replace(home)
 
+    def open_chat():
+        screen_mgr.replace(ChatPanel(client=client, ui_settings=ui_settings, repository=repository, audio_pipeline=audio_pipeline, led=led, on_back=on_home))
+
+    def open_focus():
+        screen_mgr.replace(FocusPanel(on_back=on_home, ui_settings=ui_settings, repository=repository))
+
+    def open_tasks():
+        screen_mgr.replace(TasksPanel(client=client, repository=repository, on_back=on_home, ui_settings=ui_settings))
+
+    def open_captures():
+        screen_mgr.replace(CapturesPanel(repository=repository, on_back=on_home, ui_settings=ui_settings))
+
+    def open_messages():
+        battery_pct = int(battery_monitor.get_status().get("pct", 84))
+        screen_mgr.replace(
+            MessagesPanel(
+                client=client,
+                battery_pct=battery_pct,
+                audio_pipeline=audio_pipeline,
+                led=led,
+                on_back=on_home,
+                ui_settings=ui_settings,
+            )
+        )
+
+    def open_mail():
+        battery_pct = int(battery_monitor.get_status().get("pct", 84))
+        screen_mgr.replace(
+            MailPanel(
+                client=client,
+                battery_pct=battery_pct,
+                audio_pipeline=audio_pipeline,
+                led=led,
+                on_back=on_home,
+                ui_settings=ui_settings,
+            )
+        )
+
+    def open_notifications():
+        screen_mgr.replace(NotificationsPanel(on_back=on_home, ui_settings=ui_settings))
+
+    def open_settings():
+        screen_mgr.replace(
+            SettingsPanel(
+                repository=repository,
+                on_back=on_home,
+                on_open_model_picker=open_model_picker,
+                on_open_agent_mode=open_agent_mode,
+                on_open_sleep_timer=open_sleep_timer,
+                on_open_about=open_about,
+                on_push_overlay=screen_mgr.push_overlay,
+                on_dismiss_overlay=screen_mgr.dismiss_overlay,
+                get_ble_address=gatt_server.get_device_address,
+                on_set_discoverable=gatt_server.set_discoverable,
+                ui_settings=ui_settings,
+                client=client,
+                on_open_integration_detail=open_integration_detail,
+            )
+        )
+
+    def open_model_picker():
+        screen_mgr.replace(ModelPickerPanel(repository=repository, on_back=on_home, ui_settings=ui_settings))
+
+    def open_agent_mode():
+        screen_mgr.replace(AgentModePanel(repository=repository, on_back=on_home, ui_settings=ui_settings))
+
+    def open_sleep_timer():
+        screen_mgr.replace(SleepTimerPanel(repository=repository, on_back=on_home, ui_settings=ui_settings))
+
+    def open_about():
+        screen_mgr.replace(AboutPanel(on_back=on_home, ui_settings=ui_settings))
+
+    def open_integration_detail(integration_name: str, status_data: dict):
+        screen_mgr.replace(IntegrationDetailPanel(integration_name=integration_name, status_data=status_data, on_back=on_home, ui_settings=ui_settings))
 
     def _enter_offline_mode():
         screen_mgr.dismiss_overlay()
@@ -291,12 +446,39 @@ def main():
     else:
         screen_mgr.push(boot)
 
+    power_overlay: PowerOverlay | None = None
+
+    def close_power_overlay():
+        nonlocal power_overlay
+        power_overlay = None
+
+    def run_power_action(action: str):
+        nonlocal running
+        _cancel_inflight_voice_recording(screen_mgr)
+        _request_backend_shutdown(client)
+        _save_runtime_state(screen_mgr, time.time())
+        _execute_power_action(action)
+        running = False
+
+    def open_power_overlay():
+        nonlocal power_overlay
+        if power_overlay is not None:
+            return
+        _cancel_inflight_voice_recording(screen_mgr)
+        power_overlay = PowerOverlay(
+            on_shutdown=lambda: run_power_action("shutdown"),
+            on_reboot=lambda: run_power_action("reboot"),
+            on_cancel=close_power_overlay,
+        )
+
     screen_mgr.attach_device_status_characteristic(device_status_char)
 
     notification_poller.start()
     status_poller.start()
     monitor.start()
     led.off()
+    ble_service.start()
+    pairing_mgr.start()
     gatt_server.start()
     gatt_server.set_discoverable(False)
     device_status_char.start_periodic_updates(_collect_device_status, interval_s=30)
@@ -353,6 +535,8 @@ def main():
     monitor.stop()
     led.off()
     device_status_char.stop_periodic_updates()
+    pairing_mgr.stop()
+    ble_service.stop()
     gatt_server.stop()
     driver.quit()
     logger.info("[BITOS] Shut down.")

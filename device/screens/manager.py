@@ -1,9 +1,5 @@
-"""DEPRECATED legacy Screen Manager.
-
-This module is kept for reference-only backward compatibility.
-Active navigation now lives in `device/ui/screen_manager.py` with
-semantic navigation-event translation.
-"""
+"""BITOS Screen Manager: stack + simple route transitions."""
+import gc
 import pygame
 import warnings
 
@@ -45,13 +41,13 @@ class ScreenManager:
         self._emit_active_screen_status()
 
     def pop(self) -> BaseScreen | None:
-        if not self._stack:
+        if len(self._stack) <= 1:
             return None
         screen = self._stack.pop()
         screen.on_exit()
-        if self._stack:
-            self._flash_frames = 2
-            self._stack[-1].on_enter()
+        gc.collect()
+        self._flash_frames = 2
+        self._stack[-1].on_enter()
         self._emit_active_screen_status()
         return screen
 

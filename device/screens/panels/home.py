@@ -51,6 +51,8 @@ class HomePanel(BaseScreen):
         self._font_body = load_ui_font("body", self._ui_settings)
         self._font_small = load_ui_font("small", self._ui_settings)
         self._font_hint = load_ui_font("hint", self._ui_settings)
+        self._capture_count = 0
+        self._capture_refresh_elapsed = 5.0
         self._nav = VerticalNavController(
             [
                 NavItem(key="chat", label="CHAT", status="READY", action=self._open_chat),
@@ -67,6 +69,14 @@ class HomePanel(BaseScreen):
             ]
         )
 
+
+    def on_enter(self):
+        self._refresh_capture_count()
+
+    def update(self, dt: float):
+        self._capture_refresh_elapsed += float(dt)
+        if self._capture_refresh_elapsed >= 5.0:
+            self._refresh_capture_count()
 
     def handle_action(self, action: str):
         if action == "SHORT_PRESS":
@@ -100,7 +110,6 @@ class HomePanel(BaseScreen):
         surface.blit(health_surface, (PHYSICAL_W - health_surface.get_width() - 6, (STATUS_BAR_H - health_surface.get_height()) // 2))
 
         y = STATUS_BAR_H + 2
-        capture_count = self._repository.get_capture_count() if self._repository else 0
         for idx, item in enumerate(self._nav.items):
             focused = idx == self._nav.focus_index
             if focused:
@@ -109,7 +118,7 @@ class HomePanel(BaseScreen):
             status_color = BLACK if focused else (DIM2 if item.enabled else DIM3)
             label = item.label
             if item.key == "captures":
-                label = f"CAPTURES ({capture_count})"
+                label = f"CAPTURES ({self._capture_count})"
             elif item.key == "msgs":
                 unread = int(getattr(self._status_state, "imessage_unread", 0)) if self._status_state else 0
                 label = f"MSGS ({unread})" if unread > 0 else "MSGS"
@@ -186,3 +195,13 @@ class HomePanel(BaseScreen):
     def _open_home(self):
         # Already on home panel.
         return
+
+    def _refresh_capture_count(self):
+        self._capture_refresh_elapsed = 0.0
+        if not self._repository:
+            self._capture_count = 0
+            return
+        try:
+            self._capture_count = int(self._repository.get_capture_count())
+        except Exception:
+            self._capture_count = 0

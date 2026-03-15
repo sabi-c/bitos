@@ -42,3 +42,8 @@ From your Mac:
 
 6. Optional: bash scripts/setup/06_offline_ai.sh
    → Installs offline Piper TTS + whisper.cpp STT models
+
+
+7. Optional: bash scripts/setup/07_power_optimizations.sh
+   → Applies Pi Zero battery/RAM optimizations (GPU=16MB, HDMI off, zram, trims services)
+   → Reboot after running: sudo reboot

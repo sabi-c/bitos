@@ -7,11 +7,10 @@ Desktop: Space bar = physical button.
 from __future__ import annotations
 
 import os
-import sys
 import time
 import logging
 from enum import Enum, auto
-from typing import Callable, Optional
+from typing import Callable
 
 import pygame
 
@@ -29,11 +28,11 @@ class ButtonEvent(Enum):
     HOLD_END = auto()
 
 
-DEBOUNCE_MIN = 0.03
-SHORT_THRESHOLD = 0.6
-TRIPLE_WINDOW = 0.6
-POWER_GESTURE_COUNT = 5
-POWER_GESTURE_WINDOW_MS = 1200
+DEBOUNCE_S = 0.030
+LONG_PRESS_S = 0.500
+CLICK_TIMEOUT_S = 0.300
+POWER_PRESS_COUNT = 5
+POWER_WINDOW_S = 1.200
 
 
 class ButtonHandler:
@@ -43,11 +42,12 @@ class ButtonHandler:
         self._callbacks: dict[ButtonEvent, list[Callable]] = {e: [] for e in ButtonEvent}
         self._keyboard_mode = os.environ.get("BITOS_BUTTON", "").lower() == "keyboard"
         self._active_screen_name_getter = active_screen_name_getter
-        self._press_time: Optional[float] = None
-        self._release_times: list[float] = []
+        self._state: int = 0
+        self._start_time: float = 0.0
+        self._last_edge_time: float = 0.0
+        self._raw_pressed = False
         self._power_press_times: list[float] = []
-        self._is_pressed = False
-        self._pending_check_time: Optional[float] = None
+        self._board = None
 
     def on(self, event_type: ButtonEvent, callback: Callable):
         self._callbacks[event_type].append(callback)
@@ -81,66 +81,89 @@ class ButtonHandler:
 
     def _on_press(self):
         now = time.time()
-        if self._is_pressed:
+        if now - self._last_edge_time < DEBOUNCE_S:
             return
-        if self._press_time and (now - self._press_time) < DEBOUNCE_MIN:
+        self._last_edge_time = now
+
+        if self._state == 2:
+            self._state = 3
+            self._start_time = now
             return
 
-        self._is_pressed = True
-        self._press_time = now
+        if self._state != 0:
+            return
+
+        self._state = 1
+        self._start_time = now
         self._log_button_state(pressed=True)
 
-        cutoff = now - (POWER_GESTURE_WINDOW_MS / 1000.0)
+        cutoff = now - POWER_WINDOW_S
         self._power_press_times = [t for t in self._power_press_times if t >= cutoff]
         self._power_press_times.append(now)
-        if len(self._power_press_times) >= POWER_GESTURE_COUNT:
+        if len(self._power_press_times) >= POWER_PRESS_COUNT:
             self._power_press_times.clear()
-            self._release_times.clear()
-            self._pending_check_time = None
+            self._state = 0
             self._emit(ButtonEvent.POWER_GESTURE)
+            return
 
         self._emit(ButtonEvent.HOLD_START)
 
     def _on_release(self):
         now = time.time()
-        if not self._is_pressed:
+        if now - self._last_edge_time < DEBOUNCE_S:
             return
 
-        self._is_pressed = False
+        if self._state == 0:
+            return
+
+        self._last_edge_time = now
         self._log_button_state(pressed=False)
         self._emit(ButtonEvent.HOLD_END)
 
-        if self._press_time is None:
+        if self._state == 1:
+            self._state = 2
+            self._start_time = now
             return
 
-        hold_duration = now - self._press_time
-        if hold_duration >= SHORT_THRESHOLD:
-            self._emit(ButtonEvent.LONG_PRESS)
-            self._release_times.clear()
-            self._pending_check_time = None
-            return
-
-        self._release_times.append(now)
-        self._pending_check_time = now + TRIPLE_WINDOW
-
-    def update(self):
-        if self._pending_check_time is None:
-            return
-
-        now = time.time()
-        if now < self._pending_check_time:
-            return
-
-        taps = len(self._release_times)
-        self._release_times.clear()
-        self._pending_check_time = None
-
-        if taps >= 3:
-            self._emit(ButtonEvent.TRIPLE_PRESS)
-        elif taps == 2:
+        if self._state == 3:
+            self._state = 0
             self._emit(ButtonEvent.DOUBLE_PRESS)
-        elif taps == 1:
-            self._emit(ButtonEvent.SHORT_PRESS)
+            return
+
+        if self._state == 4:
+            self._state = 0
+            return
+
+        self._state = 0
+
+    def update(self) -> None:
+        now = time.time()
+
+        if self._board is None and not self._keyboard_mode:
+            try:
+                from hardware.whisplay_board import get_board
+
+                self._board = get_board()
+            except Exception:
+                self._board = None
+
+        if self._board is not None:
+            pressed = self._board.button_pressed()
+            if pressed and not self._raw_pressed:
+                self._raw_pressed = True
+                self._on_press()
+            elif not pressed and self._raw_pressed:
+                self._raw_pressed = False
+                self._on_release()
+
+        if self._state == 1:
+            if now - self._start_time >= LONG_PRESS_S:
+                self._state = 4
+                self._emit(ButtonEvent.LONG_PRESS)
+        elif self._state == 2:
+            if now - self._start_time >= CLICK_TIMEOUT_S:
+                self._state = 0
+                self._emit(ButtonEvent.SHORT_PRESS)
 
     def _log_button_state(self, pressed: bool):
         if not logger.isEnabledFor(logging.DEBUG):
