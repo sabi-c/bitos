@@ -1,6 +1,7 @@
 """BITOS Screen Manager: stack + simple route transitions."""
 import gc
 import pygame
+import warnings
 
 import display.tokens as tokens
 from display.tokens import BLACK, WHITE
@@ -12,6 +13,11 @@ class ScreenManager:
     """Manages a stack of screens. Top screen receives render + input."""
 
     def __init__(self, notification_queue: NotificationQueue | None = None, status_state=None):
+        warnings.warn(
+            "device.screens.manager.ScreenManager is deprecated; use device.ui.screen_manager.ScreenManager",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._stack: list[BaseScreen] = []
         self._flash_frames = 0
         self._last_frame_hash = None
