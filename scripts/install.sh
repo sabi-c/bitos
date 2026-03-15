@@ -27,12 +27,7 @@ fi
 
 
 # Apply WM8960 audio defaults after Whisplay driver configuration
-bash scripts/set_audio_levels.sh || true
-
-# wm8960 default mixer levels
-amixer -c 0 sset 'Speaker' 90% || true
-amixer -c 0 sset 'Headphone' 90% || true
-amixer -c 0 sset 'Capture' 80% || true
+bash scripts/set_audio_levels.sh
 
 bash scripts/setup/03_resilience.sh
 
