@@ -11,4 +11,6 @@ bash scripts/setup/03_resilience.sh
 bash scripts/setup/04_bitos_service.sh
 sudo systemctl enable bitos-server bitos-device
 sudo systemctl daemon-reload
+sudo mkdir -p /etc/bitos
+sudo touch /etc/bitos/configured
 echo "Done. Add API key: sudo nano /etc/bitos/secrets"

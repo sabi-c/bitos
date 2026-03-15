@@ -8,17 +8,10 @@ users:
     sudo: ALL=(ALL) NOPASSWD:ALL
     groups: [adm, dialout, cdrom, audio, video, plugdev, users, netdev, spi, i2c, gpio]
     ssh_authorized_keys:
-      - YOUR_SSH_PUBLIC_KEY_HERE
-
-write_files:
-  - path: /etc/bitos/repo_url
-    permissions: '0644'
-    owner: root:root
-    content: |
-      https://github.com/YOUR_GITHUB_USERNAME/bitos.git
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOoNVUv0P0BGNuh4sL1zmHtK2bv/b4COlW2IzRHeG4XW seb@bitos
 
 runcmd:
-  - mkdir -p /etc/bitos
-  - chown -R pi:pi /home/pi
-  - su - pi -c 'test -d ~/bitos || git clone $(cat /etc/bitos/repo_url) ~/bitos'
-  - su - pi -c 'cd ~/bitos && bash scripts/install.sh --non-interactive'
+  - sleep 30
+  - git clone https://github.com/sabi-c/bitos.git /home/pi/bitos
+  - chown -R pi:pi /home/pi/bitos
+  - sudo -u pi bash /home/pi/bitos/scripts/install.sh --non-interactive

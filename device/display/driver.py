@@ -5,6 +5,7 @@ ST7789 hardware driver is a stub — will be ported from whisplay.py in Phase 5.
 """
 import logging
 import os
+import sys
 import time
 from abc import ABC, abstractmethod
 
@@ -112,6 +113,7 @@ class ST7789Driver(DisplayDriver):
         self._spi = None
         self._gpio = None
         self._surface: pygame.Surface | None = None
+        self.backlight = None
 
     def init(self):
         try:
@@ -137,15 +139,16 @@ class ST7789Driver(DisplayDriver):
             GPIO.setup(self.RST_PIN, GPIO.OUT)
             self._reset()
             self._init_display()
-
-            import sys
-
+            # Enable backlight via Whisplay HAT driver
             sys.path.insert(0, os.environ.get("WHISPLAY_DRIVER_PATH", "/home/pi/Whisplay/Driver"))
             try:
                 from WhisPlay import WhisPlayBoard
-
-                self._whisplay = WhisPlayBoard()
-                self._whisplay.set_backlight(100)
+                self.backlight = WhisPlayBoard()
+                # Reset → settle → ramp to configured level
+                self.backlight.set_backlight(0)
+                time.sleep(0.1)
+                level = int(os.environ.get("WHISPLAY_BACKLIGHT_LEVEL", "100"))
+                self.backlight.set_backlight(max(0, min(100, level)))
             except Exception as e:
                 print(f"backlight_init_failed: {e}")
         except Exception as e:
@@ -230,12 +233,10 @@ class ST7789Driver(DisplayDriver):
     def update(self):
         self.render(self.get_surface())
 
-    def set_brightness(self, level: int):
-        if hasattr(self, "_whisplay"):
-            try:
-                self._whisplay.set_backlight(level)
-            except Exception:
-                pass
+    def set_brightness(self, level: int) -> None:
+        """Set backlight level 0–100. No-op if Whisplay backlight is unavailable."""
+        if self.backlight is not None:
+            self.backlight.set_backlight(level)
 
     def quit(self):
         try:

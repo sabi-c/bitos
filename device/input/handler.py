@@ -4,6 +4,7 @@ Processes raw button press/release events into gesture types.
 Desktop: Space bar = physical button.
 """
 import os
+import sys
 import threading
 import time
 from enum import Enum, auto
@@ -146,26 +147,54 @@ class ButtonHandler:
 
 
 class GPIOButtonHandler:
-    """GPIO-backed button handler for Pi hardware mode."""
+    """GPIO-backed button handler for Pi hardware mode.
 
-    GPIO_PIN = 11  # Board P11 = BCM 17
+    Prefers WhisPlayBoard.set_key_callback() to avoid conflicting GPIO listeners.
+    Falls back to direct RPi.GPIO on BCM 17 if the Whisplay driver is unavailable.
+    """
+
+    GPIO_PIN_BCM = 17  # BCM 17 = Board P11 (Whisplay HAT button)
 
     def __init__(self, on_event: Callable[[ButtonEvent], None]):
-        import RPi.GPIO as GPIO  # type: ignore
-
         self._on_event = on_event
         self._press_times: list[float] = []
         self._press_start: float | None = None
         self._lock = threading.Lock()
+        self._whisplay_board = None
 
-        GPIO.setmode(GPIO.BOARD)
-        GPIO.setup(self.GPIO_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        # Strategy 1: Use WhisPlayBoard's own button callback (avoids GPIO conflict)
+        try:
+            sys.path.insert(0, os.environ.get("WHISPLAY_DRIVER_PATH", "/home/pi/Whisplay/Driver"))
+            from WhisPlay import WhisPlayBoard
+            board = WhisPlayBoard()
+            board.set_key_callback(self._raw_callback_whisplay)
+            self._whisplay_board = board
+            return  # Success — no direct GPIO needed
+        except (ImportError, AttributeError, Exception):
+            pass  # WhisPlay unavailable or no set_key_callback — fall through
+
+        # Strategy 2: Direct GPIO (BCM numbering, consistent with display driver)
+        import RPi.GPIO as GPIO  # type: ignore
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setup(self.GPIO_PIN_BCM, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         GPIO.add_event_detect(
-            self.GPIO_PIN,
+            self.GPIO_PIN_BCM,
             GPIO.BOTH,
             callback=self._raw_callback,
             bouncetime=30,
         )
+
+    def _raw_callback_whisplay(self, pin_state: int):
+        """Callback from WhisPlayBoard: pin_state 0=pressed, 1=released."""
+        now_ms = time.time() * 1000.0
+        if pin_state == 0:
+            with self._lock:
+                self._press_start = now_ms
+            return
+        with self._lock:
+            start_ms = self._press_start if self._press_start is not None else now_ms
+        duration_ms = now_ms - start_ms
+        self._handle_release(duration_ms=duration_ms, now_ms=now_ms)
 
     def _raw_callback(self, channel):
         import RPi.GPIO as GPIO  # type: ignore
@@ -221,3 +250,24 @@ class GPIOButtonHandler:
                     self._on_event(ButtonEvent.SHORT_PRESS)
 
         threading.Thread(target=check_single, daemon=True).start()
+
+
+def create_button_handler():
+    """Return a button handler for the current mode: GPIO on Pi, keyboard/pygame on desktop."""
+    if os.environ.get("BITOS_BUTTON", "").lower() == "gpio":
+        return GPIOButtonHandlerAdapter()
+    return ButtonHandler()
+
+
+class GPIOButtonHandlerAdapter(ButtonHandler):
+    """Wraps GPIOButtonHandler so the main loop can use the same .on() / handle_pygame_event / update API."""
+
+    def __init__(self):
+        super().__init__()
+        self._gpio = GPIOButtonHandler(on_event=self._emit)
+
+    def handle_pygame_event(self, event: pygame.event.Event) -> bool:
+        return False  # GPIO path: events come from callback, not pygame
+
+    def update(self) -> None:
+        pass  # GPIO path: no per-frame tap resolution needed (handled in GPIOButtonHandler)

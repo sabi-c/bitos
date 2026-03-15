@@ -17,7 +17,7 @@ import pygame
 from display.driver import create_driver
 import display.tokens as tokens
 from display.tokens import FPS
-from input.handler import ButtonHandler, ButtonEvent
+from input.handler import ButtonEvent, create_button_handler
 from notifications import NotificationPoller
 from overlays import NotificationQueue, NotificationToast, QROverlay
 from overlays.power import PowerOverlay
@@ -126,7 +126,7 @@ def _handle_main_loop_crash(error: Exception, crash_path: str = "/tmp/bitos_cras
         json.dump({"error": str(error), "timestamp": time.time()}, f)
 
 
-def _run_main_loop(driver, button: ButtonHandler, screen_mgr: ScreenManager, outbound_loop: OutboundWorkerRuntimeLoop):
+def _run_main_loop(driver, button, screen_mgr: ScreenManager, outbound_loop: OutboundWorkerRuntimeLoop):
     clock = pygame.time.Clock()
     running = True
     last_time = time.time()
@@ -172,7 +172,7 @@ def main():
     driver = create_driver()
     driver.init()
 
-    button = ButtonHandler()
+    button = create_button_handler()
     audio_pipeline = get_audio_pipeline()
     led = LEDController()
     monitor = SystemMonitor(interval=30)
@@ -406,6 +406,12 @@ def main():
         screen_mgr.replace(lock)
 
     def _show_setup_qr_if_needed():
+        from pathlib import Path
+        # Skip onboarding if device is already configured
+        if Path("/etc/bitos/configured").exists():
+            return
+        if os.environ.get("ANTHROPIC_API_KEY"):
+            return
         active = network_manager.get_active_connection()
         if active:
             return
