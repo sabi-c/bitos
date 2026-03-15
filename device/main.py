@@ -178,7 +178,6 @@ def main():
     driver = create_driver(board=board)
     driver.init()
 
-    button = create_button_handler(board=board)
     audio_pipeline = get_audio_pipeline()
     led = LEDController(board=board)
     monitor = SystemMonitor(interval=30)
@@ -189,6 +188,14 @@ def main():
     notification_queue = NotificationQueue(repository=repository)
     status_state = StatusState()
     screen_mgr = ScreenManager(notification_queue=notification_queue, status_state=status_state)
+
+    def _active_screen_name() -> str:
+        current = screen_mgr.current
+        if current is None:
+            return "none"
+        return current.__class__.__name__
+
+    button = create_button_handler(board=board, active_screen_name_getter=_active_screen_name)
     notification_poller = NotificationPoller(queue=notification_queue, api_client=client, repository=repository)
 
     # SD-002: BLE auth bootstrap binds device identity + shared secret before any protected characteristic writes.

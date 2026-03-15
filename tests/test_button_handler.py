@@ -11,7 +11,19 @@ import pygame
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "device"))
 
-from input.handler import ButtonEvent, ButtonHandler
+from input.handler import ButtonEvent, ButtonHandler, create_button_handler
+
+
+class BoardStub:
+    def __init__(self):
+        self.press_callbacks = []
+        self.release_callbacks = []
+
+    def on_button_press(self, callback):
+        self.press_callbacks.append(callback)
+
+    def on_button_release(self, callback):
+        self.release_callbacks.append(callback)
 
 
 class ButtonHandlerTests(unittest.TestCase):
@@ -99,6 +111,27 @@ class ButtonHandlerTests(unittest.TestCase):
         t1.join(timeout=2)
 
         self.assertTrue(True)
+
+    def test_create_button_handler_registers_board_callbacks(self):
+        board = BoardStub()
+        handler = create_button_handler(board=board)
+
+        self.assertEqual(len(board.press_callbacks), 1)
+        self.assertEqual(len(board.release_callbacks), 1)
+
+        board.press_callbacks[0]()
+        board.release_callbacks[0]()
+        self.assertTrue(callable(handler.handle_pygame_event))
+
+    def test_button_state_logs_include_active_screen(self):
+        handler = ButtonHandler(active_screen_name_getter=lambda: "lock")
+
+        with patch("input.handler.logger.info") as log_info:
+            handler._on_press()
+            handler._on_release()
+
+        log_info.assert_any_call("Button %s — active screen: %s", "pressed", "lock")
+        log_info.assert_any_call("Button %s — active screen: %s", "released", "lock")
 
 
 if __name__ == "__main__":
