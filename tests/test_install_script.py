@@ -34,3 +34,8 @@ def test_day_one_health_wait_has_timeout():
     assert "until curl -sf http://localhost:8000/health > /dev/null; do" in day_one
     assert "sleep 1" in day_one
     assert "echo -n \".\"" in day_one
+
+
+def test_device_service_sets_pythonwarnings_runtimewarning_ignore():
+    service_setup = _read("scripts/setup/04_bitos_service.sh")
+    assert "Environment=PYTHONWARNINGS=ignore::RuntimeWarning" in service_setup

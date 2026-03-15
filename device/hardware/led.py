@@ -11,18 +11,21 @@ logger = logging.getLogger(__name__)
 class LEDController:
     def __init__(self, board=None):
         self._board = board
-        if self._board is None:
+
+    def set_color(self, r: int, g: int, b: int):
+        board = self._board
+        if board is None:
             try:
                 from hardware.whisplay_board import get_board
 
-                self._board = get_board()
+                board = get_board()
             except Exception as exc:
                 logger.warning("led_init_failed error=%s", exc)
+                board = None
 
-    def set_color(self, r: int, g: int, b: int):
-        if self._board is not None:
+        if board:
             try:
-                self._board.set_rgb(r, g, b)
+                board.set_rgb(r, g, b)
             except Exception:
                 logger.debug("led_set_color_failed r=%s g=%s b=%s", r, g, b)
 

@@ -39,6 +39,7 @@ Environment=BITOS_BUTTON=gpio
 Environment=SERVER_URL=http://localhost:8000
 Environment=WHISPLAY_DRIVER_PATH=/home/pi/Whisplay/Driver
 Environment=PYTHONPATH=/home/pi/bitos
+Environment=PYTHONWARNINGS=ignore::RuntimeWarning
 ExecStartPre=/bin/bash -c "until curl -sf http://localhost:8000/health; do sleep 1; done"
 ExecStart=/home/pi/bitos/.venv/bin/python -m device.main
 Restart=always
