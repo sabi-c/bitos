@@ -166,15 +166,22 @@ def _run_main_loop(driver, button, screen_mgr: ScreenManager, outbound_loop: Out
 
 
 def main():
+    import sys, os
+    sys.path.insert(0, os.environ.get(
+      'WHISPLAY_DRIVER_PATH', '/home/pi/Whisplay/Driver'))
+    import RPi.GPIO as GPIO
+    GPIO.setwarnings(False)
+    try:
+        GPIO.remove_event_detect(11)
+    except Exception:
+        pass
+    GPIO.cleanup()
+
+    from device.hardware.whisplay_board import get_board
+    board = get_board()
+
     logger.info("[BITOS] Starting device...")
     start_time = time.time()
-
-    # WhisPlayBoard must init first — it owns all HAT GPIO (display, button, LED)
-    try:
-        from hardware.whisplay_board import get_board
-        get_board()
-    except Exception:
-        pass  # Non-Pi environment — board unavailable
 
     driver = create_driver()
     driver.init()
