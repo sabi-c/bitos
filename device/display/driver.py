@@ -108,26 +108,16 @@ class ST7789Driver(DisplayDriver):
 
         self._board = get_board()
         if self._board is None:
-            raise RuntimeError("WhisPlayBoard unavailable — cannot init ST7789")
+            raise RuntimeError("WhisPlayBoard unavailable: get_board() returned None; cannot initialize ST7789 display")
 
         pygame.init()
         self._surface = pygame.Surface((self.WIDTH, self.HEIGHT))
         self._surface.fill(BLACK)
 
-        # Clear display via board
-        try:
-            from PIL import Image as PILImage
-            img = PILImage.new("RGB", (self.WIDTH, self.HEIGHT), (0, 0, 0))
-            self._board.disp.image(img)
-        except Exception as e:
-            logger.warning("st7789_clear_failed", extra={"error": str(e)})
-
-        # Set backlight to configured level
-        try:
-            level = int(os.environ.get("WHISPLAY_BACKLIGHT_LEVEL", "100"))
-            self._board.set_backlight(max(0, min(100, level)))
-        except Exception as e:
-            print(f"backlight_init_failed: {e}")
+        from PIL import Image as PILImage
+        black_image = PILImage.new("RGB", (self.WIDTH, self.HEIGHT), (0, 0, 0))
+        self._board.disp.image(black_image)
+        self._board.set_backlight(100)
 
     def get_surface(self) -> pygame.Surface:
         if self._surface is None:
@@ -142,9 +132,14 @@ class ST7789Driver(DisplayDriver):
             from PIL import Image as PILImage
             raw = pygame.image.tostring(self._surface, "RGB")
             img = PILImage.frombytes("RGB", (self.WIDTH, self.HEIGHT), raw)
-            self._board.disp.image(img)
+            self.display(img)
         except Exception as e:
             logger.debug("st7789_update_failed", extra={"error": str(e)})
+
+    def display(self, frame):
+        if self._board is None:
+            raise RuntimeError("WhisPlayBoard unavailable: call init() before display()")
+        self._board.disp.image(frame)
 
     def set_brightness(self, level: int) -> None:
         """Set backlight level 0–100."""
