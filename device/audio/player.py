@@ -25,7 +25,7 @@ class AudioPlayer:
     def _init(self) -> None:
         if self._initialized:
             return
-        os.environ.setdefault("AUDIODEV", PLAYBACK_DEVICE)
+        os.environ["AUDIODEV"] = PLAYBACK_DEVICE
         pygame.mixer.pre_init(SAMPLE_RATE, -16, CHANNELS, 4096)
         pygame.mixer.init()
         pygame.mixer.music.set_volume(self._volume)

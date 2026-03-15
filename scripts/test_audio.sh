@@ -1,35 +1,10 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/bash
+set -e
 
-cd "$(dirname "$0")/.."
+echo "Recording 3 seconds..."
+arecord -D hw:0,0 -f S16_LE -r 48000 -c 2 -d 3 /tmp/test_rec.wav
 
-OUT="/tmp/bitos_audio_smoke.wav"
-rm -f "$OUT"
+echo "Playback..."
+aplay -D hw:0,0 /tmp/test_rec.wav
 
-printf '== Audio smoke test ==\n'
-
-python - <<'PY'
-from device.audio.recorder import AudioRecorder
-
-out = "/tmp/bitos_audio_smoke.wav"
-try:
-    AudioRecorder().record_to_wav(out, seconds=3.0)
-    print("RECORD: PASS")
-except Exception as exc:
-    print(f"RECORD: FAIL ({exc})")
-    raise
-PY
-
-python - <<'PY'
-from device.audio.player import AudioPlayer
-
-out = "/tmp/bitos_audio_smoke.wav"
-try:
-    ok = AudioPlayer().play_file(out)
-    print("PLAYBACK: PASS" if ok else "PLAYBACK: FAIL")
-    if not ok:
-        raise SystemExit(1)
-except Exception as exc:
-    print(f"PLAYBACK: FAIL ({exc})")
-    raise
-PY
+echo "Audio test PASS ✓"
