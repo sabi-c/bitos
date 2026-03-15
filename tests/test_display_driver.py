@@ -39,7 +39,7 @@ class DisplayDriverTests(unittest.TestCase):
         os.environ["BITOS_DISPLAY"] = "st7789"
         drv = create_driver()
         self.assertIsInstance(drv, ST7789Driver)
-        with self.assertRaises(NotImplementedError):
+        with self.assertRaises(RuntimeError):
             drv.init()
 
     def test_pygame_driver_update_with_240x280_surface(self):

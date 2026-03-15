@@ -162,7 +162,11 @@ class WhisPlayBoardButtonHandler:
             from hardware.whisplay_board import get_board
             board = get_board()
             if board is not None:
-                board.set_key_callback(self._raw_callback)
+                # Use whichever callback registration the board exposes
+                if hasattr(board, 'set_button_callback'):
+                    board.set_button_callback(self._raw_callback)
+                elif hasattr(board, 'set_key_callback'):
+                    board.set_key_callback(self._raw_callback)
         except Exception as e:
             print(f"whisplay_button_init_failed: {e}")
 

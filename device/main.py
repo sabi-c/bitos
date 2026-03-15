@@ -169,6 +169,13 @@ def main():
     logger.info("[BITOS] Starting device...")
     start_time = time.time()
 
+    # WhisPlayBoard must init first — it owns all HAT GPIO (display, button, LED)
+    try:
+        from hardware.whisplay_board import get_board
+        get_board()
+    except Exception:
+        pass  # Non-Pi environment — board unavailable
+
     driver = create_driver()
     driver.init()
 
