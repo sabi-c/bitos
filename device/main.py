@@ -27,7 +27,8 @@ from bluetooth.characteristics import DeviceInfoCharacteristic, DeviceStatusChar
 from bluetooth.constants import build_pair_url, build_setup_url
 from bluetooth.network_manager import NetworkPriorityManager
 from bluetooth.wifi_manager import WiFiManager
-from ble import BITOSBleService
+from device.ble.ble_service import BITOSBleService
+from device.ble.pairing_manager import PairingManager
 from audio.pipeline import get_audio_pipeline
 from hardware import StatusPoller, StatusState, SystemMonitor
 from power.battery import BatteryMonitor
@@ -248,19 +249,38 @@ def main():
 
     wifi_manager = WiFiManager()
     ble_service = BITOSBleService()
+    pairing_mgr = PairingManager()
 
-    def on_ble_message(text: str):
-        logger.info("[BLE] message -> chat route pending: %r", text)
+    def on_ble_message(msg: dict):
+        message_type = msg.get("t")
+        if message_type == "msg":
+            logger.info("[BLE] chat message: %r", msg.get("body", ""))
+        elif message_type == "vol":
+            logger.info("[BLE] volume: %s", msg.get("v"))
+        else:
+            logger.info("[BLE] unhandled message: %s", msg)
 
     def on_ble_connect():
+        led.connected()
         logger.info("[BLE] phone connected")
 
     def on_ble_disconnect():
         logger.info("[BLE] phone disconnected")
 
+    def on_ancs_notification(notif: dict):
+        logger.info(
+            "[ANCS] iOS notif: %s — %s: %s",
+            notif.get("app", "?"),
+            notif.get("title", "?"),
+            notif.get("body", "?"),
+        )
+        if ble_service.is_connected:
+            ble_service.send(notif)
+
     ble_service.on_message(on_ble_message)
     ble_service.on_connect(on_ble_connect)
     ble_service.on_disconnect(on_ble_disconnect)
+    pairing_mgr.on_notification(on_ancs_notification)
 
     network_manager = NetworkPriorityManager()
     status_poller = StatusPoller(status_state, client, battery_monitor, network_manager, led=led)
@@ -414,6 +434,7 @@ def main():
     monitor.start()
     led.off()
     ble_service.start()
+    pairing_mgr.start()
     gatt_server.start()
     gatt_server.set_discoverable(False)
     device_status_char.start_periodic_updates(_collect_device_status, interval_s=30)
@@ -514,6 +535,8 @@ def main():
     monitor.stop()
     led.off()
     device_status_char.stop_periodic_updates()
+    pairing_mgr.stop()
+    ble_service.stop()
     gatt_server.stop()
     driver.quit()
     logger.info("[BITOS] Shut down.")
