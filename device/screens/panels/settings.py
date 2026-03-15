@@ -72,24 +72,19 @@ class SettingsPanel(BaseScreen):
         self._agent_mode = "producer"
         self._sleep_sec = 60
 
-        self._nav = VerticalNavController(
-            [
-                NavItem(key="web_search", label="WEB SEARCH", status="", action=self._toggle_web_search),
-                NavItem(key="memory", label="MEMORY", status="", action=self._toggle_memory),
-                NavItem(key="ai_model", label="AI MODEL", status="", action=self._open_model_picker),
-                NavItem(key="agent_mode", label="AGENT MODE", status="", action=self._open_agent_mode),
-                NavItem(key="sleep", label="SLEEP TIMER", status="", action=self._open_sleep_timer),
-                NavItem(key="about", label="ABOUT", status="", action=self._open_about),
-                NavItem(key="companion", label="COMPANION APP", status="", action=self._open_companion_app),
-                NavItem(key="integrations_header", label="INTEGRATIONS", status="", enabled=False),
-                NavItem(key="imessage", label="iMESSAGE", status="", action=lambda: None),
-                NavItem(key="vikunja", label="VIKUNJA", status="", action=lambda: None),
-                NavItem(key="companion", label="COMPANION APP", status="", action=self._open_companion_app),
-                NavItem(key="ai", label="AI", status="", action=self._open_model_picker),
-                NavItem(key="bluebubbles", label="BLUEBUBBLES", status="", action=lambda: None),
-                NavItem(key="back", label="BACK", status="HOME", action=self._go_back),
-            ]
-        )
+        self._nav = VerticalNavController([
+            NavItem(key="web_search", label="WEB SEARCH", status="", action=self._toggle_web_search),
+            NavItem(key="memory", label="MEMORY", status="", action=self._toggle_memory),
+            NavItem(key="ai_model", label="AI MODEL", status="", action=self._open_model_picker),
+            NavItem(key="agent_mode", label="AGENT MODE", status="", action=self._open_agent_mode),
+            NavItem(key="sleep", label="SLEEP TIMER", status="", action=self._open_sleep_timer),
+            NavItem(key="about", label="ABOUT", status="", action=self._open_about),
+            NavItem(key="companion", label="COMPANION APP", status="", action=self._open_companion_app),
+            NavItem(key="integrations_header", label="─ INTEGRATIONS ─", status="", enabled=False),
+            NavItem(key="imessage", label="iMESSAGE", status="", action=lambda: self._open_integration_detail("imessage")),
+            NavItem(key="vikunja", label="VIKUNJA", status="", action=lambda: self._open_integration_detail("vikunja")),
+            NavItem(key="back", label="BACK", status="HOME", action=self._go_back),
+        ])
 
     def on_enter(self):
         self._web_search = bool(self._repo.get_setting("web_search", default=True))
