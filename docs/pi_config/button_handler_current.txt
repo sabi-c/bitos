@@ -1,0 +1,29 @@
+2:BITOS Button Handler
+3:Processes raw button press/release events into gesture types.
+4:Desktop: Space bar = physical button.
+17:class ButtonEvent(Enum):
+34:class ButtonHandler:
+35:    """Detect button gestures from raw press/release events."""
+38:        self._callbacks: dict[ButtonEvent, list[Callable]] = {e: [] for e in ButtonEvent}
+46:    def on(self, event_type: ButtonEvent, callback: Callable):
+47:        self._callbacks[event_type].append(callback)
+49:    def _emit(self, event_type: ButtonEvent):
+50:        for cb in self._callbacks[event_type]:
+54:                print(f"[ButtonHandler] Callback error for {event_type.name}: {exc}")
+59:                self._emit(ButtonEvent.LONG_PRESS)
+62:                self._emit(ButtonEvent.DOUBLE_PRESS)
+65:                self._emit(ButtonEvent.TRIPLE_PRESS)
+93:            self._emit(ButtonEvent.POWER_GESTURE)
+95:        self._emit(ButtonEvent.HOLD_START)
+103:        self._emit(ButtonEvent.HOLD_END)
+110:            self._emit(ButtonEvent.LONG_PRESS)
+131:            self._emit(ButtonEvent.TRIPLE_PRESS)
+133:            self._emit(ButtonEvent.DOUBLE_PRESS)
+135:            self._emit(ButtonEvent.SHORT_PRESS)
+138:def create_button_handler(board=None):
+139:    """WhisPlay mode uses GPIO polling; desktop mode uses keyboard events."""
+141:        handler = ButtonHandler()
+148:            print("button_board_unavailable: falling back to keyboard-only input")
+151:        board.on_button_press(handler._on_press)
+152:        board.on_button_release(handler._on_release)
+155:    return ButtonHandler()
