@@ -7,6 +7,7 @@ Desktop: Space bar = physical button.
 from __future__ import annotations
 
 import os
+import sys
 import time
 import logging
 from enum import Enum, auto
@@ -154,8 +155,12 @@ class ButtonHandler:
 
 def create_button_handler(board=None, active_screen_name_getter: Callable[[], str] | None = None):
     """Create a button handler, preferring WhisPlay board callbacks when available."""
+    mode = os.environ.get("BITOS_BUTTON", "")
+    logger.info("button_handler mode=%s board=%s", mode, board)
+
     handler = ButtonHandler(active_screen_name_getter=active_screen_name_getter)
-    button_mode = os.environ.get("BITOS_BUTTON", "").lower()
+    _on_pi = sys.platform == "linux" and os.path.exists("/proc/device-tree/model")
+    button_mode = os.environ.get("BITOS_BUTTON", "gpio" if _on_pi else "keyboard").lower()
 
     if board is None and button_mode == "gpio":
         from hardware.whisplay_board import get_board
