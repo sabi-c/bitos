@@ -9,6 +9,7 @@ from datetime import datetime
 import pygame
 
 from device.ui.fonts import get_font
+from device.ui.font_sizes import TIME_LARGE, TITLE, BODY, CAPTION
 from device.ui.panels.base import (
     BasePanel, PANEL_W, BLACK, WHITE, GRAY_555, GRAY_444, GRAY_333,
     GRAY_AAA, GRAY_1A, SEP_COLOR,
@@ -41,7 +42,7 @@ class HomePanel(BasePanel):
         y = self.draw_header(surface, right_text=right_time, right_color=GRAY_555)
 
         # Large time display
-        font_22 = get_font(22)
+        font_22 = get_font(TIME_LARGE)
         h = now.hour % 12 or 12
         m = now.strftime("%M")
         time_text = f"{h}:{m}"
@@ -56,8 +57,8 @@ class HomePanel(BasePanel):
         months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN",
                   "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
         date_str = f"{days[now.weekday()]} {months[now.month - 1]} {now.day}"
-        font_6 = get_font(6)
-        date_surf = font_6.render(date_str, False, GRAY_555)
+        font_date = get_font(CAPTION)
+        date_surf = font_date.render(date_str, False, GRAY_555)
         surface.blit(date_surf, ((PANEL_W - date_surf.get_width()) // 2, y))
         y += date_surf.get_height() + 10
 
@@ -68,12 +69,12 @@ class HomePanel(BasePanel):
         pygame.draw.rect(surface, GRAY_1A, (wx, y, ww, wh), 2)
 
         # Temp
-        font_14 = get_font(14)
+        font_14 = get_font(TITLE)
         temp_surf = font_14.render(f"{self.weather_temp}\xb0", False, WHITE)
         surface.blit(temp_surf, (wx + 8, y + (wh - temp_surf.get_height()) // 2))
 
         # Weather info (right side of box)
-        font_5 = get_font(5)
+        font_5 = get_font(CAPTION)
         info_x = wx + 8 + temp_surf.get_width() + 6
         info_lines = [self.weather_desc, self.weather_location,
                       f"H:{self.weather_hi} L:{self.weather_lo}"]
@@ -86,15 +87,16 @@ class HomePanel(BasePanel):
         y += wh + 10
 
         # "NEXT TASK" section header
-        section_surf = font_5.render("NEXT TASK", False, GRAY_333)
+        font_section = get_font(CAPTION)
+        section_surf = font_section.render("NEXT TASK", False, GRAY_333)
         surface.blit(section_surf, (8, y))
         y += section_surf.get_height() + 4
         pygame.draw.line(surface, SEP_COLOR, (0, y), (PANEL_W, y))
         y += 1
 
         # Task rows
-        font_task = font_6
-        row_h = 20
+        font_task = get_font(BODY)
+        row_h = 24
         for idx, task in enumerate(self.tasks):
             focused = idx == self.focused_task
             if focused:

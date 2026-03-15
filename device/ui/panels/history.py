@@ -7,9 +7,10 @@ Matches bitos-nav-v2.html .history-panel specification.
 import pygame
 
 from device.ui.fonts import get_font
+from device.ui.font_sizes import BODY, CAPTION
 from device.ui.panels.base import (
     BasePanel, PANEL_W, BLACK, WHITE, GRAY_555, GRAY_333,
-    GRAY_AAA, GRAY_1A, SEP_COLOR,
+    GRAY_666, GRAY_AAA, GRAY_1A, SEP_COLOR,
 )
 
 
@@ -35,11 +36,11 @@ class HistoryPanel(BasePanel):
         y = self.draw_header(surface, right_text=str(self.total_count),
                              right_color=GRAY_555)
 
-        font_7 = get_font(7)
-        font_5 = get_font(5)
+        font_body = get_font(BODY)
+        font_cap = get_font(CAPTION)
 
         # Session rows
-        row_h = 24
+        row_h = 28
         for idx, session in enumerate(self.sessions):
             focused = idx == self.focused_session
 
@@ -48,12 +49,12 @@ class HistoryPanel(BasePanel):
 
             # Title
             title_color = BLACK if focused else GRAY_AAA
-            title_surf = font_7.render(session["title"][:18], False, title_color)
+            title_surf = font_body.render(session["title"][:18], False, title_color)
             surface.blit(title_surf, (8, y + 4))
 
             # Meta (timestamp)
-            meta_color = (102, 102, 102) if focused else GRAY_333
-            meta_surf = font_5.render(session["meta"], False, meta_color)
+            meta_color = GRAY_666 if focused else GRAY_333
+            meta_surf = font_cap.render(session["meta"], False, meta_color)
             surface.blit(meta_surf, (8, y + 4 + title_surf.get_height() + 2))
 
             pygame.draw.line(surface, SEP_COLOR, (0, y + row_h - 1), (PANEL_W, y + row_h - 1))

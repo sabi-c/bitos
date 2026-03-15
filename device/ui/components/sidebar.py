@@ -6,19 +6,17 @@ Matches bitos-nav-v2.html .sidebar specification.
 import pygame
 
 from device.ui.fonts import get_font
+from device.ui.font_sizes import SIDEBAR_ITEM
 
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-GRAY_444 = (68, 68, 68)
-GRAY_AAA = (170, 170, 170)
-GRAY_080808 = (8, 8, 8)
-SEP_COLOR = (10, 10, 10)
+from device.ui.panels.base import WHITE, BLACK, GRAY_444, GRAY_AAA, GRAY_080808, GRAY_0A
+
+SEP_COLOR = GRAY_0A
 
 SIDEBAR_W = 84
-ITEM_H = 26  # 9px padding top+bottom + 7px font ~ 25-26px
-FONT_SIZE = 7
+ITEM_H = 28  # padding top+bottom + 12px font
+FONT_SIZE = SIDEBAR_ITEM
 PAD_X = 7
-PAD_Y = 9
+PAD_Y = 8
 
 ITEMS = ["HOME", "CHAT", "TASKS", "SETTINGS", "FOCUS", "MAIL", "MSGS", "MUSIC", "HISTORY"]
 

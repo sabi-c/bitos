@@ -7,6 +7,7 @@ Matches bitos-nav-v2.html .music-panel specification.
 import pygame
 
 from device.ui.fonts import get_font
+from device.ui.font_sizes import TITLE, BODY, CAPTION
 from device.ui.panels.base import (
     BasePanel, PANEL_W, BLACK, WHITE, GRAY_555, GRAY_444,
     GRAY_1A, SEP_COLOR,
@@ -35,11 +36,9 @@ class MusicPanel(BasePanel):
     def render(self, surface: pygame.Surface) -> None:
         surface.fill(BLACK)
 
-        font_7 = get_font(7)
-        font_5 = get_font(5)
-        font_6 = get_font(6)
-        font_8 = get_font(8)
-        font_18 = get_font(18)
+        font_body = get_font(BODY)
+        font_cap = get_font(CAPTION)
+        font_ctrl = get_font(TITLE)
 
         # Header
         y = self.draw_header(surface, right_text="\u266a PLAYING", right_color=GRAY_555)
@@ -53,18 +52,18 @@ class MusicPanel(BasePanel):
         art_y = y + 10
         pygame.draw.rect(surface, WHITE, (art_x, art_y, art_size, art_size), 2)
         # Music note inside
-        note_surf = font_18.render("\u266b", False, WHITE)
+        note_surf = font_ctrl.render("\u266b", False, WHITE)
         surface.blit(note_surf, (art_x + (art_size - note_surf.get_width()) // 2,
                                   art_y + (art_size - note_surf.get_height()) // 2))
 
         # Track name
         track_y = art_y + art_size + 4
-        track_surf = font_7.render(np["track"][:18], False, WHITE)
+        track_surf = font_body.render(np["track"][:18], False, WHITE)
         surface.blit(track_surf, ((PANEL_W - track_surf.get_width()) // 2, track_y))
 
         # Artist + time
         artist_str = f"{np['artist']} \u00b7 {np['position']}/{np['duration']}"
-        artist_surf = font_5.render(artist_str[:24], False, GRAY_444)
+        artist_surf = font_cap.render(artist_str[:24], False, GRAY_444)
         artist_y = track_y + track_surf.get_height() + 2
         surface.blit(artist_surf, ((PANEL_W - artist_surf.get_width()) // 2, artist_y))
 
@@ -88,8 +87,7 @@ class MusicPanel(BasePanel):
         for i, label in enumerate(buttons):
             bx = btn_start_x + i * (btn_size + btn_gap)
             pygame.draw.rect(surface, WHITE, (bx, btn_y, btn_size, btn_size), 2)
-            btn_font = font_8
-            btn_surf = btn_font.render(label, False, WHITE)
+            btn_surf = font_ctrl.render(label, False, WHITE)
             surface.blit(btn_surf, (bx + (btn_size - btn_surf.get_width()) // 2,
                                      btn_y + (btn_size - btn_surf.get_height()) // 2))
 
@@ -99,7 +97,7 @@ class MusicPanel(BasePanel):
         y = sep_y + 2
 
         # Track list
-        track_h = 20
+        track_h = 24
         for idx, track in enumerate(self.tracks):
             focused = idx == self.focused_track
             playing = track.get("playing", False)
@@ -116,7 +114,7 @@ class MusicPanel(BasePanel):
 
             prefix = "\u266a " if playing else ""
             label = prefix + track["title"][:16]
-            label_surf = font_6.render(label, False, text_color)
+            label_surf = font_body.render(label, False, text_color)
             surface.blit(label_surf, (8, y + (track_h - label_surf.get_height()) // 2))
 
             pygame.draw.line(surface, SEP_COLOR, (0, y + track_h - 1), (PANEL_W, y + track_h - 1))

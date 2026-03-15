@@ -7,6 +7,7 @@ Matches bitos-nav-v2.html .msgs-panel specification.
 import pygame
 
 from device.ui.fonts import get_font
+from device.ui.font_sizes import BODY, CAPTION
 from device.ui.panels.base import (
     BasePanel, PANEL_W, BLACK, WHITE, GRAY_555, GRAY_333,
     GRAY_AAA, GRAY_1A, SEP_COLOR, GRAY_222,
@@ -34,17 +35,17 @@ class MessagesPanel(BasePanel):
     def render(self, surface: pygame.Surface) -> None:
         surface.fill(BLACK)
 
-        font_7 = get_font(7)
-        font_5 = get_font(5)
+        font_body = get_font(BODY)
+        font_cap = get_font(CAPTION)
 
         # Header with badge
-        pygame.draw.rect(surface, WHITE, (0, 0, PANEL_W, 16))
-        pygame.draw.line(surface, WHITE, (0, 16), (PANEL_W, 16), 2)
-        title_surf = font_7.render("MESSAGES", False, BLACK)
+        pygame.draw.rect(surface, WHITE, (0, 0, PANEL_W, 22))
+        pygame.draw.line(surface, WHITE, (0, 22), (PANEL_W, 22), 2)
+        title_surf = font_body.render("MESSAGES", False, BLACK)
         surface.blit(title_surf, (8, 5))
 
         badge_text = str(self.unread_count)
-        badge_surf = font_5.render(badge_text, False, BLACK)
+        badge_surf = font_cap.render(badge_text, False, BLACK)
         bx = 8 + title_surf.get_width() + 6
         by = 5
         pygame.draw.rect(surface, BLACK, (bx - 1, by - 1,
@@ -52,7 +53,7 @@ class MessagesPanel(BasePanel):
                                           badge_surf.get_height() + 4), 2)
         surface.blit(badge_surf, (bx + 3, by + 1))
 
-        y = 18
+        y = 24
 
         # Message rows
         row_h = 36
@@ -68,7 +69,7 @@ class MessagesPanel(BasePanel):
             av_y = y + (row_h - 24) // 2
             border_color = BLACK if focused else GRAY_333
             pygame.draw.rect(surface, border_color, (av_x, av_y, 24, 24), 2)
-            av_font = font_7
+            av_font = font_body
             av_surf = av_font.render(thread["initials"], False,
                                      BLACK if focused else WHITE)
             surface.blit(av_surf, (av_x + (24 - av_surf.get_width()) // 2,
@@ -83,13 +84,13 @@ class MessagesPanel(BasePanel):
             else:
                 name_color = GRAY_AAA
 
-            name_surf = font_7.render(thread["name"], False, name_color)
+            name_surf = font_body.render(thread["name"], False, name_color)
             surface.blit(name_surf, (text_x, y + 6))
 
             # Preview
             preview_color = BLACK if focused else GRAY_333
             preview_text = thread["preview"][:18]
-            preview_surf = font_5.render(preview_text, False, preview_color)
+            preview_surf = font_cap.render(preview_text, False, preview_color)
             surface.blit(preview_surf, (text_x, y + 6 + name_surf.get_height() + 3))
 
             pygame.draw.line(surface, SEP_COLOR, (0, y + row_h - 1), (PANEL_W, y + row_h - 1))
@@ -98,5 +99,5 @@ class MessagesPanel(BasePanel):
         # "NEW MESSAGE" footer
         pygame.draw.line(surface, GRAY_333, (0, y), (PANEL_W, y), 2)
         y += 2
-        footer_surf = font_5.render("\u25b6 NEW MESSAGE", False, GRAY_222)
+        footer_surf = font_cap.render("\u25b6 NEW MESSAGE", False, GRAY_222)
         surface.blit(footer_surf, (8, y + 6))

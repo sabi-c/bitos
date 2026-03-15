@@ -9,13 +9,8 @@ import math
 import pygame
 
 from device.ui.fonts import get_font
-
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-GRAY_333 = (51, 51, 51)
-GRAY_222 = (34, 34, 34)
-GRAY_1A = (26, 26, 26)
-GRAY_111 = (17, 17, 17)
+from device.ui.font_sizes import TITLE, HINT
+from device.ui.panels.base import WHITE, BLACK, GRAY_333, GRAY_222, GRAY_1A, GRAY_111
 
 SCREEN_W = 240
 SCREEN_H = 280
@@ -63,23 +58,23 @@ class BootPanel:
         pygame.draw.rect(surface, WHITE, (cx - 2, cy - 2, 4, 4))
 
         # "BITOS" title with blinking cursor
-        font_9 = get_font(9)
-        title_surf = font_9.render("BITOS", False, WHITE)
+        font_title = get_font(TITLE)
+        title_surf = font_title.render("BITOS", False, WHITE)
         title_y = cy + radius + 30
         surface.blit(title_surf, ((SCREEN_W - title_surf.get_width()) // 2, title_y))
 
         # Block cursor (blinking)
         if (self._frame // 12) % 2 == 0:
             cursor_x = (SCREEN_W + title_surf.get_width()) // 2 + 2
-            pygame.draw.rect(surface, WHITE, (cursor_x, title_y, 6, 10))
+            pygame.draw.rect(surface, WHITE, (cursor_x, title_y, 10, 16))
 
         # Version text
-        font_4 = get_font(5)
-        ver_surf = font_4.render("v1.0 \u00b7 MONOCHROME AI DEVICE", False, GRAY_1A)
-        surface.blit(ver_surf, ((SCREEN_W - ver_surf.get_width()) // 2, title_y + 18))
+        font_hint = get_font(HINT)
+        ver_surf = font_hint.render("v1.0 \u00b7 MONOCHROME AI DEVICE", False, GRAY_1A)
+        surface.blit(ver_surf, ((SCREEN_W - ver_surf.get_width()) // 2, title_y + 24))
 
         # Bottom hint
-        hint_surf = font_4.render("TAP BUTTON TO BOOT", False, GRAY_111)
+        hint_surf = font_hint.render("TAP BUTTON TO BOOT", False, GRAY_111)
         surface.blit(hint_surf, ((SCREEN_W - hint_surf.get_width()) // 2, SCREEN_H - 14))
 
         self._frame += 1

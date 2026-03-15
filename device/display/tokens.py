@@ -29,9 +29,9 @@ FONT_PATH = "assets/fonts/PressStart2P.ttf"
 
 FONT_SIZES = {
     "title": 16,
-    "body": 8,
-    "small": 6,
-    "hint": 5,
+    "body": 12,
+    "small": 10,
+    "hint": 8,
 }
 
 # ── Borders & Padding ─────────────────────────────────────────
@@ -46,6 +46,6 @@ PAD_WIDGET = 6     # px, padding inside widgets
 SIDEBAR_W = 84     # px, left sidebar panel
 CONTENT_W = PHYSICAL_W - SIDEBAR_W  # 156px, right content panel
 
-STATUS_BAR_H = 18  # px, top status bar (inverted: white bg, black text)
-ROW_H_MIN = 26     # px, minimum row height (fingertip navigable)
+STATUS_BAR_H = 20  # px, top status bar (inverted: white bg, black text)
+ROW_H_MIN = 28     # px, minimum row height (fingertip navigable)
 NAV_HEADER_H = 16  # px, panel header with title

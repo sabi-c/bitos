@@ -6,11 +6,13 @@ Matches bitos-nav-v2.html .kh specification.
 import pygame
 
 from device.ui.fonts import get_font
+from device.ui.font_sizes import HINT
 
-GRAY_111 = (17, 17, 17)
-SEP_COLOR = (10, 10, 10)
+from device.ui.panels.base import GRAY_111, GRAY_0A
 
-FONT_SIZE = 5  # 4px in HTML but 5 is smallest practical
+SEP_COLOR = GRAY_0A
+
+FONT_SIZE = HINT  # 8px, lowest acceptable size on 218 PPI
 PAD_X = 6
 PAD_Y = 2
 DEFAULT_HINT = "SHORT:NEXT \u00b7 LONG:SELECT \u00b7 DBL:BACK"

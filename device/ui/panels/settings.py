@@ -7,9 +7,10 @@ Matches bitos-nav-v2.html .settings-panel specification.
 import pygame
 
 from device.ui.fonts import get_font
+from device.ui.font_sizes import BODY, CAPTION
 from device.ui.panels.base import (
     BasePanel, PANEL_W, BLACK, WHITE, GRAY_555, GRAY_333,
-    GRAY_1A, SEP_COLOR,
+    GRAY_666, GRAY_1A, SEP_COLOR,
 )
 
 
@@ -34,8 +35,8 @@ class SettingsPanel(BasePanel):
 
         y = self.draw_header(surface)
 
-        font_7 = get_font(7)
-        font_6 = get_font(6)
+        font_body = get_font(BODY)
+        font_cap = get_font(CAPTION)
 
         row_h = 24
         for idx, row in enumerate(self.rows):
@@ -44,7 +45,7 @@ class SettingsPanel(BasePanel):
                 pygame.draw.rect(surface, WHITE, (0, y, PANEL_W, row_h))
 
             text_color = BLACK if focused else GRAY_555
-            label_surf = font_7.render(row["label"], False, text_color)
+            label_surf = font_body.render(row["label"], False, text_color)
             ty = y + (row_h - label_surf.get_height()) // 2
             surface.blit(label_surf, (8, ty))
 
@@ -58,8 +59,8 @@ class SettingsPanel(BasePanel):
                 knob_color = BLACK if focused else WHITE
                 pygame.draw.rect(surface, knob_color, (sw_x + 20 - 1 - 6, sw_y + 1, 6, 6))
             elif row.get("value"):
-                val_color = (102, 102, 102) if focused else GRAY_333
-                val_surf = font_6.render(row["value"], False, val_color)
+                val_color = GRAY_666 if focused else GRAY_333
+                val_surf = font_cap.render(row["value"], False, val_color)
                 surface.blit(val_surf, (PANEL_W - val_surf.get_width() - 8, ty))
 
             pygame.draw.line(surface, SEP_COLOR, (0, y + row_h - 1), (PANEL_W, y + row_h - 1))

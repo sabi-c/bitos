@@ -8,12 +8,12 @@ from datetime import datetime
 import pygame
 
 from device.ui.fonts import get_font
+from device.ui.font_sizes import STATUS_BAR
 
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
+from device.ui.panels.base import WHITE, BLACK
 
-BAR_H = 18
-FONT_SIZE = 6
+BAR_H = 20
+FONT_SIZE = STATUS_BAR
 PAD_X = 6
 
 
