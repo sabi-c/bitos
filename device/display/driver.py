@@ -98,6 +98,9 @@ class ST7789Driver(DisplayDriver):
 
     WIDTH = 240
     HEIGHT = 280
+    OFFSET_LEFT = 0
+    OFFSET_TOP = 0
+    ROTATION = 180
 
     # Pin assignments (BCM numbering)
     DC_PIN = 27  # GPIO27 = Board P13
@@ -134,6 +137,17 @@ class ST7789Driver(DisplayDriver):
             GPIO.setup(self.RST_PIN, GPIO.OUT)
             self._reset()
             self._init_display()
+
+            import sys
+
+            sys.path.insert(0, os.environ.get("WHISPLAY_DRIVER_PATH", "/home/pi/Whisplay/Driver"))
+            try:
+                from WhisPlay import WhisPlayBoard
+
+                self._whisplay = WhisPlayBoard()
+                self._whisplay.set_backlight(100)
+            except Exception as e:
+                print(f"backlight_init_failed: {e}")
         except Exception as e:
             logger.error("st7789_init_failed", extra={"error": str(e)})
             raise
@@ -155,11 +169,25 @@ class ST7789Driver(DisplayDriver):
         self._write_cmd(0x11)  # sleep out
         time.sleep(0.5)
         self._write_cmd(0x3A, [0x05])  # pixel format RGB565
-        self._write_cmd(0x36, [0x00])  # memory access control
-        self._write_cmd(0x2A, [0x00, 0x00, 0x00, 0xEF])  # col addr 240
-        self._write_cmd(0x2B, [0x00, 0x00, 0x01, 0x17])  # row addr 280
+        self._write_cmd(0x36, [self._madctl_for_rotation(self.ROTATION)])  # memory access control
+        x_start = self.OFFSET_LEFT
+        y_start = self.OFFSET_TOP
+        x_end = x_start + self.WIDTH - 1
+        y_end = y_start + self.HEIGHT - 1
+        self._write_cmd(0x2A, [x_start >> 8, x_start & 0xFF, x_end >> 8, x_end & 0xFF])  # col addr
+        self._write_cmd(0x2B, [y_start >> 8, y_start & 0xFF, y_end >> 8, y_end & 0xFF])  # row addr
         self._write_cmd(0x21)  # invert on (Whisplay needs this)
         self._write_cmd(0x29)  # display on
+
+    def _madctl_for_rotation(self, rotation: int) -> int:
+        normalized = rotation % 360
+        table = {
+            0: 0x00,
+            90: 0x60,
+            180: 0xC0,
+            270: 0xA0,
+        }
+        return table.get(normalized, 0xC0)
 
     def _write_cmd(self, cmd: int, data: list[int] | None = None):
         if self._gpio is None or self._spi is None:
@@ -180,8 +208,9 @@ class ST7789Driver(DisplayDriver):
         if self._gpio is None or self._spi is None:
             return
 
-        if surface.get_size() != (self.WIDTH, self.HEIGHT):
-            surface = pygame.transform.scale(surface, (self.WIDTH, self.HEIGHT))
+        framebuffer = pygame.Surface((self.WIDTH, self.HEIGHT))
+        framebuffer.blit(surface, (0, 0), area=pygame.Rect(0, 0, self.WIDTH, self.HEIGHT))
+        surface = framebuffer
 
         raw = pygame.image.tostring(surface, "RGB")
         rgb565 = bytearray()
@@ -200,6 +229,13 @@ class ST7789Driver(DisplayDriver):
 
     def update(self):
         self.render(self.get_surface())
+
+    def set_brightness(self, level: int):
+        if hasattr(self, "_whisplay"):
+            try:
+                self._whisplay.set_backlight(level)
+            except Exception:
+                pass
 
     def quit(self):
         try:

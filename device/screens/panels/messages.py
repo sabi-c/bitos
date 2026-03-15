@@ -37,10 +37,11 @@ class MessagesPanel(BaseScreen):
     STATE_DRAFT_VOICE = "draft_voice"
     STATE_CONFIRM_SEND = "confirm_send"
 
-    def __init__(self, client, battery_pct: int = 84, audio_pipeline=None, on_back=None, ui_settings: dict | None = None):
+    def __init__(self, client, battery_pct: int = 84, audio_pipeline=None, led=None, on_back=None, ui_settings: dict | None = None):
         self._client = client
         self._battery_pct = battery_pct
         self._audio_pipeline = audio_pipeline
+        self._led = led
         self._on_back = on_back
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
 
@@ -126,8 +127,12 @@ class MessagesPanel(BaseScreen):
             self._state = self.STATE_DRAFT_VOICE
         elif action == "LONG_PRESS":
             self._status_toast = "Sending..."
+            if self._led:
+                self._led.thinking()
             ok = self._client.send_message(self._selected_chat_id, self._draft_text, confirmed=True)
             self._status_toast = "Sent ✓" if ok else "Failed"
+            if self._led:
+                self._led.off() if ok else self._led.error()
             self._status_toast_until = time.time() + 1.5
             self._load_thread(self._selected_chat_id)
             self._state = self.STATE_THREAD
@@ -137,6 +142,8 @@ class MessagesPanel(BaseScreen):
             return
         transcript = ""
         try:
+            if self._led:
+                self._led.listening()
             audio_path = self._audio_pipeline.record(max_seconds=30)
             stop_fn = getattr(self._audio_pipeline, "stop", None) or getattr(self._audio_pipeline, "stop_recording", None)
             if callable(stop_fn):
@@ -144,9 +151,17 @@ class MessagesPanel(BaseScreen):
             transcript = self._audio_pipeline.transcribe(audio_path).strip()
         except Exception:
             transcript = ""
+            if self._led:
+                self._led.error()
+        if self._led:
+            self._led.off()
         if not transcript:
             return
+        if self._led:
+            self._led.thinking()
         draft = self._client.draft_reply(self._selected_chat_id, transcript)
+        if self._led:
+            self._led.off()
         self._draft_text = draft or transcript
         self._state = self.STATE_CONFIRM_SEND
 

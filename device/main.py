@@ -2,6 +2,12 @@
 import json
 import logging
 import os
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
 import subprocess
 import time
 
@@ -22,7 +28,7 @@ from bluetooth.constants import build_pair_url, build_setup_url
 from bluetooth.network_manager import NetworkPriorityManager
 from bluetooth.wifi_manager import WiFiManager
 from audio import get_audio_pipeline
-from hardware import BatteryMonitor, StatusPoller, StatusState
+from hardware import BatteryMonitor, LEDController, StatusPoller, StatusState, SystemMonitor
 from screens.manager import ScreenManager
 from screens.boot import BootScreen
 from screens.lock import LockScreen
@@ -168,6 +174,8 @@ def main():
 
     button = ButtonHandler()
     audio_pipeline = get_audio_pipeline()
+    led = LEDController()
+    monitor = SystemMonitor(interval=30)
     battery_monitor = BatteryMonitor()
     client = BackendClient()
     repository = DeviceRepository()
@@ -283,7 +291,7 @@ def main():
     focus_panel: FocusPanel | None = None
 
     def open_chat():
-        chat = ChatPanel(client, ui_settings=ui_settings, repository=repository, audio_pipeline=audio_pipeline, on_back=on_home)
+        chat = ChatPanel(client, ui_settings=ui_settings, repository=repository, audio_pipeline=audio_pipeline, led=led, on_back=on_home)
         screen_mgr.replace(chat)
 
     def on_home():
@@ -326,12 +334,12 @@ def main():
 
 
     def open_messages():
-        messages = MessagesPanel(client=client, battery_pct=battery_monitor.get_status().get("pct", 84), audio_pipeline=audio_pipeline, on_back=on_home, ui_settings=ui_settings)
+        messages = MessagesPanel(client=client, battery_pct=battery_monitor.get_status().get("pct", 84), audio_pipeline=audio_pipeline, led=led, on_back=on_home, ui_settings=ui_settings)
         screen_mgr.replace(messages)
 
 
     def open_mail():
-        mail = MailPanel(client=client, battery_pct=battery_monitor.get_status().get("pct", 84), audio_pipeline=audio_pipeline, on_back=on_home, ui_settings=ui_settings)
+        mail = MailPanel(client=client, battery_pct=battery_monitor.get_status().get("pct", 84), audio_pipeline=audio_pipeline, led=led, on_back=on_home, ui_settings=ui_settings)
         screen_mgr.replace(mail)
 
     def open_notifications():
@@ -457,6 +465,8 @@ def main():
 
     notification_poller.start()
     status_poller.start()
+    monitor.start()
+    led.off()
     gatt_server.start()
     gatt_server.set_discoverable(False)
     device_status_char.start_periodic_updates(_collect_device_status, interval_s=30)
@@ -554,6 +564,8 @@ def main():
 
     notification_poller.stop()
     status_poller.stop()
+    monitor.stop()
+    led.off()
     device_status_char.stop_periodic_updates()
     gatt_server.stop()
     driver.quit()

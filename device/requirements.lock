@@ -26,6 +26,7 @@ pillow==12.1.1
 pycparser==3.0
 pydantic==2.12.5
 pydantic_core==2.41.5
+psutil==6.1.1
 pygame==2.6.1
 python-dotenv==1.2.2
 RPi.GPIO==0.7.1
