@@ -29,7 +29,9 @@ from bluetooth.network_manager import NetworkPriorityManager
 from bluetooth.wifi_manager import WiFiManager
 from ble import BITOSBleService
 from audio import get_audio_pipeline
-from hardware import BatteryMonitor, LEDController, StatusPoller, StatusState, SystemMonitor
+from hardware import StatusPoller, StatusState, SystemMonitor
+from power.battery import BatteryMonitor
+from power.leds import LEDController
 from screens.manager import ScreenManager
 from screens.boot import BootScreen
 from screens.lock import LockScreen
@@ -176,6 +178,9 @@ def main():
     led = LEDController(board=board)
     monitor = SystemMonitor(interval=30)
     battery_monitor = BatteryMonitor()
+    battery_monitor.start()
+    battery_monitor.configure_safe_shutdown(threshold_pct=5, delay_s=30)
+    led.idle()
     client = BackendClient()
     repository = DeviceRepository()
     repository.initialize()

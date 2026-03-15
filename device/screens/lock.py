@@ -12,6 +12,10 @@ from hardware.battery import BatteryMonitor
 class LockScreen(BaseScreen):
     """Simple lock gate before entering home flow."""
 
+    __slots__ = (
+        "_on_home", "_is_unlocking", "_ui_settings", "_font_title", "_font_body",
+        "_font_small", "_clock_text", "_last_clock_update"
+    )
     _owns_status_bar: bool = True
 
     def __init__(self, on_home=None, ui_settings: dict | None = None):
