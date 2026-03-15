@@ -17,8 +17,9 @@ from .player import AudioPlayer
 
 logger = logging.getLogger(__name__)
 
-SAMPLE_RATE = int(os.getenv("ALSA_SAMPLE_RATE", "48000"))
-CHANNELS = 2
+SAMPLE_RATE = int(os.getenv("AUDIO_SAMPLE_RATE", os.getenv("ALSA_SAMPLE_RATE", "48000")))
+CHANNELS = int(os.getenv("AUDIO_CHANNELS", "2"))
+PLAYBACK_DEVICE = os.getenv("ALSA_PLAYBACK_DEVICE", "hw:0,0")
 
 
 class TextToSpeech:
@@ -59,18 +60,23 @@ class TextToSpeech:
 
     def _run_piper(self, text: str, output_file: Path) -> None:
         model = os.getenv("PIPER_MODEL", "/home/pi/bitos/models/tts/en_US-lessac-medium.onnx")
+        env = os.environ.copy()
+        env["ALSA_DEFAULT_PCM"] = PLAYBACK_DEVICE
         subprocess.run(
             ["piper", "--model", model, "--output_file", str(output_file)],
             input=text.encode("utf-8"),
             check=False,
             timeout=30,
+            env=env,
         )
 
     def _run_espeak(self, text: str, output_file: Path) -> None:
         espeak_cmd = shutil.which("espeak-ng") or shutil.which("espeak")
         if not espeak_cmd:
             return
-        subprocess.run([espeak_cmd, "-v", "en", "-s", "150", "-w", str(output_file), text], check=False, timeout=20)
+        env = os.environ.copy()
+        env["ALSA_DEFAULT_PCM"] = PLAYBACK_DEVICE
+        subprocess.run([espeak_cmd, "-v", "en-us", "-s", "150", "-w", str(output_file), text], check=False, timeout=20, env=env)
 
     def _ensure_48k_stereo_wav(self, path: Path) -> None:
         with wave.open(str(path), "rb") as src:

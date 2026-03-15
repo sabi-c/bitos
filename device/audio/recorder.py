@@ -15,8 +15,8 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 RECORD_DEVICE = os.getenv("ALSA_RECORD_DEVICE", "hw:0,0")
-SAMPLE_RATE = int(os.getenv("ALSA_SAMPLE_RATE", "48000"))
-CHANNELS = 2
+SAMPLE_RATE = int(os.getenv("AUDIO_SAMPLE_RATE", os.getenv("ALSA_SAMPLE_RATE", "48000")))
+CHANNELS = int(os.getenv("AUDIO_CHANNELS", "2"))
 SAMPLE_WIDTH_BYTES = 2
 PCM_FORMAT = "S16_LE"
 
