@@ -23,6 +23,8 @@ class IntegrationDetailPanel(BaseScreen):
     def handle_action(self, action: str):
         if action == "DOUBLE_PRESS" and self._on_back:
             self._on_back()
+        elif action in {"SHORT_PRESS", "LONG_PRESS", "TRIPLE_PRESS"}:
+            return
 
     def handle_input(self, event: pygame.event.Event):
         if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):

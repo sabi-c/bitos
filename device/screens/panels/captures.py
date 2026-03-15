@@ -36,6 +36,8 @@ class CapturesPanel(BaseScreen):
             return
         if action == "SHORT_PRESS":
             self._cursor = (self._cursor + 1) % len(items)
+        elif action == "TRIPLE_PRESS":
+            self._cursor = (self._cursor - 1) % len(items)
         elif action == "LONG_PRESS":
             item = items[self._cursor]
             try:

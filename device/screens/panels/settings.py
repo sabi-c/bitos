@@ -302,6 +302,8 @@ class ModelPickerPanel(BaseScreen):
         elif action == "DOUBLE_PRESS":
             if self._on_back:
                 self._on_back()
+        elif action == "TRIPLE_PRESS":
+            self._index = (self._index - 1) % len(self.OPTIONS)
 
     def handle_input(self, event: pygame.event.Event):
         if event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_SPACE):
@@ -388,6 +390,8 @@ class AgentModePanel(BaseScreen):
         elif action == "DOUBLE_PRESS":
             if self._on_back:
                 self._on_back()
+        elif action == "TRIPLE_PRESS":
+            self._index = (self._index - 1) % len(self.OPTIONS)
 
     def handle_input(self, event: pygame.event.Event):
         if event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_SPACE):
@@ -454,6 +458,8 @@ class SleepTimerPanel(BaseScreen):
     def handle_action(self, action: str):
         if action == "DOUBLE_PRESS" and self._on_back:
             self._on_back()
+        elif action in {"SHORT_PRESS", "LONG_PRESS", "TRIPLE_PRESS"}:
+            return
 
     def handle_input(self, event: pygame.event.Event):
         if event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_ESCAPE):
@@ -489,6 +495,8 @@ class AboutPanel(BaseScreen):
     def handle_action(self, action: str):
         if action == "DOUBLE_PRESS" and self._on_back:
             self._on_back()
+        elif action in {"SHORT_PRESS", "LONG_PRESS", "TRIPLE_PRESS"}:
+            return
 
     def handle_input(self, event: pygame.event.Event):
         if event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_ESCAPE):
