@@ -27,7 +27,7 @@ class Phase2ShellFlowTests(unittest.TestCase):
     def tearDownClass(cls):
         pygame.quit()
 
-    def test_boot_auto_advances_after_three_seconds(self):
+    def test_boot_auto_advances_after_eight_seconds(self):
         triggered = {"called": False}
 
         def on_complete():
@@ -37,7 +37,7 @@ class Phase2ShellFlowTests(unittest.TestCase):
         boot._diagnostics.ensure_critical_results = lambda: None
         boot._diagnostics.all_critical_passed = lambda: True
 
-        boot.update(3.1)
+        boot.update(8.1)
         self.assertTrue(triggered["called"])
 
     def test_lock_unlock_action(self):

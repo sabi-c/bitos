@@ -1,7 +1,6 @@
 """BITOS Boot screen with diagnostics sequencing and gated readiness."""
 from __future__ import annotations
 
-import math
 import os
 import subprocess
 import threading
@@ -21,7 +20,6 @@ from display.tokens import (
     PHYSICAL_W,
     PHYSICAL_H,
     FONT_PATH,
-    FONT_SIZES,
     STATUS_BAR_H,
 )
 from display.animator import orb_rotate, blink_cursor
@@ -141,20 +139,20 @@ class BootScreen(BaseScreen):
         self._orb_anim = orb_rotate()
         self._cursor_anim = blink_cursor()
         self._elapsed = 0.0
-        self._auto_advance_time = 3.0
+        self._auto_advance_time = 8.0
         self._done = False
         self._diagnostics = BootDiagnostics()
         self._diagnostics.run_async()
 
         try:
-            self._font = pygame.font.Font(FONT_PATH, FONT_SIZES["title"])
+            self._font = pygame.font.Font(FONT_PATH, 32)
         except FileNotFoundError:
-            self._font = pygame.font.SysFont("monospace", FONT_SIZES["title"])
+            self._font = pygame.font.SysFont("monospace", 32)
 
         try:
-            self._status_font = pygame.font.Font(FONT_PATH, FONT_SIZES["small"])
+            self._status_font = pygame.font.Font(FONT_PATH, 10)
         except FileNotFoundError:
-            self._status_font = pygame.font.SysFont("monospace", FONT_SIZES["small"])
+            self._status_font = pygame.font.SysFont("monospace", 10)
 
         if self._health_check:
             threading.Thread(target=self._run_health_check, daemon=True).start()
@@ -189,17 +187,25 @@ class BootScreen(BaseScreen):
         surface.fill(BLACK)
 
         cx, cy = PHYSICAL_W // 2, PHYSICAL_H // 2 - 66
-        radius = 24
         orb_size = 4
-        step = self._orb_anim.step
-        angle_offset = (step / 8) * 2 * math.pi
+
+        orbs = [
+            (cx + 24, cy),
+            (cx + 17, cy - 17),
+            (cx, cy - 24),
+            (cx - 17, cy - 17),
+            (cx - 24, cy),
+            (cx - 17, cy + 17),
+            (cx, cy + 24),
+            (cx + 17, cy + 17),
+        ]
+        step = self._orb_anim.step % 8
 
         orb_colors = [WHITE, DIM2, DIM3, DIM4]
         for i in range(4):
-            angle = angle_offset + (i * math.pi / 2)
-            ox = int(cx + radius * math.cos(angle))
-            oy = int(cy + radius * math.sin(angle))
-            color = orb_colors[i % len(orb_colors)]
+            pos_idx = (step + i * 2) % 8
+            ox, oy = orbs[pos_idx]
+            color = orb_colors[i]
             pygame.draw.rect(surface, color, (ox - orb_size // 2, oy - orb_size // 2, orb_size, orb_size))
 
         text_surface = self._font.render("BITOS", False, WHITE)
@@ -209,8 +215,8 @@ class BootScreen(BaseScreen):
 
         if self._cursor_anim.step == 0:
             cursor_x = text_x + text_surface.get_width() + 2
-            cursor_w = FONT_SIZES["title"]
-            cursor_h = FONT_SIZES["title"]
+            cursor_w = 32
+            cursor_h = 32
             pygame.draw.rect(surface, WHITE, (cursor_x, text_y, cursor_w, cursor_h))
 
         self._render_checks(surface, text_y + 30)
