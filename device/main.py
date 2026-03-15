@@ -48,6 +48,7 @@ from screens.panels.messages import MessagesPanel
 from screens.panels.mail import MailPanel
 from screens.panels.notifications import NotificationsPanel
 from screens.panels.settings import SettingsPanel, ModelPickerPanel, AgentModePanel, SleepTimerPanel, AboutPanel
+from screens.panels.change_pin import ChangePinPanel
 from screens.subscreens.integration_detail import IntegrationDetailPanel
 from overlays.power import PowerOverlay
 
@@ -448,6 +449,7 @@ def main():
                 on_open_agent_mode=open_agent_mode,
                 on_open_sleep_timer=open_sleep_timer,
                 on_open_about=open_about,
+                on_open_change_pin=open_change_pin,
                 on_push_overlay=screen_mgr.push_overlay,
                 on_dismiss_overlay=screen_mgr.dismiss_overlay,
                 get_ble_address=gatt_server.get_device_address,
@@ -470,6 +472,9 @@ def main():
     def open_about():
         screen_mgr.push(AboutPanel(on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
 
+    def open_change_pin():
+        screen_mgr.push(ChangePinPanel(repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
+
     def open_integration_detail(integration_name: str, status_data: dict):
         screen_mgr.push(
             IntegrationDetailPanel(
@@ -482,7 +487,7 @@ def main():
 
     def _enter_offline_mode():
         screen_mgr.dismiss_overlay()
-        lock = LockScreen(on_home=on_home, ui_settings=ui_settings)
+        lock = LockScreen(on_home=on_home, ui_settings=ui_settings, repository=repository)
         screen_mgr.replace(lock)
 
     def _show_setup_qr_if_needed():
@@ -509,7 +514,7 @@ def main():
         gatt_server.set_discoverable(True, timeout_s=120)
 
     def on_boot_complete():
-        lock = LockScreen(on_home=on_home, ui_settings=ui_settings)
+        lock = LockScreen(on_home=on_home, ui_settings=ui_settings, repository=repository)
         screen_mgr.replace(lock)
         _show_setup_qr_if_needed()
 

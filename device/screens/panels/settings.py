@@ -35,6 +35,7 @@ class SettingsPanel(BaseScreen):
         on_open_sleep_timer=None,
         on_open_about=None,
         on_open_companion_app=None,
+        on_open_change_pin=None,
         get_ble_address=None,
         on_set_discoverable=None,
         on_push_overlay=None,
@@ -50,6 +51,7 @@ class SettingsPanel(BaseScreen):
         self._on_open_sleep_timer = on_open_sleep_timer
         self._on_open_about = on_open_about
         self._on_open_companion_app = on_open_companion_app
+        self._on_open_change_pin = on_open_change_pin
         self._get_ble_address = get_ble_address or (lambda: "mock-BT-addr")
         self._on_set_discoverable = on_set_discoverable or (lambda _enabled, _timeout: None)
         self._on_push_overlay = on_push_overlay
@@ -81,6 +83,7 @@ class SettingsPanel(BaseScreen):
             NavItem(key="sleep", label="SLEEP TIMER", status="", action=self._open_sleep_timer),
             NavItem(key="about", label="ABOUT", status="", action=self._open_about),
             NavItem(key="companion", label="COMPANION APP", status="", action=self._open_companion_app),
+            NavItem(key="change_pin", label="CHANGE PIN", status="", action=self._open_change_pin),
             NavItem(key="integrations_header", label="─ INTEGRATIONS ─", status="", enabled=False),
             NavItem(key="imessage", label="iMESSAGE", status="", action=lambda: self._open_integration_detail("imessage")),
             NavItem(key="vikunja", label="VIKUNJA", status="", action=lambda: self._open_integration_detail("vikunja")),
@@ -137,6 +140,7 @@ class SettingsPanel(BaseScreen):
             "sleep": f"{self._sleep_sec}s \u203a",
             "about": "v1.0 \u203a",
             "companion": "PAIR \u203a",
+            "change_pin": "\u203a",
             "imessage": self._format_integration_status("imessage", arrow=True),
             "vikunja": self._format_integration_status("vikunja", arrow=True),
             "ai": self._format_integration_status("ai", arrow=True),
@@ -200,6 +204,10 @@ class SettingsPanel(BaseScreen):
     def _open_about(self):
         if self._on_open_about:
             self._on_open_about()
+
+    def _open_change_pin(self):
+        if self._on_open_change_pin:
+            self._on_open_change_pin()
 
     def _open_companion_app(self):
         if self._on_open_companion_app:
