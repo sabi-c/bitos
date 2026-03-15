@@ -66,26 +66,50 @@ class ANCSClient:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            loop.run_until_complete(self._connect_and_subscribe())
+            loop.run_until_complete(self._connect_with_retry())
         except Exception as exc:
-            logger.error("ANCS error: %s", exc)
+            logger.error("[ANCS] Fatal error: %s", exc)
         finally:
             loop.close()
 
-    async def _connect_and_subscribe(self) -> None:
+    async def _connect_with_retry(self) -> None:
+        """Connect to iPhone with retry on disconnect/failure."""
         try:
             from bleak import BleakClient
         except ImportError:
-            logger.error("bleak not installed. Run: pip install bleak")
+            logger.warning("[ANCS] bleak not installed — ANCS disabled")
             return
 
+        retries = 0
+        max_retries = 5
+        while self._running and retries < max_retries:
+            try:
+                await self._connect_and_subscribe(BleakClient)
+                # Clean exit from subscribe loop means we disconnected normally
+                if not self._running:
+                    return
+                retries += 1
+                delay = min(5 * retries, 30)
+                logger.info("[ANCS] Disconnected — retrying in %ds (attempt %d/%d)", delay, retries, max_retries)
+                await asyncio.sleep(delay)
+            except Exception as exc:
+                retries += 1
+                delay = min(5 * retries, 30)
+                logger.error("[ANCS] Connection error (attempt %d/%d): %s", retries, max_retries, exc)
+                if self._running and retries < max_retries:
+                    await asyncio.sleep(delay)
+
+        if self._running:
+            logger.warning("[ANCS] Gave up reconnecting after %d attempts", max_retries)
+
+    async def _connect_and_subscribe(self, BleakClient) -> None:
         if not self._iphone_address:
-            logger.error("ANCS missing iPhone address")
+            logger.error("[ANCS] Missing iPhone address")
             return
 
-        logger.info("Connecting to iPhone at %s", self._iphone_address)
-        async with BleakClient(self._iphone_address) as client:
-            logger.info("Connected to iPhone. Discovering ANCS...")
+        logger.info("[ANCS] Connecting to iPhone at %s", self._iphone_address)
+        async with BleakClient(self._iphone_address, timeout=15.0) as client:
+            logger.info("[ANCS] Connected. Discovering services...")
             services = await client.get_services()
 
             notif_source_uuid = None

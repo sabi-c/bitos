@@ -90,6 +90,7 @@ class ChatPanel(BaseScreen):
         self._template_index = 0
         self._templates = list(DEFAULT_TEMPLATES)
         self._resumed_until = 0.0
+        self._voice_stop_requested = False
 
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
         self._font = load_ui_font("body", self._ui_settings)
@@ -147,10 +148,14 @@ class ChatPanel(BaseScreen):
 
     def handle_action(self, action: str):
         if action == "SHORT_PRESS" and self._audio_pipeline and self._audio_pipeline.is_speaking():
-            # VERIFIED: SHORT_PRESS while TTS is active immediately stops speech and shows "speech stopped".
             self._audio_pipeline.stop_speaking()
             with self._messages_lock:
                 self._status_detail = "speech stopped"
+            return
+
+        # Stop voice recording on any press while recording
+        if action in ("SHORT_PRESS", "LONG_PRESS") and self._is_streaming and self._voice_stop_requested is False and self._status_detail == "recording...":
+            self._voice_stop_requested = True
             return
 
         if self._showing_templates() and action == "SHORT_PRESS":
@@ -255,7 +260,9 @@ class ChatPanel(BaseScreen):
             pygame.draw.rect(surface, WHITE, (cursor_x, input_y, 6, self._font.get_height()))
 
         # ── Key hint bar ──
-        if self._showing_templates():
+        if self._status_detail == "recording...":
+            hint_text = "TAP:STOP RECORDING"
+        elif self._showing_templates():
             hint_text = "SHORT:NEXT \u00b7 LONG:SEND \u00b7 DBL:BACK"
         else:
             hint_text = "SHORT:SCROLL \u00b7 LONG:VOICE \u00b7 DBL:BACK"
@@ -275,8 +282,6 @@ class ChatPanel(BaseScreen):
         threading.Thread(target=self._do_voice_capture, daemon=True).start()
 
     def _do_voice_capture(self):
-        import time as _time
-
         timeout_seconds = 30
         try:
             audio_path = self._audio_pipeline.record(max_seconds=timeout_seconds)
@@ -285,10 +290,16 @@ class ChatPanel(BaseScreen):
                 if self._led:
                     self._led.off()
                 return
-            _time.sleep(timeout_seconds)
+            # Wait for button release to stop recording (polled via _voice_stop_requested flag),
+            # or fall back to max timeout. The flag is set by handle_action on SHORT_PRESS/LONG_PRESS.
+            import time as _time
+            start = _time.time()
+            while not self._voice_stop_requested and (_time.time() - start) < timeout_seconds:
+                _time.sleep(0.1)
+            self._voice_stop_requested = False
             self._audio_pipeline.stop_recording()
             with self._messages_lock:
-                self._status_detail = "Recording stopped (30s max)"
+                self._status_detail = "transcribing..."
             text = self._audio_pipeline.transcribe(audio_path).strip()
         except Exception as exc:
             self._is_streaming = False

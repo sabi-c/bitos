@@ -177,11 +177,6 @@ class BootScreen(BaseScreen):
             if self._diagnostics.all_critical_passed():
                 self._advance()
 
-    def handle_action(self, action: str):
-        if not self._done:
-            logger.info("[Boot] action=%s → advance", action)
-            self._advance()
-
     def handle_input(self, event: pygame.event.Event):
         if self._done:
             return

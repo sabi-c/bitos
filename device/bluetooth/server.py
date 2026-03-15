@@ -85,8 +85,11 @@ class BitosGATTServer:
 
     def _loop(self) -> None:
         while self._running:
-            if self._discoverable and self._pairing_until and time.time() >= self._pairing_until:
-                self.set_discoverable(False)
+            try:
+                if self._discoverable and self._pairing_until and time.time() >= self._pairing_until:
+                    self.set_discoverable(False)
+            except Exception as exc:
+                logging.error("[BLE] GATT server loop error: %s", exc)
             self._stop_event.wait(timeout=0.2)
 
 

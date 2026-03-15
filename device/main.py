@@ -23,7 +23,7 @@ from bluetooth.characteristics import DeviceInfoCharacteristic, DeviceStatusChar
 from bluetooth.constants import build_setup_url
 from bluetooth.network_manager import NetworkPriorityManager
 from bluetooth.wifi_manager import WiFiManager
-from device.ble.ble_service import BITOSBleService
+from device.ble.ble_service import get_ble_service
 from device.ble.pairing_manager import PairingManager
 from audio.pipeline import get_audio_pipeline
 from hardware import StatusPoller, StatusState, SystemMonitor
@@ -208,13 +208,16 @@ def main():
 
     def _on_button(btn_event: ButtonEvent):
         logger.info("[Button] %s", btn_event.name)
+        if power_overlay is not None:
+            power_overlay.handle_input(btn_event.name)
+            return
         screen_mgr.handle_action(btn_event.name)
 
     button.on(ButtonEvent.SHORT_PRESS, lambda: _on_button(ButtonEvent.SHORT_PRESS))
     button.on(ButtonEvent.LONG_PRESS, lambda: _on_button(ButtonEvent.LONG_PRESS))
     button.on(ButtonEvent.DOUBLE_PRESS, lambda: _on_button(ButtonEvent.DOUBLE_PRESS))
     button.on(ButtonEvent.TRIPLE_PRESS, lambda: _on_button(ButtonEvent.TRIPLE_PRESS))
-    button.on(ButtonEvent.POWER_GESTURE, lambda: _on_button(ButtonEvent.POWER_GESTURE))
+    button.on(ButtonEvent.POWER_GESTURE, lambda: open_power_overlay())
 
     notification_poller = NotificationPoller(queue=notification_queue, api_client=client, repository=repository)
 
@@ -244,7 +247,7 @@ def main():
         )
 
     wifi_manager = WiFiManager()
-    ble_service = BITOSBleService()
+    ble_service = get_ble_service()
     pairing_mgr = PairingManager()
 
     def on_ble_message(msg: dict):
@@ -537,10 +540,24 @@ def main():
     status_poller.start()
     monitor.start()
     led.off()
-    ble_service.start()
-    pairing_mgr.start()
-    gatt_server.start()
-    gatt_server.set_discoverable(False)
+
+    # BLE subsystems must never crash the device — wrap each in try/except
+    try:
+        ble_service.start()
+    except Exception as exc:
+        logger.error("[BITOS] BLE NUS service failed to start: %s", exc)
+
+    try:
+        pairing_mgr.start()
+    except Exception as exc:
+        logger.error("[BITOS] Pairing manager failed to start: %s", exc)
+
+    try:
+        gatt_server.start()
+        gatt_server.set_discoverable(False)
+    except Exception as exc:
+        logger.error("[BITOS] GATT server failed to start: %s", exc)
+
     device_status_char.start_periodic_updates(_collect_device_status, interval_s=30)
 
     clock = pygame.time.Clock()
@@ -578,6 +595,8 @@ def main():
         surface = driver.get_surface()
         screen_mgr.update(dt)
         screen_mgr.render(surface)
+        if power_overlay is not None:
+            power_overlay.render(surface, tokens)
         driver.update()
 
         clock.tick(FPS)
@@ -587,9 +606,14 @@ def main():
     monitor.stop()
     led.off()
     device_status_char.stop_periodic_updates()
-    pairing_mgr.stop()
-    ble_service.stop()
-    gatt_server.stop()
+
+    # Shutdown BLE subsystems safely — never let cleanup crash the shutdown sequence
+    for name, subsystem in [("pairing_mgr", pairing_mgr), ("ble_service", ble_service), ("gatt_server", gatt_server)]:
+        try:
+            subsystem.stop()
+        except Exception as exc:
+            logger.error("[BITOS] %s stop failed: %s", name, exc)
+
     driver.quit()
     if board is not None:
         board.cleanup()

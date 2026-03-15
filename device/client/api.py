@@ -87,7 +87,7 @@ class BackendClient:
             raise RuntimeError(message) from exc
 
     def chat(self, message: str) -> Generator[str, None, None] | dict:
-        """Send a message and return either chunk iterator or error dict."""
+        """Send a message and yield chunks as they stream from SSE."""
         from power import BatteryMonitor
         from storage.repository import DeviceRepository
 
@@ -101,46 +101,52 @@ class BackendClient:
             tasks_today = [str(t.get("title", "")).strip() for t in repository.list_incomplete_tasks(limit=3)]
             tasks_today = [t for t in tasks_today if t]
         except Exception as exc:
-            # Safe fallback to defaults is acceptable: prompt context enrichment is optional.
             logging.debug("chat_context_load_failed error=%s", exc)
 
         try:
             battery_pct = int(BatteryMonitor().get_status().get("pct"))
         except Exception as exc:
-            # Safe fallback to unknown battery percentage is acceptable.
             logging.debug("battery_read_failed error=%s", exc)
 
         try:
-            with httpx.stream(
-                "POST",
-                f"{self.base_url}/chat",
-                json={
-                    "message": message,
-                    "agent_mode": mode,
-                    "tasks_today": tasks_today,
-                    "battery_pct": battery_pct,
-                },
-                timeout=60.0,
-                headers=self._request_headers(),
-            ) as response:
-                response.raise_for_status()
-                chunks: list[str] = []
-                for line in response.iter_lines():
-                    if line.startswith("data: "):
-                        data = line[6:]
-                        if data == "[DONE]":
-                            break
-                        try:
-                            chunk = json.loads(data)
-                            if "text" in chunk:
-                                chunks.append(chunk["text"])
-                        except json.JSONDecodeError:
-                            chunks.append(data)
-                return iter(chunks)
+            return self._stream_chat_sse(message, mode, tasks_today, battery_pct)
         except Exception as exc:
             kind, message_copy = self._http_error_message(exc)
             retryable = kind in {"offline", "timeout", "network", "server"}
             return {"error": message_copy, "kind": kind, "retryable": retryable}
+
+    def _stream_chat_sse(
+        self,
+        message: str,
+        mode: str,
+        tasks_today: list[str],
+        battery_pct: int | None,
+    ) -> Generator[str, None, None]:
+        """Yield text chunks from the /chat SSE stream in real time."""
+        with httpx.stream(
+            "POST",
+            f"{self.base_url}/chat",
+            json={
+                "message": message,
+                "agent_mode": mode,
+                "tasks_today": tasks_today,
+                "battery_pct": battery_pct,
+            },
+            timeout=60.0,
+            headers=self._request_headers(),
+        ) as response:
+            response.raise_for_status()
+            for line in response.iter_lines():
+                if line.startswith("data: "):
+                    data = line[6:]
+                    if data == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data)
+                        if "text" in chunk:
+                            yield chunk["text"]
+                    except json.JSONDecodeError:
+                        yield data
 
 
     def get_integration_status(self) -> dict:

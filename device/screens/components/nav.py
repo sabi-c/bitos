@@ -39,7 +39,15 @@ class VerticalNavController:
     def move(self, direction: int) -> None:
         if not self._items:
             return
-        self._focus_index = (self._focus_index + direction) % len(self._items)
+        n = len(self._items)
+        step = 1 if direction > 0 else -1
+        candidate = (self._focus_index + step) % n
+        # Skip disabled items, but limit iterations to avoid infinite loop
+        for _ in range(n):
+            if self._items[candidate].enabled:
+                break
+            candidate = (candidate + step) % n
+        self._focus_index = candidate
 
     def activate_focused(self) -> bool:
         item = self.focused_item

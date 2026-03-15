@@ -33,7 +33,9 @@ class CapturesPanel(BaseScreen):
                 self._on_back()
             return
         if not items:
+            self._cursor = 0
             return
+        self._cursor = min(self._cursor, len(items) - 1)
         if action == "SHORT_PRESS":
             self._cursor = (self._cursor + 1) % len(items)
         elif action == "TRIPLE_PRESS":
