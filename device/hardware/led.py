@@ -43,3 +43,12 @@ class LEDController:
 
     def error(self):
         self.set_color(255, 0, 0)
+
+    def battery_warning(self, pct: int) -> None:
+        """Amber pulse for low battery warning."""
+        if pct <= 5:
+            self.set_color(255, 0, 0)
+        elif pct <= 15:
+            self.set_color(255, 60, 0)
+        else:
+            self.off()

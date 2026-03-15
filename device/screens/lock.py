@@ -6,6 +6,7 @@ import pygame
 from screens.base import BaseScreen
 from display.tokens import BLACK, WHITE, DIM3, HAIRLINE, PHYSICAL_W, PHYSICAL_H
 from display.theme import merge_runtime_ui_settings, load_ui_font
+from hardware.battery import BatteryMonitor
 
 
 class LockScreen(BaseScreen):
@@ -70,6 +71,20 @@ class LockScreen(BaseScreen):
         hint_y = line_y + 12
         hint_x = (PHYSICAL_W - hint.get_width()) // 2
         surface.blit(hint, (hint_x, hint_y))
+
+        # Read cached battery (30s TTL, won't block)
+        try:
+            batt = BatteryMonitor().get_status()
+            pct = batt.get("pct", 0)
+            charging = batt.get("charging", False)
+            batt_text = f"{'↑' if charging else ''}{pct}%"
+            batt_color = DIM3 if pct > 20 else WHITE
+            batt_surf = self._font_small.render(batt_text, False, batt_color)
+            batt_x = (PHYSICAL_W - batt_surf.get_width()) // 2
+            batt_y = hint_y + hint.get_height() + 8
+            surface.blit(batt_surf, (batt_x, batt_y))
+        except Exception:
+            pass
 
     def _unlock(self):
         if self._is_unlocking:

@@ -219,7 +219,7 @@ def main():
 
     wifi_manager = WiFiManager()
     network_manager = NetworkPriorityManager()
-    status_poller = StatusPoller(status_state, client, battery_monitor, network_manager)
+    status_poller = StatusPoller(status_state, client, battery_monitor, network_manager, led=led)
     wifi_status_char = WiFiStatusCharacteristic()
 
     def on_wifi_config(ssid: str, password: str, security: str, priority: int) -> bool:

@@ -611,13 +611,42 @@ async def get_device_status():
 @app.get("/device/stats")
 async def get_device_stats():
     mem = psutil.virtual_memory()
+    pct = 0
+    charging = False
+    try:
+        from device.storage.repository import DeviceRepository
+
+        repo = DeviceRepository()
+        pct = int(repo.get_setting("battery_pct", 0) or 0)
+        charging = str(repo.get_setting("charging", "false")).lower() == "true"
+    except Exception:
+        pass
     return {
         "cpu_percent": psutil.cpu_percent(interval=0.1),
         "ram_used_mb": mem.used // 1024 // 1024,
         "ram_total_mb": mem.total // 1024 // 1024,
         "ram_percent": mem.percent,
         "disk_percent": psutil.disk_usage('/').percent,
+        "battery": {
+            "pct": pct,
+            "charging": charging,
+            "present": pct > 0,
+        },
     }
+
+
+@app.get("/device/battery")
+async def get_battery():
+    """Read battery state cached by device poller."""
+    try:
+        from device.storage.repository import DeviceRepository
+
+        repo = DeviceRepository()
+        pct = int(repo.get_setting("battery_pct", 0) or 0)
+        charging = str(repo.get_setting("charging", "false")).lower() == "true"
+        return {"pct": pct, "charging": charging, "present": pct > 0}
+    except Exception:
+        return {"pct": 0, "charging": False, "present": False}
 
 @app.get("/dashboard")
 async def get_dashboard():

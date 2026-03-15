@@ -8,11 +8,12 @@ logger = logging.getLogger(__name__)
 class StatusPoller:
     """# WHY THIS EXISTS: updates StatusState every 30s without blocking render."""
 
-    def __init__(self, state, api_client, battery_monitor, network_manager):
+    def __init__(self, state, api_client, battery_monitor, network_manager, led=None):
         self._state = state
         self._api = api_client
         self._battery = battery_monitor
         self._network = network_manager
+        self._led = led
         self._stop = threading.Event()
 
     def start(self):
@@ -42,6 +43,9 @@ class StatusPoller:
                 msgs_unread=msgs_unread,
                 gmail_unread=gmail_unread,
             )
+            if hasattr(self, "_led") and self._led:
+                if batt["pct"] <= 15 and not batt.get("charging"):
+                    self._led.battery_warning(batt["pct"])
         except Exception as e:
             logger.warning("status_poll_failed error=%s", e)
 
