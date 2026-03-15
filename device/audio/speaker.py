@@ -1,4 +1,9 @@
-"""Piper-based text-to-speech speaker (with safe fallbacks)."""
+"""Piper-based text-to-speech speaker (with safe fallbacks).
+
+STATUS: Deprecated — superseded by audio.tts.TextToSpeech which is used by
+audio.pipeline (the main audio path). This module is only referenced by
+VoicePipeline, which is itself unused. Kept until VoicePipeline's future is decided.
+"""
 
 from __future__ import annotations
 

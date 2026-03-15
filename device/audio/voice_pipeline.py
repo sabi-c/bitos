@@ -1,4 +1,9 @@
-"""Voice pipeline: record -> transcribe -> AI -> speak."""
+"""Voice pipeline: record -> transcribe -> AI -> speak.
+
+STATUS: Currently unused. ChatPanel uses audio_pipeline.record()/transcribe()/speak()
+directly rather than this higher-level pipeline. Kept for potential future use as a
+standalone voice-in/voice-out loop (e.g., fob device or hands-free mode).
+"""
 
 from __future__ import annotations
 
