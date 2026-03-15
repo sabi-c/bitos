@@ -6,18 +6,14 @@ import hashlib
 
 
 def _hkdf_sha256(ikm: bytes, info: bytes, length: int) -> bytes:
-    prk = hashlib.hmac.new(b"", ikm, hashlib.sha256).digest() if hasattr(hashlib, "hmac") else None
-    if prk is None:
-        import hmac
+    import hmac as _hmac
 
-        prk = hmac.new(b"", ikm, hashlib.sha256).digest()
+    prk = _hmac.new(b"", ikm, hashlib.sha256).digest()
     out = b""
     t = b""
     counter = 1
-    import hmac
-
     while len(out) < length:
-        t = hmac.new(prk, t + info + bytes([counter]), hashlib.sha256).digest()
+        t = _hmac.new(prk, t + info + bytes([counter]), hashlib.sha256).digest()
         out += t
         counter += 1
     return out[:length]

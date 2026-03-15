@@ -5,7 +5,6 @@ import logging
 import os
 import subprocess
 
-from bluetooth.network_manager import NetworkPriorityManager
 
 
 NMCLI_TIMEOUT_SECONDS = 8
@@ -71,12 +70,6 @@ class WiFiManager:
             return False
 
         return up.returncode == 0
-        up = subprocess.run(["nmcli", "connection", "up", ssid], capture_output=True, text=True)
-        ok = up.returncode == 0
-        if ok:
-            priority_manager = NetworkPriorityManager()
-            priority_manager.set_priority(ssid, priority)
-        return ok
 
     def get_status(self) -> dict:
         if os.environ.get("BITOS_WIFI") == "mock":

@@ -19,7 +19,7 @@ import display.tokens as tokens
 from display.tokens import FPS
 from input.handler import ButtonEvent, create_button_handler
 from notifications import NotificationPoller
-from overlays import NotificationQueue, NotificationToast, QROverlay
+from overlays import NotificationQueue, NotificationToast, QROverlay, QuickCaptureOverlay
 from overlays.power import PowerOverlay
 from bluetooth import AuthManager, get_gatt_server
 from bluetooth.constants import PAIRING_MODE_TIMEOUT_SECONDS
@@ -126,43 +126,36 @@ def _handle_main_loop_crash(error: Exception, crash_path: str = "/tmp/bitos_cras
         json.dump({"error": str(error), "timestamp": time.time()}, f)
 
 
-def _run_main_loop(driver, button, screen_mgr: ScreenManager, outbound_loop: OutboundWorkerRuntimeLoop):
-    clock = pygame.time.Clock()
-    running = True
-    last_time = time.time()
+def _cancel_inflight_voice_recording(screen_mgr):
+    """Stop any in-progress voice recording before shutdown."""
+    current = screen_mgr.current
+    if current and hasattr(current, "_audio_pipeline"):
+        try:
+            pipeline = getattr(current, "_audio_pipeline", None)
+            if pipeline and hasattr(pipeline, "stop_recording"):
+                pipeline.stop_recording()
+            if pipeline and hasattr(pipeline, "stop_speaking"):
+                pipeline.stop_speaking()
+        except Exception as exc:
+            logger.warning("cancel_voice_failed error=%s", exc)
 
-    while running:
-        now = time.time()
-        dt = now - last_time
-        last_time = now
 
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-                break
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                running = False
-                break
+def _request_backend_shutdown(client):
+    """Tell backend to save state before device shutdown."""
+    try:
+        client.health(timeout=1.0)
+    except Exception:
+        pass
 
-            button.handle_pygame_event(event)
-            screen_mgr.handle_input(event)
 
-        if not running:
-            break
-
-        button.update()
-        worker_results = outbound_loop.tick(now=now)
-        for result in worker_results:
-            if result.status in ("retrying", "dead_letter"):
-                reason = result.reason or "unknown"
-                logger.warning("[Queue] command=%s status=%s reason=%s", result.command_id, result.status, reason)
-
-        surface = driver.get_surface()
-        screen_mgr.update(dt)
-        screen_mgr.render(surface)
-        driver.update()
-
-        clock.tick(FPS)
+def _execute_power_action(action: str) -> None:
+    """Execute system power action."""
+    if action == "shutdown":
+        logger.info("[Power] Shutting down...")
+        subprocess.run(["sudo", "shutdown", "-h", "now"], check=False)
+    elif action == "reboot":
+        logger.info("[Power] Rebooting...")
+        subprocess.run(["sudo", "reboot"], check=False)
 
 
 def main():
@@ -521,7 +514,7 @@ def main():
 
             overlay = QuickCaptureOverlay(
                 repository=repository,
-            client=client,
+                client=client,
                 audio_pipeline=audio_pipeline,
                 context=screen_mgr.current.__class__.__name__.replace("Panel", "").upper() if screen_mgr.current else "",
                 on_saved=_saved,

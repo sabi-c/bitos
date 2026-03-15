@@ -1,7 +1,6 @@
 """Tasks panel backed by server /tasks/today with offline cache."""
 from __future__ import annotations
 
-import asyncio
 import threading
 
 import pygame
@@ -34,7 +33,7 @@ class TasksPanel(BaseScreen):
 
         def _run():
             try:
-                tasks = asyncio.run(self._client.get_tasks())
+                tasks = self._client.get_tasks()
                 if tasks:
                     self._tasks = tasks
                     self._state = "ready"
