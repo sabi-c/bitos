@@ -34,7 +34,7 @@ class NotificationPoller:
     def _poll_loop(self) -> None:
         next_health_poll = 0.0
         next_task_poll = 0.0
-        while not self._stop.wait(0.25):
+        while not self._stop.wait(1.0):
             now = time.time()
             if now >= next_health_poll:
                 self._poll_health_state()

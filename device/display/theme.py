@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import pygame
 
+_FONT_CACHE: dict[tuple[str, int], pygame.font.Font] = {}
+
 from display.tokens import FONT_PATH, FONT_SIZES, PAD_ROW
 
 DEFAULT_RUNTIME_UI_SETTINGS = {
@@ -49,13 +51,22 @@ def ui_font_size(role: str, ui_settings: dict) -> int:
 
 def load_ui_font(role: str, ui_settings: dict) -> pygame.font.Font:
     size = ui_font_size(role, ui_settings)
-    if ui_settings.get("font_family") == "monospace":
-        return pygame.font.SysFont("monospace", size)
+    family = ui_settings.get("font_family", "press_start_2p")
+    cache_key = (family, size)
 
-    try:
-        return pygame.font.Font(FONT_PATH, size)
-    except FileNotFoundError:
-        return pygame.font.SysFont("monospace", size)
+    if cache_key in _FONT_CACHE:
+        return _FONT_CACHE[cache_key]
+
+    if family == "monospace":
+        font = pygame.font.SysFont("monospace", size)
+    else:
+        try:
+            font = pygame.font.Font(FONT_PATH, size)
+        except FileNotFoundError:
+            font = pygame.font.SysFont("monospace", size)
+
+    _FONT_CACHE[cache_key] = font
+    return font
 
 
 def ui_line_height(font: pygame.font.Font, ui_settings: dict) -> int:
