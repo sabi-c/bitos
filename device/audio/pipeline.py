@@ -111,6 +111,8 @@ class WM8960Pipeline(AudioPipeline):
                     str(self.SAMPLE_RATE),
                     "-c",
                     str(self.CHANNELS),
+                    "-d",
+                    str(max_seconds),
                     out,
                 ]
             )
@@ -127,51 +129,15 @@ class WM8960Pipeline(AudioPipeline):
             self._rec_proc = None
 
     def transcribe(self, audio_path: str) -> str:
-        """Send to Whisper API. Falls back to empty string."""
-        try:
-            import openai
+        from audio.stt import SpeechToText
 
-            client = openai.OpenAI(api_key=os.environ.get("ANTHROPIC_API_KEY"))
-            with open(audio_path, "rb") as f:
-                result = client.audio.transcriptions.create(model="whisper-1", file=f)
-            return result.text
-        except Exception as e:
-            logger.error("transcribe_failed error=%s", e)
-            return ""
-        finally:
-            if os.path.exists(audio_path):
-                os.remove(audio_path)
+        return SpeechToText().transcribe(audio_path)
 
     def speak(self, text: str) -> None:
-        """TTS via OpenAI, play via aplay. Falls back to Piper."""
-        try:
-            self._speak_openai(text)
-        except Exception:
-            self._speak_piper(text)
+        from audio.player import AudioPlayer
+        from audio.tts import TextToSpeech
 
-    def _speak_openai(self, text: str) -> None:
-        import openai
-
-        client = openai.OpenAI(api_key=os.environ.get("ANTHROPIC_API_KEY"))
-        out = "/tmp/bitos_tts.mp3"
-        with client.audio.speech.with_streaming_response.create(model="tts-1", voice="alloy", input=text) as resp:
-            resp.stream_to_file(out)
-        self._play_audio(out, timeout=30)
-
-    def _speak_piper(self, text: str) -> None:
-        model = os.environ.get("PIPER_MODEL", "/home/pi/bitos/models/tts/en_US-lessac-medium.onnx")
-        if not os.path.exists(model):
-            logger.warning("piper_model_missing path=%s", model)
-            return
-        out = "/tmp/bitos_tts.wav"
-        subprocess.run(
-            ["piper", "--model", model, "--output_file", out],
-            input=text.encode(),
-            capture_output=True,
-            timeout=30,
-            check=False,
-        )
-        self._play_audio(out, timeout=10)
+        TextToSpeech(AudioPlayer()).speak(text)
 
     def _play_audio(self, path: str, timeout: int) -> None:
         self._speak_proc = subprocess.Popen(

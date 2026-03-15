@@ -1,4 +1,4 @@
-"""TTS helpers with runtime fallback chain: piper -> espeak -> silent."""
+"""TTS helpers with runtime fallback chain: piper -> openai -> espeak -> silent."""
 
 from __future__ import annotations
 
@@ -29,10 +29,15 @@ class TextToSpeech:
         logger.info("tts_engine=%s", self.engine)
 
     def _detect_engine(self) -> str:
-        has_piper = shutil.which("piper")
+        has_openai_key = bool(os.environ.get("OPENAI_API_KEY"))
+        has_piper = shutil.which("piper") and os.path.exists(
+            os.getenv("PIPER_MODEL", "/home/pi/bitos/models/tts/en_US-lessac-medium.onnx")
+        )
         has_espeak = shutil.which("espeak") or shutil.which("espeak-ng")
         if has_piper:
             return "piper"
+        if has_openai_key:
+            return "openai"
         if has_espeak:
             return "espeak"
         return "silent"
@@ -48,6 +53,8 @@ class TextToSpeech:
         try:
             if self.engine == "piper":
                 self._run_piper(text, out)
+            elif self.engine == "openai":
+                self._run_openai_tts(text, out)
             elif self.engine == "espeak":
                 self._run_espeak(text, out)
             if not out.exists() or out.stat().st_size == 0:
@@ -69,6 +76,16 @@ class TextToSpeech:
             timeout=30,
             env=env,
         )
+
+
+    def _run_openai_tts(self, text: str, output_file: Path) -> None:
+        import openai
+
+        client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+        with client.audio.speech.with_streaming_response.create(
+            model="tts-1", voice="alloy", input=text
+        ) as resp:
+            resp.stream_to_file(str(output_file))
 
     def _run_espeak(self, text: str, output_file: Path) -> None:
         espeak_cmd = shutil.which("espeak-ng") or shutil.which("espeak")

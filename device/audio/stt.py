@@ -28,6 +28,7 @@ class SpeechToText:
         return "none"
 
     def transcribe(self, audio_path: str) -> str:
+        logger.info("stt_engine=%s path=%s", self.engine, audio_path)
         if self.engine == "whisper":
             return self._transcribe_whisper(audio_path)
         if self.engine == "vosk":
