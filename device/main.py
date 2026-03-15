@@ -314,118 +314,9 @@ def main():
         logger.warning("[BITOS] UI settings unavailable, using defaults (%s)", exc)
 
     restored_state = _restore_state()
-    restored_session_id = restored_state.get("session_id") if restored_state else None
-    restored_pomodoro = restored_state.get("pomodoro") if restored_state else None
-    focus_panel: FocusPanel | None = None
 
-    def open_chat():
-        chat = ChatPanel(client, ui_settings=ui_settings, repository=repository, audio_pipeline=audio_pipeline, led=led, on_back=on_home)
-        screen_mgr.replace(chat)
-
-    def on_home():
-        home = HomePanel(
-            on_open_chat=open_chat,
-            on_open_focus=open_focus,
-            on_open_notifications=open_notifications,
-            on_open_messages=open_messages,
-            on_open_mail=open_mail,
-            on_open_tasks=open_tasks,
-            on_open_captures=open_captures,
-            on_open_settings=open_settings,
-            on_show_shade=screen_mgr.show_shade,
-            ui_settings=ui_settings,
-            startup_health=startup_health,
-            repository=repository,
-            client=client,
-            status_state=status_state,
-        )
-        screen_mgr.replace(home)
-
-    def open_focus():
-        nonlocal focus_panel
-        focus = FocusPanel(on_back=on_home, ui_settings=ui_settings, repository=repository)
-
-        raw = repository.get_setting("pomodoro_state", None)
-        if raw:
-            try:
-                focus.restore_state(json.loads(raw))
-            except Exception:
-                pass
-
-        if restored_pomodoro and restored_pomodoro.get("is_running"):
-            started_at = float(restored_pomodoro.get("started_at", restored_state.get("timestamp", time.time()))) if restored_state else time.time()
-            elapsed = max(0, int(time.time() - started_at))
-            remaining = max(0, int(restored_pomodoro.get("remaining_seconds", focus.remaining_seconds)) - elapsed)
-            focus.restore_state(remaining_seconds=remaining, is_running=remaining > 0)
-        focus_panel = focus
-        screen_mgr.replace(focus)
-
-
-    def open_messages():
-        messages = MessagesPanel(client=client, battery_pct=battery_monitor.get_status().get("pct", 84), audio_pipeline=audio_pipeline, led=led, on_back=on_home, ui_settings=ui_settings)
-        screen_mgr.replace(messages)
-
-
-    def open_mail():
-        mail = MailPanel(client=client, battery_pct=battery_monitor.get_status().get("pct", 84), audio_pipeline=audio_pipeline, led=led, on_back=on_home, ui_settings=ui_settings)
-        screen_mgr.replace(mail)
-
-    def open_notifications():
-        notifications = NotificationsPanel(on_back=on_home, ui_settings=ui_settings)
-        screen_mgr.replace(notifications)
-
-    def open_tasks():
-        tasks = TasksPanel(client=client, repository=repository, on_back=on_home, ui_settings=ui_settings)
-        screen_mgr.replace(tasks)
-
-    def open_captures():
-        captures = CapturesPanel(repository=repository, on_back=on_home, ui_settings=ui_settings)
-        screen_mgr.replace(captures)
-
-    def open_settings():
-        settings = SettingsPanel(
-            repository=repository,
-            client=client,
-            on_back=on_home,
-            on_open_model_picker=open_model_picker,
-            on_open_agent_mode=open_agent_mode,
-            on_open_sleep_timer=open_sleep_timer,
-            on_open_about=open_about,
-            on_open_companion_app=open_companion_app,
-            get_ble_address=gatt_server.get_device_address,
-            on_set_discoverable=lambda enabled, timeout: gatt_server.set_discoverable(enabled, timeout),
-            on_push_overlay=screen_mgr.push_overlay,
-            on_dismiss_overlay=screen_mgr.dismiss_overlay,
-            ui_settings=ui_settings,
-            on_open_integration_detail=open_integration_detail,
-        )
-        screen_mgr.replace(settings)
-
-    def open_model_picker():
-        screen_mgr.replace(ModelPickerPanel(repository=repository, on_back=open_settings, ui_settings=ui_settings))
-
-    def open_agent_mode():
-        screen_mgr.replace(AgentModePanel(repository=repository, on_back=open_settings, ui_settings=ui_settings))
-
-    def open_sleep_timer():
-        screen_mgr.replace(SleepTimerPanel(repository=repository, on_back=open_settings, ui_settings=ui_settings))
-
-    def open_about():
-        screen_mgr.replace(AboutPanel(on_back=open_settings, ui_settings=ui_settings))
-
-    def open_integration_detail(integration_name: str, status_data: dict):
-        screen_mgr.replace(IntegrationDetailPanel(integration_name=integration_name, status_data=status_data, on_back=open_settings, ui_settings=ui_settings))
-
-    def open_companion_app():
-        ble_addr = gatt_server.get_device_address()
-        qr = QROverlay(
-            url=build_pair_url(ble_addr),
-            title="PAIR COMPANION APP",
-            subtitle="SCAN WITH YOUR PHONE",
-            on_dismiss=lambda: screen_mgr.dismiss_overlay(qr),
-        )
-        screen_mgr.push_overlay(qr)
-        gatt_server.set_discoverable(True, 120)
+    # Deprecated: legacy panel-based navigation functions were removed in favor of
+    # Screen + NavigationEvent routing via device/ui/screen_manager.py.
 
 
     def _enter_offline_mode():
@@ -478,8 +369,6 @@ def main():
         nonlocal running
         _cancel_inflight_voice_recording(screen_mgr)
         _request_backend_shutdown(client)
-        if focus_panel is not None:
-            focus_panel.save_state()
         _save_runtime_state(screen_mgr, time.time())
         _execute_power_action(action)
         running = False
