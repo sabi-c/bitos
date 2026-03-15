@@ -11,7 +11,7 @@ import pygame
 from display.driver import create_driver
 import display.tokens as tokens
 from display.tokens import FPS
-from input.handler import ButtonHandler, ButtonEvent
+from input.handler import ButtonHandler, ButtonEvent, create_button_handler
 from notifications import NotificationPoller
 from overlays import NotificationQueue, NotificationToast, QROverlay
 from overlays.power import PowerOverlay
@@ -161,7 +161,7 @@ def main():
     driver = create_driver()
     driver.init()
 
-    button = ButtonHandler()
+    button = create_button_handler()
     audio_pipeline = get_audio_pipeline()
     battery_monitor = BatteryMonitor()
     client = BackendClient()
@@ -387,11 +387,6 @@ def main():
 
     boot = BootScreen(on_complete=on_boot_complete, startup_health=startup_health, health_check=lambda: _run_startup_health_check(client, repository, startup_health))
 
-    if restored_state:
-        on_boot_complete()
-    else:
-        screen_mgr.push(boot)
-
     power_overlay: PowerOverlay | None = None
 
     def close_power_overlay():
@@ -418,14 +413,6 @@ def main():
             on_reboot=lambda: run_power_action("reboot"),
             on_cancel=close_power_overlay,
         )
-
-    screen_mgr.attach_device_status_characteristic(device_status_char)
-
-    notification_poller.start()
-    status_poller.start()
-    gatt_server.start()
-    gatt_server.set_discoverable(False)
-    device_status_char.start_periodic_updates(_collect_device_status, interval_s=30)
 
     def _dispatch_action(action: str):
         if power_overlay is not None:
@@ -458,6 +445,22 @@ def main():
     button.on(ButtonEvent.DOUBLE_PRESS, on_double)
     button.on(ButtonEvent.TRIPLE_PRESS, on_triple)
     button.on(ButtonEvent.POWER_GESTURE, on_power_gesture)
+
+    # Push boot AFTER callbacks are registered so no press is dropped
+    if restored_state:
+        on_boot_complete()
+    else:
+        screen_mgr.push(boot)
+
+    screen_mgr.attach_device_status_characteristic(device_status_char)
+
+    notification_poller.start()
+    status_poller.start()
+    gatt_server.start()
+    gatt_server.set_discoverable(False)
+    device_status_char.start_periodic_updates(_collect_device_status, interval_s=30)
+
+    logger.info("[Startup] stack=%s", [type(s).__name__ for s in screen_mgr._stack])
 
     clock = pygame.time.Clock()
     running = True

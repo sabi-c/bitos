@@ -3,9 +3,12 @@ BITOS Boot Screen
 4 pixel orbs rotating in 8 steps + "BITOS" text with blinking cursor.
 Auto-advances after 3 seconds or any button press.
 """
+import logging
 import math
 import threading
 import pygame
+
+logger = logging.getLogger(__name__)
 
 from screens.base import BaseScreen
 from display.tokens import (
@@ -52,6 +55,11 @@ class BootScreen(BaseScreen):
         self._cursor_anim.update(dt)
 
         if self._elapsed >= self._auto_advance_time:
+            self._advance()
+
+    def handle_action(self, action: str):
+        if not self._done:
+            logger.info("[Boot] action=%s → advance", action)
             self._advance()
 
     def handle_input(self, event: pygame.event.Event):

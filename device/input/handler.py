@@ -23,12 +23,17 @@ class ButtonEvent(Enum):
 
 
 # Timing constants (seconds)
-DEBOUNCE_MIN = 0.03       # 30ms debounce
-SHORT_THRESHOLD = 0.6     # <600ms = short press
-DOUBLE_WINDOW = 0.4       # Window for double-press detection
-TRIPLE_WINDOW = 0.6       # Window for triple-press detection
+DEBOUNCE_S = 0.030        # 30ms debounce
+LONG_PRESS_S = 0.800      # >=800ms hold = long press
+CLICK_TIMEOUT_S = 0.300   # Window for multi-tap detection
 POWER_GESTURE_COUNT = 5
 POWER_GESTURE_WINDOW_MS = 1200
+
+# Back-compat aliases used internally
+DEBOUNCE_MIN = DEBOUNCE_S
+SHORT_THRESHOLD = LONG_PRESS_S
+DOUBLE_WINDOW = CLICK_TIMEOUT_S
+TRIPLE_WINDOW = CLICK_TIMEOUT_S
 
 
 class ButtonHandler:
@@ -37,6 +42,7 @@ class ButtonHandler:
     def __init__(self):
         self._callbacks: dict[ButtonEvent, list[Callable]] = {e: [] for e in ButtonEvent}
         self._keyboard_mode = os.environ.get("BITOS_BUTTON", "").lower() == "keyboard"
+        self._poll_board_state = True  # Disabled when GPIO callbacks are registered
         self._press_time: Optional[float] = None
         self._release_times: list[float] = []
         self._power_press_times: list[float] = []
@@ -125,6 +131,8 @@ class ButtonHandler:
 
     def update(self):
         """Call every frame to finalize multi-tap detection."""
+        if not self._poll_board_state:
+            return
         if self._pending_check_time is None:
             return
 
@@ -221,3 +229,30 @@ class GPIOButtonHandler:
                     self._on_event(ButtonEvent.SHORT_PRESS)
 
         threading.Thread(target=check_single, daemon=True).start()
+
+
+import logging as _logging
+
+_logger = _logging.getLogger(__name__)
+
+
+def create_button_handler(board=None) -> ButtonHandler:
+    """Factory: create ButtonHandler and optionally wire GPIO callbacks.
+
+    When *board* provides a working GPIO pin (Pi hardware), GPIO edge
+    callbacks drive press/release directly and ``_poll_board_state``
+    is disabled so ``update()`` never double-fires.
+    """
+    handler = ButtonHandler()
+
+    try:
+        if board is None and os.environ.get("BITOS_BUTTON", "").lower() != "keyboard":
+            gpio_handler = GPIOButtonHandler(on_event=lambda ev: handler._emit(ev))
+            handler._poll_board_state = False
+            _logger.info("[Button] GPIO callbacks registered, poll gate disabled")
+            _ = gpio_handler  # prevent GC
+            return handler
+    except Exception as exc:
+        _logger.warning("[Button] GPIO init failed (%s), falling back to Pygame", exc)
+
+    return handler
