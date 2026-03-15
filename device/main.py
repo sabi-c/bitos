@@ -175,6 +175,17 @@ def main():
 
     button = create_button_handler(board=board, active_screen_name_getter=_active_screen_name)
     logger.info("[Button] handler ready mode=%s gpio_wired=%s", os.environ.get("BITOS_BUTTON", "unset"), board is not None)
+
+    def _on_button(btn_event: ButtonEvent):
+        logger.info("[Button] %s", btn_event.name)
+        screen_mgr.handle_action(btn_event.name)
+
+    button.on(ButtonEvent.SHORT_PRESS, lambda: _on_button(ButtonEvent.SHORT_PRESS))
+    button.on(ButtonEvent.LONG_PRESS, lambda: _on_button(ButtonEvent.LONG_PRESS))
+    button.on(ButtonEvent.DOUBLE_PRESS, lambda: _on_button(ButtonEvent.DOUBLE_PRESS))
+    button.on(ButtonEvent.TRIPLE_PRESS, lambda: _on_button(ButtonEvent.TRIPLE_PRESS))
+    button.on(ButtonEvent.POWER_GESTURE, lambda: _on_button(ButtonEvent.POWER_GESTURE))
+
     notification_poller = NotificationPoller(queue=notification_queue, api_client=client, repository=repository)
 
     # SD-002: BLE auth bootstrap binds device identity + shared secret before any protected characteristic writes.
@@ -502,19 +513,11 @@ def main():
     gatt_server.set_discoverable(False)
     device_status_char.start_periodic_updates(_collect_device_status, interval_s=30)
 
-    def _on_button(btn_event: ButtonEvent):
-        logger.info("[Button] %s", btn_event.name)
-        screen_mgr.handle_action(btn_event.name)
-
-    button.on(ButtonEvent.SHORT_PRESS, lambda: _on_button(ButtonEvent.SHORT_PRESS))
-    button.on(ButtonEvent.LONG_PRESS, lambda: _on_button(ButtonEvent.LONG_PRESS))
-    button.on(ButtonEvent.DOUBLE_PRESS, lambda: _on_button(ButtonEvent.DOUBLE_PRESS))
-    button.on(ButtonEvent.TRIPLE_PRESS, lambda: _on_button(ButtonEvent.TRIPLE_PRESS))
-    button.on(ButtonEvent.POWER_GESTURE, lambda: _on_button(ButtonEvent.POWER_GESTURE))
-
     clock = pygame.time.Clock()
     running = True
     last_time = time.time()
+
+    logger.info("[Startup] stack=%s", [type(s).__name__ for s in screen_mgr._stack])
 
     while running:
         now = time.time()

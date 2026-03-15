@@ -1,6 +1,6 @@
 import pygame
 from typing import TYPE_CHECKING
-from device.input.handler import ButtonEvent
+from input.handler import ButtonEvent
 
 class Screen:
     """Base class for all BITOS screens."""
