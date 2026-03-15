@@ -51,3 +51,12 @@ Expected result:
 
 - all checks show `✓`
 - final status prints `READY`
+
+
+## Known Issues and Fixes
+
+- GPIO 11 is SPI CLK and button — WhisPlayBoard owns both.
+- WM8960 requires stereo (channels=2) at 48000Hz.
+- Button callbacks: must pass `board=` to `create_button_handler()`.
+- Display: use `draw_image()` only, no `.disp` attribute exists.
+- LED: use `set_rgb(r,g,b)` not `set_led` or `set_color`.
