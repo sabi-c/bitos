@@ -23,15 +23,7 @@ class LEDController:
         if self._board is None:
             return
         try:
-            if hasattr(self._board, "set_rgb"):
-                self._board.set_rgb(r, g, b)
-            elif hasattr(self._board, "set_led"):
-                self._board.set_led(r, g, b)
-            elif hasattr(self._board, "set_rgb_led"):
-                self._board.set_rgb_led(r, g, b)
-            else:
-                methods = [m for m in dir(self._board) if "led" in m.lower() or "rgb" in m.lower()]
-                logger.warning("no_led_method methods=%s", methods)
+            self._board.set_rgb(r, g, b)
         except Exception as exc:
             logger.debug("led_set_error=%s", exc)
 

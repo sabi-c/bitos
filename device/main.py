@@ -561,6 +561,8 @@ def main():
     ble_service.stop()
     gatt_server.stop()
     driver.quit()
+    if board is not None:
+        board.cleanup()
     logger.info("[BITOS] Shut down.")
 
 
