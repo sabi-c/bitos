@@ -14,6 +14,7 @@ from screens.components import NavItem, VerticalNavController
 
 class FocusPanel(BaseScreen):
     """Minimal focus timer experience for Phase 4 shell breadth."""
+    _owns_status_bar = True
 
     def __init__(self, on_back=None, ui_settings: dict | None = None, duration_seconds: int = 25 * 60, repository=None):
         self._on_back = on_back

@@ -24,6 +24,7 @@ from storage.repository import DeviceRepository
 
 class SettingsPanel(BaseScreen):
     """Button-first settings panel with persisted values and long-press actions."""
+    _owns_status_bar = True
 
     def __init__(
         self,
@@ -123,10 +124,22 @@ class SettingsPanel(BaseScreen):
             "back": "HOME",
         }
 
-        # ── Rows: 26px minimum, inverted focus ──
-        y = STATUS_BAR_H
-        for idx, item in enumerate(self._nav.items):
-            focused = idx == self._nav.focus_index
+        # ── Rows: 26px minimum, inverted focus, scroll window ──
+        y_start = STATUS_BAR_H
+        hint_h = 12
+        available_h = PHYSICAL_H - y_start - hint_h
+        max_visible = max(1, available_h // ROW_H_MIN)
+        items = self._nav.items
+        focus = self._nav.focus_index
+        start = max(0, min(focus - max_visible + 1, len(items) - max_visible))
+        if focus < start:
+            start = focus
+        visible = items[start:start + max_visible]
+
+        y = y_start
+        for idx_offset, item in enumerate(visible):
+            idx = start + idx_offset
+            focused = idx == focus
             if focused:
                 pygame.draw.rect(surface, WHITE, pygame.Rect(0, y, PHYSICAL_W, ROW_H_MIN))
             status_copy = statuses.get(item.key, item.status)
@@ -193,6 +206,7 @@ class SettingsPanel(BaseScreen):
 
 
 class ModelPickerPanel(BaseScreen):
+    _owns_status_bar = True
     OPTIONS = [
         ("SONNET 4.6", "claude-sonnet-4-6"),
         ("OPUS 4.6", "claude-opus-4-6"),
@@ -288,6 +302,7 @@ class ModelPickerPanel(BaseScreen):
 
 
 class AgentModePanel(BaseScreen):
+    _owns_status_bar = True
     OPTIONS = ["producer", "clown", "monk", "hacker", "storyteller", "director"]
     SUBTITLES = {
         "producer": "Operations \u00b7 coordination",
@@ -374,6 +389,7 @@ class AgentModePanel(BaseScreen):
 
 class SleepTimerPanel(BaseScreen):
     """Stub detail view that shows current timeout and allows returning."""
+    _owns_status_bar = True
 
     def __init__(self, repository: DeviceRepository, on_back=None, ui_settings: dict | None = None):
         self._repo = repository
@@ -383,10 +399,10 @@ class SleepTimerPanel(BaseScreen):
         self._font_body = load_ui_font("body", self._ui_settings)
         self._font_small = load_ui_font("small", self._ui_settings)
         self._font_hint = load_ui_font("hint", self._ui_settings)
-        self._timeout = int(self._repo.get_setting("sleep_timeout_seconds", default=60))
+        self._timeout = int(self._repo.get_setting("sleep_timeout_seconds", default=60) or 60)
 
     def on_enter(self):
-        self._timeout = int(self._repo.get_setting("sleep_timeout_seconds", default=60))
+        self._timeout = int(self._repo.get_setting("sleep_timeout_seconds", default=60) or 60)
 
     def handle_action(self, action: str):
         if action == "DOUBLE_PRESS" and self._on_back:
@@ -414,6 +430,7 @@ class SleepTimerPanel(BaseScreen):
 
 
 class AboutPanel(BaseScreen):
+    _owns_status_bar = True
     def __init__(self, on_back=None, ui_settings: dict | None = None):
         self._on_back = on_back
         self._ui_settings = merge_runtime_ui_settings(ui_settings)

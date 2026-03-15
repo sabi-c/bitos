@@ -9,6 +9,7 @@ from screens.components import NavItem, VerticalNavController
 
 class HomePanel(BaseScreen):
     """Home panel with focusable sidebar entries and action routing."""
+    _owns_status_bar = True
 
     def __init__(
         self,
@@ -71,10 +72,22 @@ class HomePanel(BaseScreen):
         health_surface = self._font_small.render(health, False, BLACK)
         surface.blit(health_surface, (PHYSICAL_W - health_surface.get_width() - 6, (STATUS_BAR_H - health_surface.get_height()) // 2))
 
-        # ── Rows: 26px minimum, inverted focus ──
-        y = STATUS_BAR_H + 2
-        for idx, item in enumerate(self._nav.items):
-            focused = idx == self._nav.focus_index
+        # ── Rows: 26px minimum, inverted focus, scroll window ──
+        y_start = STATUS_BAR_H + 2
+        hint_h = 12  # approximate hint bar height
+        available_h = PHYSICAL_H - y_start - hint_h
+        max_visible = max(1, available_h // ROW_H_MIN)
+        items = self._nav.items
+        focus = self._nav.focus_index
+        start = max(0, min(focus - max_visible + 1, len(items) - max_visible))
+        if focus < start:
+            start = focus
+        visible = items[start:start + max_visible]
+
+        y = y_start
+        for idx_offset, item in enumerate(visible):
+            idx = start + idx_offset
+            focused = idx == focus
             if focused:
                 pygame.draw.rect(surface, WHITE, pygame.Rect(0, y, PHYSICAL_W, ROW_H_MIN))
             row_color = BLACK if focused else (WHITE if item.enabled else DIM3)
