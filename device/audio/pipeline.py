@@ -87,8 +87,8 @@ class WM8960Pipeline(AudioPipeline):
     """
 
     ALSA_DEVICE = os.environ.get("BITOS_AUDIO", "hw:0")
-    SAMPLE_RATE = 16000
-    CHANNELS = 1
+    SAMPLE_RATE = 48000
+    CHANNELS = 2
     FORMAT = "S16_LE"
     CHUNK_SECONDS = 0.1
 
@@ -175,7 +175,18 @@ class WM8960Pipeline(AudioPipeline):
 
     def _play_audio(self, path: str, timeout: int) -> None:
         self._speak_proc = subprocess.Popen(
-            ["aplay", "-D", self.ALSA_DEVICE, path],
+            [
+                "aplay",
+                "-D",
+                self.ALSA_DEVICE,
+                "-f",
+                self.FORMAT,
+                "-r",
+                str(self.SAMPLE_RATE),
+                "-c",
+                str(self.CHANNELS),
+                path,
+            ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
@@ -205,6 +216,4 @@ def get_audio_pipeline() -> AudioPipeline:
     mode = os.environ.get("BITOS_AUDIO", "mock").lower()
     if mode == "hw:0" or mode.startswith("hw:"):
         return WM8960Pipeline()
-    if mode == "mock":
-        return MockAudioPipeline()
     return MockAudioPipeline()
