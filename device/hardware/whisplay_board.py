@@ -12,6 +12,12 @@ def get_board():
             'WHISPLAY_DRIVER_PATH',
             '/home/pi/Whisplay/Driver'))
         from WhisPlay import WhisPlayBoard
+try:
+    import RPi.GPIO as _GPIO
+    _GPIO.remove_event_detect(11)
+except Exception:
+    pass
+
         _instance = WhisPlayBoard()
         _instance.set_backlight(100)
     except Exception as e:
