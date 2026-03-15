@@ -96,6 +96,8 @@ class MessagesPanel(BaseScreen):
             return
         if action == "SHORT_PRESS":
             self._focused_idx = (self._focused_idx + 1) % len(self._conversations)
+        elif action == "TRIPLE_PRESS":
+            self._focused_idx = (self._focused_idx - 1) % len(self._conversations)
         elif action == "LONG_PRESS":
             selected = self._conversations[self._focused_idx]
             self._selected_chat_id = str(selected.get("chat_id", ""))
@@ -109,6 +111,8 @@ class MessagesPanel(BaseScreen):
             return
         if action == "SHORT_PRESS":
             self._thread_offset = min(self._thread_offset + 1, max(0, len(self._messages) - 1))
+        elif action == "TRIPLE_PRESS":
+            self._thread_offset = max(self._thread_offset - 1, 0)
         elif action == "LONG_PRESS":
             self._state = self.STATE_DRAFT_VOICE
 
@@ -118,6 +122,10 @@ class MessagesPanel(BaseScreen):
             return
         if action == "LONG_PRESS":
             self._capture_and_draft()
+        elif action == "SHORT_PRESS":
+            return
+        elif action == "TRIPLE_PRESS":
+            return
 
     def _handle_confirm(self, action: str):
         if action == "DOUBLE_PRESS":
@@ -135,6 +143,9 @@ class MessagesPanel(BaseScreen):
                 self._led.off() if ok else self._led.error()
             self._status_toast_until = time.time() + 1.5
             self._load_thread(self._selected_chat_id)
+            self._state = self.STATE_THREAD
+        elif action == "TRIPLE_PRESS":
+            self._draft_text = ""
             self._state = self.STATE_THREAD
 
     def _capture_and_draft(self):

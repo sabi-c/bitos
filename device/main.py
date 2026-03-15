@@ -43,14 +43,6 @@ from screens.panels.notifications import NotificationsPanel
 from screens.panels.settings import SettingsPanel, ModelPickerPanel, AgentModePanel, SleepTimerPanel, AboutPanel
 from screens.subscreens.integration_detail import IntegrationDetailPanel
 from overlays.power import PowerOverlay
-import screens.chat_screen  # register app
-import screens.tasks_screen  # register app
-import screens.focus_screen  # register app
-import screens.settings_screen  # register app
-import screens.notifications_screen  # register app
-import screens.messages_screen  # register app
-import screens.mail_screen  # register app
-import screens.captures_screen  # register app
 
 from client.api import BackendClient
 from storage.repository import DeviceRepository
@@ -59,7 +51,6 @@ from integrations.queue import OutboundCommandQueue
 from integrations.runtime import OutboundWorkerRuntimeLoop
 from integrations.worker import OutboundCommandWorker
 from device.audio.voice_pipeline import VoicePipeline
-import device.screens.chat_screen  # triggers @register_app
 
 logger = logging.getLogger(__name__)
 
@@ -472,10 +463,7 @@ def main():
         on_boot_complete()
     else:
         _run_startup_health_check(client, repository, startup_health)
-        if startup_health.get("backend") is False:
-            _enter_offline_mode()
-        else:
-            screen_mgr.push(boot)
+        screen_mgr.push(boot)
 
     power_overlay: PowerOverlay | None = None
 

@@ -62,6 +62,9 @@ class TasksPanel(BaseScreen):
         if action == "SHORT_PRESS":
             self._confirm_complete = False
             self._cursor = (self._cursor + 1) % len(self._tasks)
+        elif action == "TRIPLE_PRESS":
+            self._confirm_complete = False
+            self._cursor = (self._cursor - 1) % len(self._tasks)
         elif action == "LONG_PRESS":
             # VERIFIED: LONG_PRESS first shows confirm hint, second LONG marks task complete in-place.
             if not self._confirm_complete:
