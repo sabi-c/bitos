@@ -39,7 +39,7 @@ sudo systemctl start bitos-device
 
 echo ""
 echo "Step 4: Run smoke test..."
-python ~/bitos/scripts/smoke_test.py
+bash ~/bitos/scripts/smoke_test.sh
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

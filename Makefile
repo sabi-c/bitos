@@ -81,6 +81,9 @@ run-both:
 verify-hw:
 	python scripts/verify_hardware.py
 
+smoke-test:
+	@bash scripts/smoke_test.sh
+
 run-pi:
 	BITOS_DISPLAY=st7789 \
 	BITOS_AUDIO=hw:0 \
