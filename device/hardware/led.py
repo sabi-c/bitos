@@ -1,4 +1,6 @@
-import os
+"""WhisPlay RGB LED controller."""
+
+from __future__ import annotations
 
 
 class LEDController:
@@ -8,13 +10,13 @@ class LEDController:
             from hardware.whisplay_board import get_board
 
             self._board = get_board()
-        except Exception as e:
-            print(f"led_init_failed: {e}")
+        except Exception as exc:
+            print(f"led_init_failed: {exc}")
 
-    def set_color(self, r, g, b):
-        if self._board:
+    def set_color(self, r: int, g: int, b: int):
+        if self._board is not None:
             try:
-                self._board.set_led(r, g, b)
+                self._board.set_rgb(r, g, b)
             except Exception:
                 pass
 
@@ -22,17 +24,13 @@ class LEDController:
         self.set_color(0, 0, 0)
 
     def thinking(self):
-        """Blue pulse — AI is processing"""
         self.set_color(0, 0, 255)
 
     def listening(self):
-        """Green — recording voice"""
         self.set_color(0, 255, 0)
 
     def speaking(self):
-        """White — playing response"""
         self.set_color(255, 255, 255)
 
     def error(self):
-        """Red — something wrong"""
         self.set_color(255, 0, 0)
