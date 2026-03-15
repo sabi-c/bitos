@@ -18,12 +18,16 @@ class BoardStub:
     def __init__(self):
         self.press_callbacks = []
         self.release_callbacks = []
+        self._button_pressed = False
 
     def on_button_press(self, callback):
         self.press_callbacks.append(callback)
 
     def on_button_release(self, callback):
         self.release_callbacks.append(callback)
+
+    def button_pressed(self):
+        return self._button_pressed
 
 
 class ButtonHandlerTests(unittest.TestCase):
@@ -37,6 +41,7 @@ class ButtonHandlerTests(unittest.TestCase):
 
     def setUp(self):
         self.handler = ButtonHandler()
+        self.handler._poll_board_state = False  # keyboard tests don't need board polling
         self.fired = []
         self.handler.on(ButtonEvent.SHORT_PRESS, lambda: self.fired.append("short"))
         self.handler.on(ButtonEvent.LONG_PRESS, lambda: self.fired.append("long"))
@@ -117,17 +122,46 @@ class ButtonHandlerTests(unittest.TestCase):
 
         self.assertEqual(len(board.press_callbacks), 1)
         self.assertEqual(len(board.release_callbacks), 1)
+        self.assertTrue(handler._poll_board_state)  # polling fallback enabled
 
         board.press_callbacks[0]()
         board.release_callbacks[0]()
         self.assertTrue(callable(handler.handle_pygame_event))
 
+    def test_board_polling_fallback_when_edge_detection_fails(self):
+        """Simulate edge detection failure: callbacks registered but never fire.
+        Polling via board.button_pressed() should still detect presses."""
+        board = BoardStub()
+        handler = create_button_handler(board=board)
+
+        fired = []
+        handler.on(ButtonEvent.SHORT_PRESS, lambda: fired.append("short"))
+
+        # Simulate: edge detection never fires callbacks.
+        # Polling picks up button state via board.button_pressed().
+        # update() calls time.time() once, then _on_press/_on_release call it again.
+        times = iter([
+            1.0, 1.0,    # update #1: now + _on_press
+            1.1, 1.1,    # update #2: now + _on_release
+            1.8,          # update #3: now (click deadline expires)
+        ])
+        with patch("input.handler.time.time", side_effect=lambda: next(times)):
+            board._button_pressed = True
+            handler.update()  # poll detects press
+            board._button_pressed = False
+            handler.update()  # poll detects release
+            handler.update()  # click deadline expires → SHORT_PRESS
+
+        self.assertEqual(fired, ["short"])
+
     def test_button_state_logs_include_active_screen(self):
         handler = ButtonHandler(active_screen_name_getter=lambda: "lock")
 
-        with patch("input.handler.logger.isEnabledFor", return_value=True), patch("input.handler.logger.debug") as log_debug:
-            handler._on_press()
-            handler._on_release()
+        times = iter([5.0, 5.1])  # press and release at distinct times (> debounce)
+        with patch("input.handler.time.time", side_effect=lambda: next(times)):
+            with patch("input.handler.logger.isEnabledFor", return_value=True), patch("input.handler.logger.debug") as log_debug:
+                handler._on_press()
+                handler._on_release()
 
         log_debug.assert_any_call("Button %s — active screen: %s", "pressed", "lock")
         log_debug.assert_any_call("Button %s — active screen: %s", "released", "lock")

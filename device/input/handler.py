@@ -233,10 +233,11 @@ def create_button_handler(board=None, active_screen_name_getter: Callable[[], st
 
     if board is not None:
         handler._board = board
-        handler._poll_board_state = False
+        handler._poll_board_state = True  # polling fallback if edge detection fails
         board.on_button_press(handler._on_press)
         board.on_button_release(handler._on_release)
         handler.handle_pygame_event = lambda event: False
+        logger.info("board_button_init: callbacks registered + polling fallback enabled")
         return handler
 
     if button_mode == "gpio":

@@ -96,18 +96,6 @@ class IntegrationSettingsRequest(BaseModel):
     config: dict = Field(default_factory=dict)
 
 
-class MailDraftRequest(BaseModel):
-    thread_id: str
-    voice_transcript: str
-
-
-class MailCreateDraftRequest(BaseModel):
-    thread_id: str
-    body: str
-    confirmed: bool = False
-
-
-
 class DeviceUpdateRequest(BaseModel):
     target: str = "both"
     confirmed: bool = False
@@ -364,11 +352,6 @@ async def health():
     }
 
 
-@app.get("/status/integrations")
-async def get_integrations_status():
-    return _integration_status_payload()
-
-
 @app.get("/device/version")
 async def device_version():
     behind = _commits_behind_origin_main()
@@ -584,26 +567,6 @@ async def integrations_status():
         }
     )
     return payload
-
-
-@app.get("/device/version")
-async def get_device_version():
-    return {"status": "not_implemented"}
-
-
-@app.post("/device/update")
-async def post_device_update():
-    return {"status": "not_implemented"}
-
-
-@app.post("/device/heartbeat")
-async def post_device_heartbeat():
-    return {"status": "not_implemented"}
-
-
-@app.get("/device/status")
-async def get_device_status():
-    return {"status": "not_implemented"}
 
 
 

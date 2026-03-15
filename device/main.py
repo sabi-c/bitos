@@ -119,6 +119,36 @@ def _cancel_inflight_voice_recording(screen_mgr):
             logger.warning("cancel_voice_failed error=%s", exc)
 
 
+def _request_backend_shutdown(client: "BackendClient"):
+    """Best-effort POST to /shutdown so the server can clean up."""
+    try:
+        client.post("/shutdown", json={}, timeout=2.0)
+    except Exception as exc:
+        logger.warning("backend_shutdown_request_failed error=%s", exc)
+
+
+def _save_runtime_state(screen_mgr, now: float):
+    """Persist minimal state so a quick reboot can skip the boot screen."""
+    current = screen_mgr.current
+    screen_name = current.__class__.__name__ if current else "none"
+    state = {"screen": screen_name, "timestamp": now}
+    try:
+        with open("/tmp/bitos_state.json", "w", encoding="utf-8") as f:
+            json.dump(state, f)
+    except Exception as exc:
+        logger.warning("save_state_failed error=%s", exc)
+
+
+def _execute_power_action(action: str):
+    """Run systemctl poweroff or reboot."""
+    cmd = "poweroff" if action == "shutdown" else "reboot"
+    logger.info("power_action=%s", cmd)
+    try:
+        os.system(f"sudo systemctl {cmd}")
+    except Exception as exc:
+        logger.warning("power_action_failed error=%s", exc)
+
+
 def main():
     from hardware.whisplay_board import get_board
 
