@@ -33,6 +33,8 @@ from screens.manager import ScreenManager
 from screens.boot import BootScreen
 from screens.lock import LockScreen
 from screens.panels.home import HomePanel
+from ui.composite_screen import CompositeScreen
+from ui.panel_registry import create_right_panels
 from screens.panels.chat import ChatPanel
 from screens.panels.focus import FocusPanel
 from screens.panels.tasks import TasksPanel
@@ -357,23 +359,24 @@ def main():
 
     restored_state = _restore_state()
 
+    right_panels = create_right_panels()
+
     def on_home():
-        home = HomePanel(
-            on_back=on_home,
-            on_open_chat=open_chat,
-            on_open_focus=open_focus,
-            on_open_tasks=open_tasks,
-            on_open_captures=open_captures,
-            on_open_notifications=open_notifications,
-            on_open_messages=open_messages,
-            on_open_mail=open_mail,
-            on_open_settings=open_settings,
-            on_show_shade=screen_mgr.show_shade,
-            repository=repository,
-            client=client,
+        panel_openers = {
+            "HOME": lambda: None,  # already showing home
+            "CHAT": open_chat,
+            "TASKS": open_tasks,
+            "SETTINGS": open_settings,
+            "FOCUS": open_focus,
+            "MAIL": open_mail,
+            "MSGS": open_messages,
+            "MUSIC": lambda: None,  # not yet implemented
+            "HISTORY": open_captures,
+        }
+        home = CompositeScreen(
+            panel_openers=panel_openers,
             status_state=status_state,
-            ui_settings=ui_settings,
-            startup_health=startup_health,
+            right_panels=right_panels,
         )
         screen_mgr.replace(home)
 

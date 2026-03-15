@@ -22,9 +22,7 @@ from device.display.tokens import PHYSICAL_W, PHYSICAL_H, SIDEBAR_W, CONTENT_W, 
 from device.ui.components.sidebar import Sidebar, ITEMS
 from device.ui.components.status_bar import StatusBar
 from device.ui.components.hint_bar import HintBar
-
-# BaseScreen lives in old screen system (relative to device/ cwd)
-from screens.base import BaseScreen
+from device.screens.base import BaseScreen
 
 BLACK = (0, 0, 0)
 
