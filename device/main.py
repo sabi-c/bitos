@@ -166,7 +166,10 @@ def _run_main_loop(driver, button, screen_mgr: ScreenManager, outbound_loop: Out
 
 
 def main():
-    from device.hardware.whisplay_board import get_board
+    from hardware.whisplay_board import get_board
+
+    # Ensure the shared board instance is created before button handler setup.
+    # If `board` is omitted, create_button_handler falls back to keyboard mode.
     board = get_board()
 
     logger.info("[BITOS] Starting device...")
