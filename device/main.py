@@ -32,7 +32,6 @@ from power.leds import LEDController
 from screens.manager import ScreenManager
 from screens.boot import BootScreen
 from screens.lock import LockScreen
-from screens.panels.home import HomePanel
 from ui.composite_screen import CompositeScreen
 from ui.panel_registry import create_right_panels
 from screens.panels.chat import ChatPanel
