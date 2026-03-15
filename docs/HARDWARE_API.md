@@ -1,113 +1,67 @@
-# HARDWARE API (Single Source of Truth)
+## WhisPlayBoard
 
-This document is the hardware source-of-truth for BITOS.
+Methods verified from `docs/whisplay/WhisPlay_methods.txt`:
 
-> Rule: **No hardware code changes should be made before validating names/signatures/ownership here against source.**
+- `__init__(self)`: Initializes GPIO, SPI, display state, backlight, RGB PWM, and button callbacks.
+- `_button_event_rpi(self, channel)`: Raspberry Pi interrupt callback that dispatches press/release handlers.
+- `_button_monitor_radxa(self)`: Radxa polling loop for button transitions.
+- `_button_press_event(self, channel)`: Internal helper that invokes registered press callback.
+- `_button_release_event(self, channel)`: Internal helper that invokes registered release callback.
+- `_create_rpi_rgb_pwm(self, pin, color_name)`: Creates software PWM for RGB channels on RPi.
+- `_detect_hardware_version(self)`: Detects platform variant and sets backlight mode.
+- `_detect_wm8960(self)`: Detects WM8960 audio card presence.
+- `_gpio_input(self, pin)`: Cross-platform GPIO input wrapper.
+- `_gpio_output(self, pin, value)`: Cross-platform GPIO output wrapper.
+- `_init_display(self)`: Sends panel init command sequence.
+- `_init_radxa(self)`: Configures Radxa GPIO and SPI.
+- `_init_rpi(self)`: Configures Raspberry Pi GPIO and SPI.
+- `_reset_lcd(self)`: Performs panel hardware reset sequence.
+- `_rpi_pin_can_drive_low(self, pin)`: Verifies an RPi GPIO pin can sink current.
+- `_rpi_set_backlight_state(self, value)`: Drives active-low backlight pin on RPi.
+- `_rpi_set_rgb_output_state(self, pin, value)`: Drives RGB pins in output mode on RPi.
+- `_rpi_set_rgb_sink_state(self, pin, value)`: Drives RGB pins with pulldown sink fallback on RPi.
+- `_send_command(self, cmd, *args)`: Sends a display command and optional command parameters.
+- `_send_data(self, data)`: Sends raw display data bytes over SPI.
+- `button_pressed(self)`: Returns current button state (`True` when pressed).
+- `cleanup(self)`: Stops PWM, closes SPI, and releases GPIO resources.
+- `draw_image(self, x, y, width, height, pixel_data)`: Draws RGB565 image payload in a region.
+- `draw_line(self, x0, y0, x1, y1, color)`: Draws a line in RGB565 color.
+- `draw_pixel(self, x, y, color)`: Draws a single pixel in RGB565 color.
+- `fill_screen(self, color)`: Fills full panel with one RGB565 color.
+- `on_button_press(self, callback)`: Registers callback for button press.
+- `on_button_release(self, callback)`: Registers callback for button release.
+- `set_backlight(self, brightness)`: Sets backlight level (0-100).
+- `set_backlight_mode(self, mode)`: Switches between PWM and simple on/off backlight modes.
+- `set_rgb(self, r, g, b)`: Sets RGB LED color.
+- `set_rgb_fade(self, r_target, g_target, b_target, duration_ms=100)`: Fades RGB LED to target color.
+- `set_window(self, x0, y0, x1, y1, use_horizontal=0)`: Sets panel drawing window.
 
-## Source files used
+## GPIO Pin Map
 
-- `docs/whisplay/WhisPlay_patched.py` (driver implementation currently in repo)
-- `docs/pi_config/config.txt` (boot overlays and bus enablement)
-- `device/hardware/battery.py` (PiSugar I2C usage in BITOS)
-- `device/audio/pipeline.py` (ALSA device usage in BITOS)
-- `device/input/handler.py` (GPIO button polling behavior in BITOS)
+| Pin | BCM | Owner | Used For |
+|---|---:|---|---|
+| 7 | 4 | WhisPlayBoard | LCD reset (`RST_PIN`) |
+| 11 | 17 | WhisPlayBoard | User button input (`BUTTON_PIN`) |
+| 13 | 27 | WhisPlayBoard | LCD data/command (`DC_PIN`) |
+| 15 | 22 | WhisPlayBoard | LCD backlight (`LED_PIN`, active-low) |
+| 16 | 23 | WhisPlayBoard | RGB LED blue channel (`BLUE_PIN`) |
+| 18 | 24 | WhisPlayBoard | RGB LED green channel (`GREEN_PIN`) |
+| 22 | 25 | WhisPlayBoard | RGB LED red channel (`RED_PIN`) |
+| 19 | 10 | SPI0 | LCD SPI MOSI |
+| 23 | 11 | SPI0 | LCD SPI SCLK |
+| 24 | 8 | SPI0 | LCD SPI CE0 |
 
-## 1) WhisPlayBoard public API
+## I2C Devices
 
-From `class WhisPlayBoard` in `docs/whisplay/WhisPlay_patched.py`, the **public class attributes** are:
+| Address | Bus | Device | Purpose |
+|---|---:|---|---|
+| `0x1a` | 1 | WM8960 codec (`UU`) | Audio capture/playback codec |
+| `0x57` | 1 | PiSugar 3 battery manager | Battery percent/charging/voltage telemetry |
+| `0x68` | 1 | RTC (`UU`) | Real-time clock source |
 
-- `LCD_WIDTH`
-- `LCD_HEIGHT`
-- `CornerHeight`
-- `DC_PIN`
-- `RST_PIN`
-- `LED_PIN`
-- `RED_PIN`
-- `GREEN_PIN`
-- `BLUE_PIN`
-- `BUTTON_PIN`
+## ALSA
 
-Public methods with signatures:
-
-- `set_backlight(brightness)`
-- `set_backlight_mode(mode)`
-- `set_window(x0, y0, x1, y1, use_horizontal=0)`
-- `draw_pixel(x, y, color)`
-- `draw_line(x0, y0, x1, y1, color)`
-- `fill_screen(color)`
-- `draw_image(x, y, width, height, pixel_data)`
-- `set_rgb(r, g, b)`
-- `set_rgb_fade(r_target, g_target, b_target, duration_ms=100)`
-- `button_pressed()`
-- `on_button_press(callback)`
-- `on_button_release(callback)`
-- `cleanup()`
-
-Notes:
-
-- `WhisPlayBoard` has **no** `.disp` attribute and **no** `.display` attribute in this source file.
-- Display push is done via `draw_image(...)` (and primitives like `fill_screen(...)`).
-
-## 2) GPIO pin ownership
-
-### HAT-owned pins (from WhisPlayBoard constants)
-
-| Physical pin (BOARD) | Symbol | Owner / purpose |
+| Card | Device | Controls |
 |---|---|---|
-| 13 | `DC_PIN` | LCD D/C control (WhisPlay display driver) |
-| 7  | `RST_PIN` | LCD reset (WhisPlay display driver) |
-| 15 | `LED_PIN` | LCD backlight control (WhisPlay display driver) |
-| 22 | `RED_PIN` | RGB LED red channel (WhisPlay) |
-| 18 | `GREEN_PIN` | RGB LED green channel (WhisPlay) |
-| 16 | `BLUE_PIN` | RGB LED blue channel (WhisPlay) |
-| 11 | `BUTTON_PIN` | User button input (WhisPlay / BITOS input) |
-
-### SPI-related ownership
-
-- WhisPlay RPi path uses `self.spi.open(0, 0)` (SPI0 CS0).
-- Physical pin **11** is also SPI SCLK on Raspberry Pi headers, so interrupt edge detection is unreliable in this hardware layout.
-- BITOS therefore polls pin 11 state with `GPIO.input()` at 20ms interval in `device/input/handler.py`.
-
-## 3) I2C address map used by BITOS
-
-| Bus | Address | Device | Evidence |
-|---|---|---|---|
-| I2C-1 | `0x57` | PiSugar 3 battery/power controller | `device/hardware/battery.py` |
-
-Registers used by BITOS battery monitor:
-
-- `%`: `0x2A`
-- status: `0x02` (charging bit mask `0x80`)
-- voltage MSB/LSB: `0x22` / `0x23` (optional read)
-
-## 4) ALSA devices and control names
-
-### Devices currently referenced by BITOS
-
-- `hw:0` default ALSA device via `BITOS_AUDIO` in `device/audio/pipeline.py`.
-- Capture uses `arecord` with `-D <device>`.
-- Playback uses `aplay` with `-D <device>`.
-
-### Overlay / card context
-
-- `dtoverlay=wm8960-soundcard` is enabled in `docs/pi_config/config.txt`.
-- WhisPlay driver probes `/proc/asound/cards` for a card containing `wm8960`.
-
-### ALSA control names
-
-No stable control-name list is currently stored in-repo. When generating/refreshing this doc on target hardware, capture:
-
-- `amixer -c <card-index> scontrols`
-- `amixer -c <card-index> controls`
-
-and append the exact mixer control names here.
-
-## 5) Required workflow for hardware edits
-
-Before any hardware-layer code change:
-
-1. Confirm target API/pin/address/control in this document.
-2. Verify against the referenced source file(s).
-3. Update this document first if reality changed.
-4. Then update code.
-
+| `0: wm8960soundcard (wm8960-soundcard)` | `0: bcm2835-i2s-wm8960-hifi` | Capture Volume, Capture Switch, Playback Volume, Speaker Playback Volume, Headphone Playback Volume, ADC PCM Capture Volume |
+| `1: vc4hdmi (vc4-hdmi)` | `0: MAI PCM i2s-hifi-0` | HDMI playback path (no WM8960 mixer controls) |

@@ -7,7 +7,6 @@ Desktop: Space bar = physical button.
 from __future__ import annotations
 
 import os
-import threading
 import time
 from enum import Enum, auto
 from typing import Callable, Optional
@@ -136,59 +135,21 @@ class ButtonHandler:
             self._emit(ButtonEvent.SHORT_PRESS)
 
 
-class GPIOButtonPoller:
-    """Poll physical pin 11 via GPIO.input() every 20ms (no edge interrupts)."""
-
-    GPIO_PIN_BOARD = 11
-    POLL_INTERVAL = 0.02
-
-    def __init__(self, on_press: Callable[[], None], on_release: Callable[[], None]):
-        from hardware.whisplay_board import get_board
-
-        self._board = get_board()
-        self._on_press = on_press
-        self._on_release = on_release
-        self._running = self._board is not None
-        self._last_state = False
-
-        if not self._running:
-            print("button_board_unavailable: falling back to keyboard-only input")
-            return
-
-        import RPi.GPIO as GPIO
-
-        self._gpio = GPIO
-        try:
-            self._last_state = self._gpio.input(self.GPIO_PIN_BOARD) == self._gpio.HIGH
-        except Exception:
-            self._last_state = False
-
-        self._thread = threading.Thread(target=self._poll, daemon=True)
-        self._thread.start()
-
-    def _poll(self):
-        while self._running:
-            try:
-                state = self._gpio.input(self.GPIO_PIN_BOARD) == self._gpio.HIGH
-                if state != self._last_state:
-                    self._last_state = state
-                    if state:
-                        self._on_press()
-                    else:
-                        self._on_release()
-            except Exception:
-                pass
-            time.sleep(self.POLL_INTERVAL)
-
-    def stop(self):
-        self._running = False
-
-
-def create_button_handler():
+def create_button_handler(board=None):
     """WhisPlay mode uses GPIO polling; desktop mode uses keyboard events."""
     if os.environ.get("BITOS_BUTTON", "").lower() == "gpio":
         handler = ButtonHandler()
-        handler._gpio_poller = GPIOButtonPoller(on_press=handler._on_press, on_release=handler._on_release)
+        if board is None:
+            from hardware.whisplay_board import get_board
+
+            board = get_board()
+
+        if board is None:
+            print("button_board_unavailable: falling back to keyboard-only input")
+            return handler
+
+        board.on_button_press(handler._on_press)
+        board.on_button_release(handler._on_release)
         handler.handle_pygame_event = lambda event: False
         return handler
     return ButtonHandler()
