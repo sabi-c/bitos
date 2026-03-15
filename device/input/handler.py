@@ -164,19 +164,24 @@ class GPIOButtonHandler:
 
         # Strategy 1: Use WhisPlayBoard's own button callback (avoids GPIO conflict)
         try:
-            sys.path.insert(0, os.environ.get("WHISPLAY_DRIVER_PATH", "/home/pi/Whisplay/Driver"))
-            from WhisPlay import WhisPlayBoard
-            board = WhisPlayBoard()
-            board.set_key_callback(self._raw_callback_whisplay)
-            self._whisplay_board = board
-            return  # Success — no direct GPIO needed
+            from hardware.whisplay_board import get_board
+            board = get_board()
+            if board is not None:
+                board.set_key_callback(self._raw_callback_whisplay)
+                self._whisplay_board = board
+                return  # Success — no direct GPIO needed
         except (ImportError, AttributeError, Exception):
             pass  # WhisPlay unavailable or no set_key_callback — fall through
 
         # Strategy 2: Direct GPIO (BCM numbering, consistent with display driver)
         import RPi.GPIO as GPIO  # type: ignore
+        GPIO.setwarnings(False)
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(self.GPIO_PIN_BCM, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        try:
+            GPIO.remove_event_detect(self.GPIO_PIN_BCM)
+        except Exception:
+            pass
         GPIO.add_event_detect(
             self.GPIO_PIN_BCM,
             GPIO.BOTH,

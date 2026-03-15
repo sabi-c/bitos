@@ -1,16 +1,13 @@
 import os
-import sys
-
-sys.path.insert(0, os.environ.get("WHISPLAY_DRIVER_PATH", "/home/pi/Whisplay/Driver"))
 
 
 class LEDController:
     def __init__(self):
         self._board = None
         try:
-            from WhisPlay import WhisPlayBoard
+            from hardware.whisplay_board import get_board
 
-            self._board = WhisPlayBoard()
+            self._board = get_board()
         except Exception as e:
             print(f"led_init_failed: {e}")
 

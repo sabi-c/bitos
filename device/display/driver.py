@@ -139,16 +139,16 @@ class ST7789Driver(DisplayDriver):
             GPIO.setup(self.RST_PIN, GPIO.OUT)
             self._reset()
             self._init_display()
-            # Enable backlight via Whisplay HAT driver
-            sys.path.insert(0, os.environ.get("WHISPLAY_DRIVER_PATH", "/home/pi/Whisplay/Driver"))
+            # Enable backlight via Whisplay HAT driver (singleton)
             try:
-                from WhisPlay import WhisPlayBoard
-                self.backlight = WhisPlayBoard()
-                # Reset → settle → ramp to configured level
-                self.backlight.set_backlight(0)
-                time.sleep(0.1)
-                level = int(os.environ.get("WHISPLAY_BACKLIGHT_LEVEL", "100"))
-                self.backlight.set_backlight(max(0, min(100, level)))
+                from hardware.whisplay_board import get_board
+                self.backlight = get_board()
+                if self.backlight:
+                    # Reset → settle → ramp to configured level
+                    self.backlight.set_backlight(0)
+                    time.sleep(0.1)
+                    level = int(os.environ.get("WHISPLAY_BACKLIGHT_LEVEL", "100"))
+                    self.backlight.set_backlight(max(0, min(100, level)))
             except Exception as e:
                 print(f"backlight_init_failed: {e}")
         except Exception as e:
