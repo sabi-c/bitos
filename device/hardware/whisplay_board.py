@@ -14,7 +14,6 @@ def get_board():
         try:
             import os
             import sys
-            import time
 
             sys.path.insert(0, os.environ.get(
                 "WHISPLAY_DRIVER_PATH",
@@ -23,8 +22,7 @@ def get_board():
             import RPi.GPIO as GPIO
 
             GPIO.setwarnings(False)
-            GPIO.cleanup()
-            time.sleep(0.5)
+            # Do NOT call GPIO.cleanup() — breaks WhisPlayBoard init
 
             from WhisPlay import WhisPlayBoard
 
