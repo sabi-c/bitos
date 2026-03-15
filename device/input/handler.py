@@ -29,7 +29,7 @@ class ButtonEvent(Enum):
 
 
 DEBOUNCE_S = 0.030
-LONG_PRESS_S = 0.500
+LONG_PRESS_S = 0.800
 CLICK_TIMEOUT_S = 0.300
 POWER_PRESS_COUNT = 5
 POWER_WINDOW_S = 1.200
@@ -48,6 +48,7 @@ class ButtonHandler:
         self._raw_pressed = False
         self._power_press_times: list[float] = []
         self._board = None
+        self._poll_board_state = True
 
     def on(self, event_type: ButtonEvent, callback: Callable):
         self._callbacks[event_type].append(callback)
@@ -139,7 +140,7 @@ class ButtonHandler:
     def update(self) -> None:
         now = time.time()
 
-        if self._board is None and not self._keyboard_mode:
+        if self._poll_board_state and self._board is None and not self._keyboard_mode:
             try:
                 from hardware.whisplay_board import get_board
 
@@ -147,7 +148,7 @@ class ButtonHandler:
             except Exception:
                 self._board = None
 
-        if self._board is not None:
+        if self._poll_board_state and self._board is not None:
             pressed = self._board.button_pressed()
             if pressed and not self._raw_pressed:
                 self._raw_pressed = True
@@ -205,6 +206,8 @@ def create_button_handler(board=None, active_screen_name_getter: Callable[[], st
         board = get_board()
 
     if board is not None:
+        handler._board = board
+        handler._poll_board_state = False
         board.on_button_press(handler._on_press)
         board.on_button_release(handler._on_release)
         handler.handle_pygame_event = lambda event: False

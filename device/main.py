@@ -31,7 +31,18 @@ from power.battery import BatteryMonitor
 from power.leds import LEDController
 from screens.manager import ScreenManager
 from screens.boot import BootScreen
-from screens.lock_screen import LockScreen
+from screens.lock import LockScreen
+from screens.panels.home import HomePanel
+from screens.panels.chat import ChatPanel
+from screens.panels.focus import FocusPanel
+from screens.panels.tasks import TasksPanel
+from screens.panels.captures import CapturesPanel
+from screens.panels.messages import MessagesPanel
+from screens.panels.mail import MailPanel
+from screens.panels.notifications import NotificationsPanel
+from screens.panels.settings import SettingsPanel, ModelPickerPanel, AgentModePanel, SleepTimerPanel, AboutPanel
+from screens.subscreens.integration_detail import IntegrationDetailPanel
+from overlays.power import PowerOverlay
 import screens.chat_screen  # register app
 import screens.tasks_screen  # register app
 import screens.focus_screen  # register app
@@ -408,7 +419,7 @@ def main():
 
     def _enter_offline_mode():
         screen_mgr.dismiss_overlay()
-        lock = LockScreen()
+        lock = LockScreen(on_home=on_home, ui_settings=ui_settings)
         screen_mgr.replace(lock)
 
     def _show_setup_qr_if_needed():
@@ -435,7 +446,7 @@ def main():
         gatt_server.set_discoverable(True, timeout_s=120)
 
     def on_boot_complete():
-        lock = LockScreen()
+        lock = LockScreen(on_home=on_home, ui_settings=ui_settings)
         screen_mgr.replace(lock)
         _show_setup_qr_if_needed()
 
