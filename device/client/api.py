@@ -268,6 +268,17 @@ class BackendClient:
             logging.warning("tasks_fetch_failed error=%s", exc)
             return []
 
+
+    def get_device_stats(self) -> dict:
+        """GET /device/stats from server."""
+        try:
+            resp = httpx.get(f"{self.base_url}/device/stats", timeout=5, headers=self._request_headers())
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as exc:
+            logging.warning("device_stats_failed error=%s", exc)
+            return {}
+
     def get_morning_brief(self) -> dict:
         """GET /brief from server."""
         try:

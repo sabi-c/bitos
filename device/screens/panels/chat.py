@@ -66,13 +66,14 @@ class ChatPanel(BaseScreen):
         "unknown": "unknown error",
     }
 
-    def __init__(self, client: BackendClient, ui_settings: dict | None = None, repository: DeviceRepository | None = None, audio_pipeline: AudioPipeline | None = None, on_back=None):
+    def __init__(self, client: BackendClient, ui_settings: dict | None = None, repository: DeviceRepository | None = None, audio_pipeline: AudioPipeline | None = None, led=None, on_back=None):
         self._client = client
         self._cursor_anim = blink_cursor()
         self._repository = repository
         self._on_back = on_back
         self._messages_lock = threading.Lock()
         self._audio_pipeline = audio_pipeline
+        self._led = led
 
         # State
         self._input_text = ""
@@ -261,6 +262,8 @@ class ChatPanel(BaseScreen):
         if self._is_streaming or not self._audio_pipeline:
             return
         self._is_streaming = True
+        if self._led:
+            self._led.listening()
         with self._messages_lock:
             self._status = self.STATUS_CONNECTED
             self._status_detail = "recording..."
@@ -274,6 +277,8 @@ class ChatPanel(BaseScreen):
             audio_path = self._audio_pipeline.record(max_seconds=timeout_seconds)
             if not audio_path:
                 self._is_streaming = False
+                if self._led:
+                    self._led.off()
                 return
             _time.sleep(timeout_seconds)
             self._audio_pipeline.stop_recording()
@@ -282,11 +287,15 @@ class ChatPanel(BaseScreen):
             text = self._audio_pipeline.transcribe(audio_path).strip()
         except Exception as exc:
             self._is_streaming = False
+            if self._led:
+                self._led.error()
             self._mark_failed("", "unknown", False)
             self._status_detail = f"voice err: {str(exc)[:20]}"
             return
 
         self._is_streaming = False
+        if self._led:
+            self._led.off()
         if not text:
             with self._messages_lock:
                 self._status_detail = "Didn't catch that — try again"
@@ -315,6 +324,8 @@ class ChatPanel(BaseScreen):
         self._last_failed_message = None
         self._last_error_retryable = False
 
+        if self._led:
+            self._led.thinking()
         thread = threading.Thread(target=self._stream_response, args=(text,), daemon=True)
         thread.start()
 
@@ -361,6 +372,8 @@ class ChatPanel(BaseScreen):
                 try:
                     with self._messages_lock:
                         self._status_detail = "◎ SPEAKING..."
+                    if self._led:
+                        self._led.speaking()
                     self._audio_pipeline.speak(response_text)
                 except Exception:
                     pass
@@ -376,11 +389,15 @@ class ChatPanel(BaseScreen):
             self._mark_failed(message, "unknown", True)
         finally:
             self._is_streaming = False
+            if self._led and self._status == self.STATUS_CONNECTED:
+                self._led.off()
 
     def _mark_failed(self, message: str, kind: str, retryable: bool, custom_copy: str | None = None):
         status = self.STATUS_OFFLINE if kind in ("offline", "network") else self.STATUS_DEGRADED
         error_copy = custom_copy or self.ERROR_MESSAGES.get(kind, self.ERROR_MESSAGES["unknown"])
 
+        if self._led:
+            self._led.error()
         with self._messages_lock:
             self._status = status
             self._status_detail = error_copy

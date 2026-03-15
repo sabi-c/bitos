@@ -19,10 +19,11 @@ class MailPanel(BaseScreen):
     STATE_CONFIRM = "confirm"
     CONFIRM_HINT_ROWS = ["SHORT: REFINE", "LONG:  SAVE DRAFT ✓", "DBL:   DISCARD"]
 
-    def __init__(self, client, battery_pct: int = 84, audio_pipeline=None, on_back=None, ui_settings: dict | None = None):
+    def __init__(self, client, battery_pct: int = 84, audio_pipeline=None, led=None, on_back=None, ui_settings: dict | None = None):
         self._client = client
         self._battery_pct = battery_pct
         self._audio_pipeline = audio_pipeline
+        self._led = led
         self._on_back = on_back
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
 
@@ -109,7 +110,11 @@ class MailPanel(BaseScreen):
         elif action == "SHORT_PRESS":
             self._state = self.STATE_DRAFT_VOICE
         elif action == "LONG_PRESS":
+            if self._led:
+                self._led.thinking()
             draft_id = self._client.create_mail_draft(self._selected_thread_id, self._draft_text, confirmed=True)
+            if self._led:
+                self._led.off() if draft_id else self._led.error()
             self._status_toast = "Draft saved ✓" if draft_id else "Draft failed"
             self._status_toast_until = time.time() + 1.5
             self._state = self.STATE_THREAD
@@ -119,6 +124,8 @@ class MailPanel(BaseScreen):
             return
         transcript = ""
         try:
+            if self._led:
+                self._led.listening()
             audio_path = self._audio_pipeline.record(max_seconds=30)
             stop_fn = getattr(self._audio_pipeline, "stop", None) or getattr(self._audio_pipeline, "stop_recording", None)
             if callable(stop_fn):
@@ -126,11 +133,19 @@ class MailPanel(BaseScreen):
             transcript = self._audio_pipeline.transcribe(audio_path).strip()
         except Exception:
             transcript = ""
+            if self._led:
+                self._led.error()
 
+        if self._led:
+            self._led.off()
         if not transcript:
             return
 
+        if self._led:
+            self._led.thinking()
         draft = self._client.draft_mail_reply(self._selected_thread_id, transcript)
+        if self._led:
+            self._led.off()
         self._draft_text = draft or transcript
         self._state = self.STATE_CONFIRM
 

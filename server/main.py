@@ -4,6 +4,32 @@ import os
 import subprocess
 import sys
 import threading
+
+try:
+    import psutil
+except Exception:  # pragma: no cover - fallback for environments missing psutil
+    class _Mem:
+        used = 0
+        total = 0
+        percent = 0
+
+    class _Disk:
+        percent = 0
+
+    class _PsutilFallback:
+        @staticmethod
+        def cpu_percent(interval=0):
+            return 0
+
+        @staticmethod
+        def virtual_memory():
+            return _Mem()
+
+        @staticmethod
+        def disk_usage(_path):
+            return _Disk()
+
+    psutil = _PsutilFallback()
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -21,6 +47,7 @@ if str(INTEGRATIONS_DIR) not in sys.path:
 
 from bluebubbles_adapter import BlueBubblesAdapter
 from vikunja_adapter import VikunjaAdapter
+from gmail_adapter import GmailAdapter
 
 from agent_modes import get_system_prompt
 from config import UI_SETTINGS_FILE
@@ -578,6 +605,19 @@ async def post_device_heartbeat():
 async def get_device_status():
     return {"status": "not_implemented"}
 
+
+
+
+@app.get("/device/stats")
+async def get_device_stats():
+    mem = psutil.virtual_memory()
+    return {
+        "cpu_percent": psutil.cpu_percent(interval=0.1),
+        "ram_used_mb": mem.used // 1024 // 1024,
+        "ram_total_mb": mem.total // 1024 // 1024,
+        "ram_percent": mem.percent,
+        "disk_percent": psutil.disk_usage('/').percent,
+    }
 
 @app.get("/dashboard")
 async def get_dashboard():
