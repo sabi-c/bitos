@@ -89,6 +89,7 @@ class ST7789Driver(DisplayDriver):
 
         self._board.fill_screen(0)
         self._board.set_backlight(100)
+        self._board.previous_frame = None
 
     def get_surface(self) -> pygame.Surface:
         if self._surface is None:

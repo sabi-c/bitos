@@ -12,7 +12,7 @@ WINDOW_W = PHYSICAL_W * SCALE
 WINDOW_H = PHYSICAL_H * SCALE
 
 CORNER_RADIUS = 20  # Rounded corner height in pixels (ST7789 physical)
-FPS = 30
+FPS = 15
 
 # ── Colors (1-bit monochrome palette) ──────────────────────────
 BLACK = (0, 0, 0)

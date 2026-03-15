@@ -21,11 +21,21 @@ class LockScreen(BaseScreen):
         self._font_title = load_ui_font("title", self._ui_settings)
         self._font_body = load_ui_font("body", self._ui_settings)
         self._font_small = load_ui_font("small", self._ui_settings)
+        self._clock_text = ""
+        self._last_clock_update = 0.0
 
         logging.getLogger(__name__).info(
             "lock_font_size title=%s",
             self._font_title.get_height(),
         )
+
+
+    def update(self, dt: float):
+        now = time.time()
+        if now - self._last_clock_update >= 1.0:
+            t = time.localtime()
+            self._clock_text = f"{t.tm_hour:02d}:{t.tm_min:02d}"
+            self._last_clock_update = now
 
     def handle_action(self, action: str):
         if action in {"SHORT_PRESS", "LONG_PRESS", "DOUBLE_PRESS"}:
@@ -40,9 +50,7 @@ class LockScreen(BaseScreen):
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
 
-        now = time.localtime()
-        clock_text = f"{now.tm_hour:02d}:{now.tm_min:02d}"
-        clock = self._font_title.render(clock_text, False, WHITE)
+        clock = self._font_title.render(self._clock_text or "00:00", False, WHITE)
         device_name = self._font_body.render("BITOS", False, DIM3)
         hint = self._font_small.render("PRESS TO UNLOCK", False, WHITE)
 

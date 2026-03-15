@@ -143,6 +143,9 @@ class ButtonHandler:
             self._emit(ButtonEvent.SHORT_PRESS)
 
     def _log_button_state(self, pressed: bool):
+        if not logger.isEnabledFor(logging.DEBUG):
+            return
+
         screen_name = "unknown"
         if self._active_screen_name_getter is not None:
             try:
@@ -150,7 +153,7 @@ class ButtonHandler:
             except Exception:
                 screen_name = "unknown"
         state = "pressed" if pressed else "released"
-        logger.info("Button %s — active screen: %s", state, screen_name)
+        logger.debug("Button %s — active screen: %s", state, screen_name)
 
 
 def create_button_handler(board=None, active_screen_name_getter: Callable[[], str] | None = None):

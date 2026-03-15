@@ -126,12 +126,12 @@ class ButtonHandlerTests(unittest.TestCase):
     def test_button_state_logs_include_active_screen(self):
         handler = ButtonHandler(active_screen_name_getter=lambda: "lock")
 
-        with patch("input.handler.logger.info") as log_info:
+        with patch("input.handler.logger.isEnabledFor", return_value=True), patch("input.handler.logger.debug") as log_debug:
             handler._on_press()
             handler._on_release()
 
-        log_info.assert_any_call("Button %s — active screen: %s", "pressed", "lock")
-        log_info.assert_any_call("Button %s — active screen: %s", "released", "lock")
+        log_debug.assert_any_call("Button %s — active screen: %s", "pressed", "lock")
+        log_debug.assert_any_call("Button %s — active screen: %s", "released", "lock")
 
 
 if __name__ == "__main__":

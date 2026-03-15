@@ -13,6 +13,7 @@ class ScreenManager:
     def __init__(self, notification_queue: NotificationQueue | None = None, status_state=None):
         self._stack: list[BaseScreen] = []
         self._flash_frames = 0
+        self._last_frame_hash = None
         self.notification_queue = notification_queue or NotificationQueue()
         self._notification_shade: NotificationShade | None = None
         self._passkey_overlay: PasskeyOverlay | None = None
@@ -178,6 +179,7 @@ class ScreenManager:
         if self._flash_frames > 0:
             surface.fill(WHITE)
             self._flash_frames -= 1
+            self._last_frame_hash = None
             return
 
         surface.fill(BLACK)
