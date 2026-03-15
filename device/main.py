@@ -358,9 +358,100 @@ def main():
 
     restored_state = _restore_state()
 
-    # Deprecated: legacy panel-based navigation functions were removed in favor of
-    # Screen + NavigationEvent routing via device/ui/screen_manager.py.
+    def on_home():
+        home = HomePanel(
+            on_back=on_home,
+            on_open_chat=open_chat,
+            on_open_focus=open_focus,
+            on_open_tasks=open_tasks,
+            on_open_captures=open_captures,
+            on_open_notifications=open_notifications,
+            on_open_messages=open_messages,
+            on_open_mail=open_mail,
+            on_open_settings=open_settings,
+            on_show_shade=screen_mgr.show_shade,
+            repository=repository,
+            client=client,
+            status_state=status_state,
+            ui_settings=ui_settings,
+            startup_health=startup_health,
+        )
+        screen_mgr.replace(home)
 
+    def open_chat():
+        screen_mgr.replace(ChatPanel(client=client, ui_settings=ui_settings, repository=repository, audio_pipeline=audio_pipeline, led=led, on_back=on_home))
+
+    def open_focus():
+        screen_mgr.replace(FocusPanel(on_back=on_home, ui_settings=ui_settings, repository=repository))
+
+    def open_tasks():
+        screen_mgr.replace(TasksPanel(client=client, repository=repository, on_back=on_home, ui_settings=ui_settings))
+
+    def open_captures():
+        screen_mgr.replace(CapturesPanel(repository=repository, on_back=on_home, ui_settings=ui_settings))
+
+    def open_messages():
+        battery_pct = int(battery_monitor.get_status().get("pct", 84))
+        screen_mgr.replace(
+            MessagesPanel(
+                client=client,
+                battery_pct=battery_pct,
+                audio_pipeline=audio_pipeline,
+                led=led,
+                on_back=on_home,
+                ui_settings=ui_settings,
+            )
+        )
+
+    def open_mail():
+        battery_pct = int(battery_monitor.get_status().get("pct", 84))
+        screen_mgr.replace(
+            MailPanel(
+                client=client,
+                battery_pct=battery_pct,
+                audio_pipeline=audio_pipeline,
+                led=led,
+                on_back=on_home,
+                ui_settings=ui_settings,
+            )
+        )
+
+    def open_notifications():
+        screen_mgr.replace(NotificationsPanel(on_back=on_home, ui_settings=ui_settings))
+
+    def open_settings():
+        screen_mgr.replace(
+            SettingsPanel(
+                repository=repository,
+                on_back=on_home,
+                on_open_model_picker=open_model_picker,
+                on_open_agent_mode=open_agent_mode,
+                on_open_sleep_timer=open_sleep_timer,
+                on_open_about=open_about,
+                on_push_overlay=screen_mgr.push_overlay,
+                on_dismiss_overlay=screen_mgr.dismiss_overlay,
+                get_ble_address=gatt_server.get_device_address,
+                on_set_discoverable=gatt_server.set_discoverable,
+                ui_settings=ui_settings,
+                client=client,
+                on_open_integration_detail=open_integration_detail,
+            )
+        )
+
+    def open_model_picker():
+        screen_mgr.replace(ModelPickerPanel(repository=repository, on_back=on_home, ui_settings=ui_settings))
+
+    def open_agent_mode():
+        screen_mgr.replace(AgentModePanel(repository=repository, on_back=on_home, ui_settings=ui_settings))
+
+    def open_sleep_timer():
+        screen_mgr.replace(SleepTimerPanel(repository=repository, on_back=on_home, ui_settings=ui_settings))
+
+    def open_about():
+        screen_mgr.replace(AboutPanel(on_back=on_home, ui_settings=ui_settings))
+
+    def open_integration_detail(integration_name: str, status_data: dict):
+        screen_mgr.replace(IntegrationDetailPanel(integration_name=integration_name, status_data=status_data, on_back=on_home, ui_settings=ui_settings))
 
     def _enter_offline_mode():
         screen_mgr.dismiss_overlay()

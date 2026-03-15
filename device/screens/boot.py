@@ -55,13 +55,16 @@ class BootDiagnostics:
 
     def _check_button(self):
         mode = os.environ.get("BITOS_BUTTON", "keyboard")
-        if mode == "gpio":
-            try:
-                import RPi.GPIO as _  # type: ignore
-            except Exception as exc:
-                logger.warning("boot_gpio_import_failed error=%s", exc)
-                return False
-        return True
+        if mode != "gpio":
+            return True
+        try:
+            from hardware.whisplay_board import get_board
+
+            board = get_board()
+            return board is not None
+        except Exception as exc:
+            logger.warning("boot_button_board_check_failed error=%s", exc)
+            return False
 
     def _check_audio(self):
         mode = os.environ.get("BITOS_AUDIO", "mock")
@@ -96,7 +99,7 @@ class BootDiagnostics:
 
     def ensure_critical_results(self) -> None:
         """Fill any missing critical results synchronously to avoid indefinite wait."""
-        for name in ("display", "button", "api_key"):
+        for name in ("display", "button"):
             with self._lock:
                 if name in self.results:
                     continue
@@ -109,8 +112,8 @@ class BootDiagnostics:
                 self.results[name] = value
 
     def all_critical_passed(self) -> bool:
-        """Display + button + api_key must pass."""
-        critical = ["display", "button", "api_key"]
+        """Display + button are true blockers for boot progression."""
+        critical = ["display", "button"]
         with self._lock:
             return all(self.results.get(c) for c in critical)
 
@@ -181,11 +184,7 @@ class BootScreen(BaseScreen):
     def handle_action(self, action: str):
         if self._done:
             return
-        if action in {"SHORT_PRESS", "LONG_PRESS"} and self._diagnostics.all_critical_passed():
-            self._advance()
-            return
-        if action in {"SHORT_PRESS", "LONG_PRESS"} and not self._diagnostics.results.get("api_key", True):
-            # VERIFIED: when API key is missing, user sees blinking warning and can continue with SHORT/LONG.
+        if action in {"SHORT_PRESS", "LONG_PRESS"}:
             self._advance()
 
     def render(self, surface: pygame.Surface):
@@ -227,9 +226,21 @@ class BootScreen(BaseScreen):
         checks_start_y = text_y + self._font.get_height() + 8
         self._render_checks(surface, checks_start_y)
 
+        self._render_api_key_warning(surface)
+
         status_surface = self._status_font.render(self._status_copy(), False, DIM2 if self._diagnostics.results.get("api_key", True) else WHITE)
         status_x = (PHYSICAL_W - status_surface.get_width()) // 2
         surface.blit(status_surface, (status_x, PHYSICAL_H - STATUS_BAR_H))
+
+    def _render_api_key_warning(self, surface: pygame.Surface) -> None:
+        if self._diagnostics.results.get("api_key", True):
+            return
+        warning_h = 14
+        warning_y = PHYSICAL_H - STATUS_BAR_H - warning_h - 2
+        pygame.draw.rect(surface, DIM4, (8, warning_y, PHYSICAL_W - 16, warning_h))
+        warning = self._status_font.render("WARNING: API KEY MISSING", False, WHITE)
+        warning_x = (PHYSICAL_W - warning.get_width()) // 2
+        surface.blit(warning, (warning_x, warning_y + 2))
 
     def _render_checks(self, surface: pygame.Surface, start_y: int) -> None:
         col_x = [26, 126]
