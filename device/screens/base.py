@@ -6,6 +6,8 @@ import pygame
 class BaseScreen(ABC):
     """Abstract base for all screens."""
 
+    _owns_status_bar: bool = False
+
     @abstractmethod
     def render(self, surface: pygame.Surface):
         """Draw this screen to the surface."""
