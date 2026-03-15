@@ -1,48 +1,41 @@
 """
 BITOS Display Driver
 Abstract display interface + Pygame implementation for desktop development.
-ST7789 hardware driver delegates to WhisPlayBoard which owns all HAT GPIO.
+ST7789 hardware driver delegates to WhisPlayBoard, which owns all HAT GPIO.
 """
+
+from __future__ import annotations
+
 import logging
 import os
 from abc import ABC, abstractmethod
 
 import pygame
 
-from display.tokens import (
-    PHYSICAL_W, PHYSICAL_H, SCALE, WINDOW_W, WINDOW_H, BLACK, FPS
-)
+from display.tokens import PHYSICAL_H, PHYSICAL_W, WINDOW_H, WINDOW_W, BLACK, FPS
 
 logger = logging.getLogger(__name__)
 
 
 class DisplayDriver(ABC):
-    """Abstract display interface."""
-
     @abstractmethod
     def init(self):
-        """Initialize the display."""
         pass
 
     @abstractmethod
     def get_surface(self) -> pygame.Surface:
-        """Return the internal rendering surface (240×280)."""
         pass
 
     @abstractmethod
     def update(self):
-        """Push the internal surface to the actual display."""
         pass
 
     @abstractmethod
     def quit(self):
-        """Clean up display resources."""
         pass
 
 
 class PygameDriver(DisplayDriver):
-    """Desktop simulator: renders 240×280 internal surface scaled 2× to a 480×560 window."""
-
     def __init__(self):
         self._surface = None
         self._window = None
@@ -60,7 +53,6 @@ class PygameDriver(DisplayDriver):
         return self._surface
 
     def update(self):
-        # Scale internal surface to window
         scaled = pygame.transform.scale(self._surface, (WINDOW_W, WINDOW_H))
         self._window.blit(scaled, (0, 0))
         pygame.display.flip()
@@ -72,29 +64,9 @@ class PygameDriver(DisplayDriver):
     def get_clock(self):
         return self._clock
 
-    def capture_frame_bytes(self) -> bytes:
-        """Capture current frame as JPEG bytes (for web preview)."""
-        try:
-            import io
-            raw = pygame.image.tostring(self._surface, "RGB")
-            from PIL import Image
-            img = Image.frombytes("RGB", (PHYSICAL_W, PHYSICAL_H), raw)
-            # Scale up for preview
-            img = img.resize((WINDOW_W, WINDOW_H), Image.NEAREST)
-            buf = io.BytesIO()
-            img.save(buf, format="JPEG", quality=80)
-            return buf.getvalue()
-        except Exception:
-            return b""
-
 
 class ST7789Driver(DisplayDriver):
-    """
-    # WHY THIS EXISTS: renders Pygame surface to physical
-    # Whisplay HAT ST7789 LCD via WhisPlayBoard.
-    # WhisPlayBoard owns all HAT GPIO (SPI, button, backlight, LED).
-    # Only instantiated when BITOS_DISPLAY=st7789.
-    """
+    """Pushes frames using WhisPlayBoard.draw_image(...)."""
 
     WIDTH = 240
     HEIGHT = 280
@@ -108,15 +80,13 @@ class ST7789Driver(DisplayDriver):
 
         self._board = get_board()
         if self._board is None:
-            raise RuntimeError("WhisPlayBoard unavailable: get_board() returned None; cannot initialize ST7789 display")
+            raise RuntimeError("WhisPlayBoard unavailable: get_board() returned None")
 
         pygame.init()
         self._surface = pygame.Surface((self.WIDTH, self.HEIGHT))
         self._surface.fill(BLACK)
 
-        from PIL import Image as PILImage
-        black_image = PILImage.new("RGB", (self.WIDTH, self.HEIGHT), (0, 0, 0))
-        self._board.display.image(black_image)
+        self._board.fill_screen(0)
         self._board.set_backlight(100)
 
     def get_surface(self) -> pygame.Surface:
@@ -124,25 +94,46 @@ class ST7789Driver(DisplayDriver):
             raise RuntimeError("ST7789 surface unavailable: call init() first")
         return self._surface
 
+    @staticmethod
+    def _rgb888_to_rgb565(raw_rgb: bytes) -> list[int]:
+        payload = bytearray((len(raw_rgb) // 3) * 2)
+        out_i = 0
+        for i in range(0, len(raw_rgb), 3):
+            r = raw_rgb[i]
+            g = raw_rgb[i + 1]
+            b = raw_rgb[i + 2]
+            rgb565 = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
+            payload[out_i] = (rgb565 >> 8) & 0xFF
+            payload[out_i + 1] = rgb565 & 0xFF
+            out_i += 2
+        return list(payload)
+
     def update(self):
-        """Convert pygame surface to PIL Image and push to board.display."""
         if self._board is None or self._surface is None:
             return
         try:
-            from PIL import Image as PILImage
-            raw = pygame.image.tostring(self._surface, "RGB")
-            img = PILImage.frombytes("RGB", (self.WIDTH, self.HEIGHT), raw)
-            self.display(img)
-        except Exception as e:
-            logger.debug("st7789_update_failed", extra={"error": str(e)})
+            raw_rgb = pygame.image.tostring(self._surface, "RGB")
+            payload = self._rgb888_to_rgb565(raw_rgb)
+            self._board.draw_image(0, 0, self.WIDTH, self.HEIGHT, payload)
+        except Exception as exc:
+            logger.debug("st7789_update_failed error=%s", exc)
 
     def display(self, frame):
+        """Compatibility helper for callers that pass PIL images or raw RGB565 bytes."""
         if self._board is None:
             raise RuntimeError("WhisPlayBoard unavailable: call init() before display()")
-        self._board.display.image(frame)
+
+        if hasattr(frame, "convert"):
+            rgb = frame.convert("RGB").tobytes("raw", "RGB")
+            payload = self._rgb888_to_rgb565(rgb)
+        elif isinstance(frame, (bytes, bytearray)):
+            payload = list(frame)
+        else:
+            raise TypeError("display(frame) expects PIL image or RGB565 byte payload")
+
+        self._board.draw_image(0, 0, self.WIDTH, self.HEIGHT, payload)
 
     def set_brightness(self, level: int) -> None:
-        """Set backlight level 0–100."""
         if self._board is not None:
             self._board.set_backlight(level)
 
@@ -150,11 +141,8 @@ class ST7789Driver(DisplayDriver):
         pygame.quit()
 
 
-
 def create_driver() -> DisplayDriver:
-    """Factory: create the appropriate display driver based on environment."""
     mode = os.environ.get("BITOS_DISPLAY", "pygame").lower()
     if mode == "st7789":
         return ST7789Driver()
-    else:
-        return PygameDriver()
+    return PygameDriver()
