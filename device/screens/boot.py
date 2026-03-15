@@ -122,6 +122,8 @@ class BootDiagnostics:
 class BootScreen(BaseScreen):
     """Boot animation: rotating orbs + diagnostics grid."""
 
+    _owns_status_bar: bool = True
+
     _LABELS = {
         "display": "DISPLAY",
         "button": "BUTTON",
@@ -219,7 +221,8 @@ class BootScreen(BaseScreen):
             cursor_h = 32
             pygame.draw.rect(surface, WHITE, (cursor_x, text_y, cursor_w, cursor_h))
 
-        self._render_checks(surface, text_y + 30)
+        checks_start_y = text_y + self._font.get_height() + 8
+        self._render_checks(surface, checks_start_y)
 
         status_surface = self._status_font.render(self._status_copy(), False, DIM2 if self._diagnostics.results.get("api_key", True) else WHITE)
         status_x = (PHYSICAL_W - status_surface.get_width()) // 2

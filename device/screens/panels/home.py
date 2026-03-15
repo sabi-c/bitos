@@ -11,6 +11,8 @@ from screens.components import NavItem, VerticalNavController
 class HomePanel(BaseScreen):
     """Home panel with focusable sidebar entries and action routing."""
 
+    _owns_status_bar: bool = True
+
     def __init__(
         self,
         on_back=None,

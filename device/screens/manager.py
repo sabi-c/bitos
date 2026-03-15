@@ -189,6 +189,8 @@ class ScreenManager:
     def _render_status_bar(self, surface: pygame.Surface) -> None:
         if self._status_state is None:
             return
+        if self.current and getattr(self.current, "_owns_status_bar", False):
+            return
         left = self._status_state.bar_left()
         right = self._status_state.bar_right()
         left_surface = self._status_font.render(left, False, WHITE)
