@@ -28,7 +28,7 @@ from bluetooth.constants import build_pair_url, build_setup_url
 from bluetooth.network_manager import NetworkPriorityManager
 from bluetooth.wifi_manager import WiFiManager
 from ble import BITOSBleService
-from audio import get_audio_pipeline
+from audio.pipeline import get_audio_pipeline
 from hardware import StatusPoller, StatusState, SystemMonitor
 from power.battery import BatteryMonitor
 from power.leds import LEDController
@@ -57,6 +57,8 @@ from integrations.adapters import create_runtime_adapter
 from integrations.queue import OutboundCommandQueue
 from integrations.runtime import OutboundWorkerRuntimeLoop
 from integrations.worker import OutboundCommandWorker
+from device.audio.voice_pipeline import VoicePipeline
+import device.screens.chat_screen  # triggers @register_app
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +189,27 @@ def main():
     notification_queue = NotificationQueue(repository=repository)
     status_state = StatusState()
     screen_mgr = ScreenManager(notification_queue=notification_queue, status_state=status_state)
+
+    openai_key = os.getenv("OPENAI_API_KEY", "")
+
+    def ai_send_fn(text: str) -> str:
+        # Placeholder — replace with real Anthropic call later
+        import anthropic
+
+        client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
+        msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=300,
+            messages=[{"role": "user", "content": text}],
+        )
+        return msg.content[0].text
+
+    voice_pipeline = VoicePipeline(
+        openai_key=openai_key,
+        ai_send_fn=ai_send_fn,
+        voice_model=os.getenv("PIPER_VOICE_MODEL", "assets/voices/en_US-ryan-low.onnx"),
+    )
+    screen_mgr._voice_pipeline = voice_pipeline
 
     def _active_screen_name() -> str:
         current = screen_mgr.current

@@ -1,98 +1,121 @@
-"""Audio recorder helpers for WM8960 (card 0, device 0)."""
+"""Push-to-talk audio recorder for WM8960-compatible microphones."""
 
 from __future__ import annotations
 
+import io
 import logging
-import os
-import subprocess
+import threading
 import wave
-from dataclasses import dataclass
-from pathlib import Path
+from typing import Optional
 
-
+import pyaudio
 
 logger = logging.getLogger(__name__)
 
-RECORD_DEVICE = os.getenv("ALSA_RECORD_DEVICE", "hw:0,0")
-SAMPLE_RATE = int(os.getenv("AUDIO_SAMPLE_RATE", os.getenv("ALSA_SAMPLE_RATE", "48000")))
-CHANNELS = int(os.getenv("AUDIO_CHANNELS", "2"))
-SAMPLE_WIDTH_BYTES = 2
-PCM_FORMAT = "S16_LE"
-
-
-@dataclass
-class RecorderConfig:
-    device: str = RECORD_DEVICE
-    sample_rate: int = SAMPLE_RATE
-    channels: int = CHANNELS
-    sample_width: int = SAMPLE_WIDTH_BYTES
-    pcm_format: str = PCM_FORMAT
+SAMPLE_RATE = 16000
+CHANNELS = 1
+FORMAT = pyaudio.paInt16
+CHUNK_SIZE = 1024
+MIN_FRAMES = 5
 
 
 class AudioRecorder:
-    """Records stereo 48kHz 16-bit PCM with arecord for WM8960."""
+    """Records PCM audio while a hold gesture is active."""
 
-    def __init__(self, config: RecorderConfig | None = None):
-        self.config = config or RecorderConfig()
+    def __init__(self) -> None:
+        self._pa = pyaudio.PyAudio()
+        self._device_index = self._find_input_device()
+        self._stream: Optional[pyaudio.Stream] = None
+        self._frames: list[bytes] = []
+        self._recording = False
+        self._thread: Optional[threading.Thread] = None
+        self._lock = threading.Lock()
 
-    def record_to_wav(self, output_path: str, seconds: float = 3.0) -> str:
-        duration = max(1, int(round(seconds)))
-        cmd = [
-            "arecord",
-            "-D",
-            self.config.device,
-            "-f",
-            self.config.pcm_format,
-            "-r",
-            str(self.config.sample_rate),
-            "-c",
-            str(self.config.channels),
-            "-d",
-            str(duration),
-            output_path,
-        ]
-        logger.info("record_cmd=%s", " ".join(cmd))
-        proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
-        if proc.returncode != 0:
-            raise RuntimeError(f"arecord failed ({proc.returncode}): {proc.stderr.strip()}")
-        return output_path
-
-    def record_for_stt(self, output_path: str, seconds: float = 3.0) -> str:
-        """Record stereo wav and convert to mono wav for STT."""
-        stereo_path = output_path
-        self.record_to_wav(stereo_path, seconds=seconds)
-        mono_path = str(Path(output_path).with_suffix(".mono.wav"))
-        self.stereo_to_mono_wav(stereo_path, mono_path)
-        return mono_path
-
-    def stereo_to_mono_wav(self, input_path: str, output_path: str) -> str:
-        with wave.open(input_path, "rb") as src:
-            channels = src.getnchannels()
-            sample_width = src.getsampwidth()
-            rate = src.getframerate()
-            frames = src.readframes(src.getnframes())
-
-        if sample_width != SAMPLE_WIDTH_BYTES:
-            raise RuntimeError(f"unsupported sample width: {sample_width}")
-
-        sample_count = len(frames) // SAMPLE_WIDTH_BYTES
-        if sample_count == 0:
-            mono_frames = b""
-        elif channels == 2:
-            data = memoryview(frames).cast("h")
-            mono_samples = bytearray()
-            for i in range(0, len(data), 2):
-                mixed = int((int(data[i]) + int(data[i + 1])) / 2.0)
-                mono_samples.extend(int(mixed).to_bytes(2, byteorder="little", signed=True))
-            mono_frames = bytes(mono_samples)
-        elif channels == 1:
-            mono_frames = frames
+    def _find_input_device(self) -> Optional[int]:
+        fallback = None
+        for idx in range(self._pa.get_device_count()):
+            info = self._pa.get_device_info_by_index(idx)
+            name = str(info.get("name", "")).lower()
+            max_input = int(info.get("maxInputChannels", 0))
+            if max_input <= 0:
+                continue
+            if fallback is None:
+                fallback = idx
+            if "wm8960" in name or "seeed" in name:
+                logger.info("audio_input_device=%s name=%s", idx, info.get("name"))
+                return idx
+        if fallback is not None:
+            info = self._pa.get_device_info_by_index(fallback)
+            logger.warning("wm8960_not_found using_fallback=%s name=%s", fallback, info.get("name"))
         else:
-            raise RuntimeError(f"unsupported channel count: {channels}")
+            logger.error("no_input_device_found")
+        return fallback
 
-        with wave.open(output_path, "wb") as dst:
-            dst.setnchannels(1)
-            dst.setsampwidth(SAMPLE_WIDTH_BYTES)
-            dst.setframerate(rate)
-            dst.writeframes(mono_frames)
-        return output_path
+    def start_recording(self) -> bool:
+        with self._lock:
+            if self._recording:
+                return True
+            if self._device_index is None:
+                return False
+
+            self._frames = []
+            self._recording = True
+            self._stream = self._pa.open(
+                format=FORMAT,
+                channels=CHANNELS,
+                rate=SAMPLE_RATE,
+                input=True,
+                input_device_index=self._device_index,
+                frames_per_buffer=CHUNK_SIZE,
+            )
+            self._thread = threading.Thread(target=self._read_loop, daemon=True)
+            self._thread.start()
+            return True
+
+    def _read_loop(self) -> None:
+        while self._recording and self._stream is not None:
+            try:
+                chunk = self._stream.read(CHUNK_SIZE, exception_on_overflow=False)
+                self._frames.append(chunk)
+            except Exception as exc:
+                logger.exception("audio_record_read_failed error=%s", exc)
+                break
+
+    def stop_recording(self) -> Optional[bytes]:
+        with self._lock:
+            self._recording = False
+            thread = self._thread
+            stream = self._stream
+            self._thread = None
+            self._stream = None
+
+        if thread is not None:
+            thread.join(timeout=1.0)
+
+        if stream is not None:
+            try:
+                stream.stop_stream()
+            finally:
+                stream.close()
+
+        if len(self._frames) < MIN_FRAMES:
+            logger.info("audio_too_short frames=%s", len(self._frames))
+            self._frames = []
+            return None
+
+        wav_bytes = self._frames_to_wav(self._frames)
+        self._frames = []
+        return wav_bytes
+
+    def _frames_to_wav(self, frames: list[bytes]) -> bytes:
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as wav:
+            wav.setnchannels(CHANNELS)
+            wav.setsampwidth(self._pa.get_sample_size(FORMAT))
+            wav.setframerate(SAMPLE_RATE)
+            wav.writeframes(b"".join(frames))
+        return buf.getvalue()
+
+    def cleanup(self) -> None:
+        self.stop_recording()
+        self._pa.terminate()
