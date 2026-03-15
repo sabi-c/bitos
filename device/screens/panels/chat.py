@@ -3,6 +3,7 @@ BITOS Chat Panel (Phase 2 — reliability UX)
 Text input via keyboard/button, streaming response rendered line-by-line.
 """
 import json
+from collections import deque
 import threading
 import time
 
@@ -77,7 +78,7 @@ class ChatPanel(BaseScreen):
 
         # State
         self._input_text = ""
-        self._messages: list[dict] = []  # {"role": "user"|"assistant", "text": "..."}
+        self._messages = deque(maxlen=50)  # {"role": "user"|"assistant", "text": "..."}
         self._is_streaming = False
         self._scroll_offset = 0
         self._status = self.STATUS_CONNECTED
@@ -113,7 +114,7 @@ class ChatPanel(BaseScreen):
                     restored = self._repository.get_session_messages(str(self._session_id), limit=10)
                     if restored:
                         with self._messages_lock:
-                            self._messages = [{"role": m["role"], "text": m["text"]} for m in restored]
+                            self._messages = deque(({"role": m["role"], "text": m["text"]} for m in restored), maxlen=50)
                             self._status_detail = "SESSION RESTORED"
                             self._resumed_until = time.time() + 2.0
                             self._scroll_offset = 0
@@ -162,7 +163,7 @@ class ChatPanel(BaseScreen):
         if action == "TRIPLE_PRESS":
             self._session_id = self._repository.create_session(title="NEW CHAT") if self._repository else None
             with self._messages_lock:
-                self._messages = []
+                self._messages = deque(maxlen=50)
                 self._input_text = ""
                 self._status_detail = "new chat"
             return

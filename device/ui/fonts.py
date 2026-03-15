@@ -4,7 +4,7 @@ from functools import lru_cache
 FONT_PATH = "assets/fonts/PressStart2P-Regular.ttf"
 
 
-@lru_cache(maxsize=32)
+@lru_cache(maxsize=16)
 def get_font(size: int) -> pygame.font.Font:
     try:
         return pygame.font.Font(FONT_PATH, size)

@@ -1,4 +1,5 @@
 """BITOS Screen Manager: stack + simple route transitions."""
+import gc
 import pygame
 
 import display.tokens as tokens
@@ -34,13 +35,13 @@ class ScreenManager:
         self._emit_active_screen_status()
 
     def pop(self) -> BaseScreen | None:
-        if not self._stack:
+        if len(self._stack) <= 1:
             return None
         screen = self._stack.pop()
         screen.on_exit()
-        if self._stack:
-            self._flash_frames = 2
-            self._stack[-1].on_enter()
+        gc.collect()
+        self._flash_frames = 2
+        self._stack[-1].on_enter()
         self._emit_active_screen_status()
         return screen
 
