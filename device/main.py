@@ -196,6 +196,7 @@ def main():
         return current.__class__.__name__
 
     button = create_button_handler(board=board, active_screen_name_getter=_active_screen_name)
+    logger.info("[Button] handler ready mode=%s gpio_wired=%s", os.environ.get("BITOS_BUTTON", "unset"), board is not None)
     notification_poller = NotificationPoller(queue=notification_queue, api_client=client, repository=repository)
 
     # SD-002: BLE auth bootstrap binds device identity + shared secret before any protected characteristic writes.

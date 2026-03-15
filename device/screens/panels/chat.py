@@ -155,6 +155,9 @@ class ChatPanel(BaseScreen):
             if self._templates:
                 self._template_index = (self._template_index + 1) % len(self._templates)
             return
+        if action == "SHORT_PRESS":
+            self._scroll_offset += 1
+            return
 
         if action == "TRIPLE_PRESS":
             self._session_id = self._repository.create_session(title="NEW CHAT") if self._repository else None

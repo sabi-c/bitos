@@ -20,7 +20,7 @@ class LockScreen(BaseScreen):
         self._font_small = load_ui_font("small", self._ui_settings)
 
     def handle_action(self, action: str):
-        if action in {"SHORT_PRESS", "LONG_PRESS", "DOUBLE_PRESS", "TRIPLE_PRESS"}:
+        if action in {"SHORT_PRESS", "LONG_PRESS", "DOUBLE_PRESS"}:
             self._unlock()
 
     def handle_input(self, event: pygame.event.Event):

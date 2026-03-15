@@ -179,6 +179,9 @@ class BootScreen(BaseScreen):
     def handle_action(self, action: str):
         if self._done:
             return
+        if action in {"SHORT_PRESS", "LONG_PRESS"} and self._diagnostics.all_critical_passed():
+            self._advance()
+            return
         if action in {"SHORT_PRESS", "LONG_PRESS"} and not self._diagnostics.results.get("api_key", True):
             # VERIFIED: when API key is missing, user sees blinking warning and can continue with SHORT/LONG.
             self._advance()
