@@ -13,8 +13,8 @@ class LockScreen(BaseScreen):
     """Simple lock gate before entering home flow."""
 
     __slots__ = (
-        "_on_home", "_is_unlocking", "_ui_settings", "_font_title", "_font_body",
-        "_font_small", "_clock_text", "_last_clock_update"
+        "_on_home", "_is_unlocking", "_ui_settings", "_font_clock", "_font_title",
+        "_font_body", "_font_small", "_clock_text", "_last_clock_update"
     )
     _owns_status_bar: bool = True
 
@@ -23,6 +23,7 @@ class LockScreen(BaseScreen):
         self._is_unlocking = False
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
 
+        self._font_clock = load_ui_font("time_large", self._ui_settings)
         self._font_title = load_ui_font("title", self._ui_settings)
         self._font_body = load_ui_font("body", self._ui_settings)
         self._font_small = load_ui_font("small", self._ui_settings)
@@ -30,7 +31,8 @@ class LockScreen(BaseScreen):
         self._last_clock_update = 0.0
 
         logging.getLogger(__name__).info(
-            "lock_font_size title=%s",
+            "lock_font_size clock=%s title=%s",
+            self._font_clock.get_height(),
             self._font_title.get_height(),
         )
 
@@ -55,7 +57,7 @@ class LockScreen(BaseScreen):
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
 
-        clock = self._font_title.render(self._clock_text or "00:00", False, WHITE)
+        clock = self._font_clock.render(self._clock_text or "00:00", False, WHITE)
         device_name = self._font_body.render("BITOS", False, DIM3)
         hint = self._font_small.render("PRESS TO UNLOCK", False, WHITE)
 

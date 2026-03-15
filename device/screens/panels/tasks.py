@@ -102,7 +102,7 @@ class TasksPanel(BaseScreen):
             project = str(task.get("project", "INBOX"))[:10]
             title_text = str(task.get("title", ""))[:24]
             surface.blit(self._font_small.render(project, False, color if focused else DIM2), (6, y + 2))
-            surface.blit(self._font_body.render(title_text, False, color), (6, y + 12))
+            surface.blit(self._font_body.render(title_text, False, color), (6, y + self._font_small.get_height() + 4))
             y += ROW_H_MIN
 
         if self._confirm_complete:

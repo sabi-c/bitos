@@ -8,7 +8,7 @@ import time
 import pygame
 
 from display.theme import load_ui_font, merge_runtime_ui_settings
-from display.tokens import BLACK, DIM2, DIM3, PHYSICAL_H, PHYSICAL_W, STATUS_BAR_H, WHITE
+from display.tokens import BLACK, DIM2, DIM3, PHYSICAL_H, PHYSICAL_W, ROW_H_MIN, STATUS_BAR_H, WHITE
 from screens.base import BaseScreen
 
 
@@ -185,7 +185,7 @@ class MailPanel(BaseScreen):
             txt = self._font_body.render("INBOX EMPTY ✓", False, DIM2)
             surface.blit(txt, ((PHYSICAL_W - txt.get_width()) // 2, PHYSICAL_H // 2))
         else:
-            row_h = 26
+            row_h = ROW_H_MIN
             visible = (PHYSICAL_H - STATUS_BAR_H - 18) // row_h
             start = min(self._focused_idx, max(0, len(self._threads) - visible))
             y = content_y
@@ -204,7 +204,7 @@ class MailPanel(BaseScreen):
                 surface.blit(top, (6, y + 2))
                 subject = str(thread.get("subject", ""))[:28]
                 sub = self._font_small.render(subject, False, meta_color)
-                surface.blit(sub, (6, y + 13))
+                surface.blit(sub, (6, y + self._font_small.get_height() + 4))
                 y += row_h
 
         hint = self._font_hint.render("SHORT:↕  LONG:OPEN  DBL:BACK", False, DIM3)
@@ -214,6 +214,7 @@ class MailPanel(BaseScreen):
         self._render_status_bar(surface, self._selected_sender.upper()[:12] if self._selected_sender else "THREAD")
         subject = self._font_small.render(self._selected_subject[:32], False, DIM2)
         surface.blit(subject, (6, STATUS_BAR_H + 2))
+        line_step = self._font_small.get_height() + 4
         y = STATUS_BAR_H + 16
         shown = self._messages[max(0, len(self._messages) - 5 - self._thread_offset) : len(self._messages) - self._thread_offset]
         for message in shown:
@@ -221,14 +222,14 @@ class MailPanel(BaseScreen):
             if bool(message.get("from_me", False)):
                 line = self._font_small.render(text, False, WHITE)
                 surface.blit(line, (PHYSICAL_W - line.get_width() - 6, y))
-                y += 14
+                y += line_step
             else:
                 sender = self._font_small.render(str(message.get("sender", "Them"))[:14], False, DIM2)
                 surface.blit(sender, (6, y))
-                y += 10
+                y += line_step
                 line = self._font_small.render(text, False, WHITE)
                 surface.blit(line, (6, y))
-                y += 14
+                y += line_step
 
         if self._status_toast and time.time() < self._status_toast_until:
             toast = self._font_small.render(self._status_toast, False, DIM2)
@@ -248,13 +249,14 @@ class MailPanel(BaseScreen):
             "",
             "Draft saved to Gmail",
         ]
+        draft_line_step = self._font_small.get_height() + 4
         y = PHYSICAL_H // 2 - 38
         for row in rows:
             if row:
                 color = DIM2 if row.startswith("RE:") else WHITE
                 line = self._font_small.render(row, False, color)
                 surface.blit(line, ((PHYSICAL_W - line.get_width()) // 2, y))
-            y += 12
+            y += draft_line_step
 
         hint = self._font_hint.render("LONG:▶ SPEAK  DBL:CANCEL", False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 1))
@@ -266,18 +268,19 @@ class MailPanel(BaseScreen):
 
         x, y, w, h = 6, STATUS_BAR_H + 16, PHYSICAL_W - 12, 80
         pygame.draw.rect(surface, WHITE, pygame.Rect(x, y, w, h), width=2)
+        confirm_line_step = self._font_small.get_height() + 4
         lines = self._wrap_text(self._draft_text, w - 10)[:5]
         yy = y + 5
         for line in lines:
             s = self._font_small.render(line, False, WHITE)
             surface.blit(s, (x + 5, yy))
-            yy += 12
+            yy += confirm_line_step
 
         hy = STATUS_BAR_H + 102
         for row in self.CONFIRM_HINT_ROWS:
             line = self._font_small.render(row, False, WHITE)
             surface.blit(line, ((PHYSICAL_W - line.get_width()) // 2, hy))
-            hy += 13
+            hy += confirm_line_step
 
     def _wrap_text(self, text: str, max_width: int) -> list[str]:
         if not text:

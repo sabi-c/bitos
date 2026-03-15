@@ -28,6 +28,8 @@ FONT_NAME = "PressStart2P"
 FONT_PATH = "assets/fonts/PressStart2P.ttf"
 
 FONT_SIZES = {
+    "time_large": 24,
+    "timer": 20,
     "title": 16,
     "body": 12,
     "small": 10,

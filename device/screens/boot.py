@@ -22,6 +22,7 @@ from display.tokens import (
     PHYSICAL_W,
     PHYSICAL_H,
     FONT_PATH,
+    FONT_SIZES,
     STATUS_BAR_H,
 )
 from display.animator import orb_rotate, blink_cursor
@@ -152,14 +153,14 @@ class BootScreen(BaseScreen):
         self._diagnostics.run_async()
 
         try:
-            self._font = pygame.font.Font(FONT_PATH, 32)
+            self._font = pygame.font.Font(FONT_PATH, FONT_SIZES["time_large"])
         except FileNotFoundError:
-            self._font = pygame.font.SysFont("monospace", 32)
+            self._font = pygame.font.SysFont("monospace", FONT_SIZES["time_large"])
 
         try:
-            self._status_font = pygame.font.Font(FONT_PATH, 10)
+            self._status_font = pygame.font.Font(FONT_PATH, FONT_SIZES["small"])
         except FileNotFoundError:
-            self._status_font = pygame.font.SysFont("monospace", 10)
+            self._status_font = pygame.font.SysFont("monospace", FONT_SIZES["small"])
 
         if self._health_check:
             threading.Thread(target=self._run_health_check, daemon=True).start()

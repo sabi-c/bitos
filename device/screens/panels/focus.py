@@ -20,6 +20,7 @@ class FocusPanel(BaseScreen):
         self._on_back = on_back
         self._repository = repository
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
+        self._font_timer = load_ui_font("timer", self._ui_settings)
         self._font_title = load_ui_font("title", self._ui_settings)
         self._font_body = load_ui_font("body", self._ui_settings)
         self._font_small = load_ui_font("small", self._ui_settings)
@@ -88,7 +89,7 @@ class FocusPanel(BaseScreen):
 
         # ── Timer display ──
         timer_text = self._timer_copy()
-        timer_surface = self._font_title.render(timer_text, False, WHITE)
+        timer_surface = self._font_timer.render(timer_text, False, WHITE)
         timer_x = (PHYSICAL_W - timer_surface.get_width()) // 2
         surface.blit(timer_surface, (timer_x, STATUS_BAR_H + 16))
 

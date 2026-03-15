@@ -79,10 +79,11 @@ class NotificationsPanel(BaseScreen):
             surface.blit(sub, (8, content_y + 22))
         else:
             y = content_y
+            notif_line_step = self._font_body.get_height() + 4
             for item in self._items[:5]:
                 line = self._font_body.render(item[:24], False, WHITE)
                 surface.blit(line, (8, y))
-                y += 14
+                y += notif_line_step
 
         # ── Nav rows: 26px, inverted focus ──
         y = PHYSICAL_H - ROW_H_MIN * len(self._nav.items) - 14
