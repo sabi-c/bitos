@@ -343,51 +343,60 @@ def main():
         screen_mgr.replace(home)
 
     def open_chat():
-        screen_mgr.replace(ChatPanel(client=client, ui_settings=ui_settings, repository=repository, audio_pipeline=audio_pipeline, led=led, on_back=on_home))
+        screen_mgr.push(
+            ChatPanel(
+                client=client,
+                ui_settings=ui_settings,
+                repository=repository,
+                audio_pipeline=audio_pipeline,
+                led=led,
+                on_back=lambda: screen_mgr.pop(),
+            )
+        )
 
     def open_focus():
-        screen_mgr.replace(FocusPanel(on_back=on_home, ui_settings=ui_settings, repository=repository))
+        screen_mgr.push(FocusPanel(on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings, repository=repository))
 
     def open_tasks():
-        screen_mgr.replace(TasksPanel(client=client, repository=repository, on_back=on_home, ui_settings=ui_settings))
+        screen_mgr.push(TasksPanel(client=client, repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
 
     def open_captures():
-        screen_mgr.replace(CapturesPanel(repository=repository, on_back=on_home, ui_settings=ui_settings))
+        screen_mgr.push(CapturesPanel(repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
 
     def open_messages():
         battery_pct = int(battery_monitor.get_status().get("pct", 84))
-        screen_mgr.replace(
+        screen_mgr.push(
             MessagesPanel(
                 client=client,
                 battery_pct=battery_pct,
                 audio_pipeline=audio_pipeline,
                 led=led,
-                on_back=on_home,
+                on_back=lambda: screen_mgr.pop(),
                 ui_settings=ui_settings,
             )
         )
 
     def open_mail():
         battery_pct = int(battery_monitor.get_status().get("pct", 84))
-        screen_mgr.replace(
+        screen_mgr.push(
             MailPanel(
                 client=client,
                 battery_pct=battery_pct,
                 audio_pipeline=audio_pipeline,
                 led=led,
-                on_back=on_home,
+                on_back=lambda: screen_mgr.pop(),
                 ui_settings=ui_settings,
             )
         )
 
     def open_notifications():
-        screen_mgr.replace(NotificationsPanel(on_back=on_home, ui_settings=ui_settings))
+        screen_mgr.push(NotificationsPanel(on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
 
     def open_settings():
-        screen_mgr.replace(
+        screen_mgr.push(
             SettingsPanel(
                 repository=repository,
-                on_back=on_home,
+                on_back=lambda: screen_mgr.pop(),
                 on_open_model_picker=open_model_picker,
                 on_open_agent_mode=open_agent_mode,
                 on_open_sleep_timer=open_sleep_timer,
@@ -403,19 +412,26 @@ def main():
         )
 
     def open_model_picker():
-        screen_mgr.replace(ModelPickerPanel(repository=repository, on_back=on_home, ui_settings=ui_settings))
+        screen_mgr.push(ModelPickerPanel(repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
 
     def open_agent_mode():
-        screen_mgr.replace(AgentModePanel(repository=repository, on_back=on_home, ui_settings=ui_settings))
+        screen_mgr.push(AgentModePanel(repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
 
     def open_sleep_timer():
-        screen_mgr.replace(SleepTimerPanel(repository=repository, on_back=on_home, ui_settings=ui_settings))
+        screen_mgr.push(SleepTimerPanel(repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
 
     def open_about():
-        screen_mgr.replace(AboutPanel(on_back=on_home, ui_settings=ui_settings))
+        screen_mgr.push(AboutPanel(on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
 
     def open_integration_detail(integration_name: str, status_data: dict):
-        screen_mgr.replace(IntegrationDetailPanel(integration_name=integration_name, status_data=status_data, on_back=on_home, ui_settings=ui_settings))
+        screen_mgr.push(
+            IntegrationDetailPanel(
+                integration_name=integration_name,
+                status_data=status_data,
+                on_back=lambda: screen_mgr.pop(),
+                ui_settings=ui_settings,
+            )
+        )
 
     def _enter_offline_mode():
         screen_mgr.dismiss_overlay()
@@ -455,7 +471,11 @@ def main():
     if restored_state:
         on_boot_complete()
     else:
-        screen_mgr.push(boot)
+        _run_startup_health_check(client, repository, startup_health)
+        if startup_health.get("backend") is False:
+            _enter_offline_mode()
+        else:
+            screen_mgr.push(boot)
 
     power_overlay: PowerOverlay | None = None
 
@@ -496,7 +516,7 @@ def main():
 
     def _on_button(btn_event: ButtonEvent):
         logger.info("[Button] %s", btn_event.name)
-        screen_mgr.handle_button_event(btn_event)
+        screen_mgr.handle_action(btn_event.name)
 
     button.on(ButtonEvent.SHORT_PRESS, lambda: _on_button(ButtonEvent.SHORT_PRESS))
     button.on(ButtonEvent.LONG_PRESS, lambda: _on_button(ButtonEvent.LONG_PRESS))
