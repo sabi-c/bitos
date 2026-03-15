@@ -81,26 +81,25 @@ class ButtonHandlerTests(unittest.TestCase):
 
         self.assertEqual(self.fired, ["double", "triple"])
 
-    def test_stale_press_times_are_cleaned_after_update(self):
-        self.handler._release_times = [1.0, 1.1, 1.2]
-        self.handler._pending_check_time = 1.3
+    def test_click_deadline_is_cleaned_after_update(self):
+        self.handler._click_count = 1
+        self.handler._click_deadline = 1.0
         with patch("input.handler.time.time", return_value=5.0):
             self.handler.update()
-        self.assertEqual(self.handler._release_times, [])
-        self.assertIsNone(self.handler._pending_check_time)
+        self.assertEqual(self.handler._click_count, 0)
+        self.assertIsNone(self.handler._click_deadline)
 
-    def test_concurrent_append_and_update_does_not_crash(self):
+    def test_concurrent_press_release_and_update_does_not_crash(self):
         stop = threading.Event()
-        self.handler._pending_check_time = 0.0
 
         def writer():
             while not stop.is_set():
-                self.handler._release_times.append(1.0)
+                self.handler._on_press()
+                self.handler._on_release()
 
         def reader():
-            with patch("input.handler.time.time", return_value=999.0):
-                for _ in range(200):
-                    self.handler.update()
+            for _ in range(200):
+                self.handler.update()
 
         t1 = threading.Thread(target=writer)
         t2 = threading.Thread(target=reader)

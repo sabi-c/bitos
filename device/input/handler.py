@@ -144,6 +144,7 @@ class ButtonHandler:
 
         duration = now - self._press_time
         if duration >= LONG_PRESS_S:
+            self._long_emitted_for_press = True
             self._emit(ButtonEvent.LONG_PRESS)
             self._click_count = 0
             self._click_deadline = None
