@@ -35,8 +35,10 @@ class StatusPoller:
             integrations = self._api.get_integrations_status() if hasattr(self._api, "get_integrations_status") else {}
             msgs_unread = int((integrations.get("bluebubbles") or {}).get("unread", 0))
             gmail_unread = int((integrations.get("gmail") or {}).get("unread", 0))
+            battery_text = self._battery.get_status_text() if hasattr(self._battery, "get_status_text") else f"{int(batt['pct'])}%"
             self._state.update(
                 battery_pct=batt["pct"],
+                battery_text=battery_text,
                 charging=batt["charging"],
                 ai_online=online,
                 wifi_symbol=conn,
@@ -44,8 +46,14 @@ class StatusPoller:
                 gmail_unread=gmail_unread,
             )
             if hasattr(self, "_led") and self._led:
-                if batt["pct"] <= 15 and not batt.get("charging"):
-                    self._led.battery_warning(batt["pct"])
+                if hasattr(self._battery, "is_low") and self._battery.is_low(5):
+                    self._led.critical_battery()
+                elif hasattr(self._battery, "is_low") and self._battery.is_low(15):
+                    self._led.low_battery()
+                elif batt.get("charging"):
+                    self._led.connected()
+                else:
+                    self._led.idle()
         except Exception as e:
             logger.warning("status_poll_failed error=%s", e)
 

@@ -27,12 +27,27 @@ from bluetooth.characteristics import DeviceInfoCharacteristic, DeviceStatusChar
 from bluetooth.constants import build_pair_url, build_setup_url
 from bluetooth.network_manager import NetworkPriorityManager
 from bluetooth.wifi_manager import WiFiManager
+from ble import BITOSBleService
 from audio import get_audio_pipeline
-from hardware import BatteryMonitor, LEDController, StatusPoller, StatusState, SystemMonitor
-import screens.notifications_screen  # register app
-import screens.messages_screen  # register app
-import screens.mail_screen  # register app
-import screens.captures_screen  # register app
+from hardware import StatusPoller, StatusState, SystemMonitor
+from power.battery import BatteryMonitor
+from power.leds import LEDController
+from screens.manager import ScreenManager
+from screens.boot import BootScreen
+from screens.lock import LockScreen
+from screens.panels.home import HomePanel
+from screens.panels.chat import ChatPanel
+from screens.panels.focus import FocusPanel
+from screens.panels.notifications import NotificationsPanel
+from screens.panels.tasks import TasksPanel
+from screens.panels.messages import MessagesPanel
+from screens.panels.mail import MailPanel
+from screens.panels.captures import CapturesPanel
+from screens.panels.settings import (
+    AboutPanel,
+    AgentModePanel,
+    ModelPickerPanel,
+    SettingsPanel,
     SleepTimerPanel,
 )
 from screens.subscreens.integration_detail import IntegrationDetailPanel
@@ -163,6 +178,9 @@ def main():
     led = LEDController(board=board)
     monitor = SystemMonitor(interval=30)
     battery_monitor = BatteryMonitor()
+    battery_monitor.start()
+    battery_monitor.configure_safe_shutdown(threshold_pct=5, delay_s=30)
+    led.idle()
     client = BackendClient()
     repository = DeviceRepository()
     repository.initialize()
@@ -206,6 +224,21 @@ def main():
         )
 
     wifi_manager = WiFiManager()
+    ble_service = BITOSBleService()
+
+    def on_ble_message(text: str):
+        logger.info("[BLE] message -> chat route pending: %r", text)
+
+    def on_ble_connect():
+        logger.info("[BLE] phone connected")
+
+    def on_ble_disconnect():
+        logger.info("[BLE] phone disconnected")
+
+    ble_service.on_message(on_ble_message)
+    ble_service.on_connect(on_ble_connect)
+    ble_service.on_disconnect(on_ble_disconnect)
+
     network_manager = NetworkPriorityManager()
     status_poller = StatusPoller(status_state, client, battery_monitor, network_manager, led=led)
     wifi_status_char = WiFiStatusCharacteristic()
@@ -357,6 +390,7 @@ def main():
     status_poller.start()
     monitor.start()
     led.off()
+    ble_service.start()
     gatt_server.start()
     gatt_server.set_discoverable(False)
     device_status_char.start_periodic_updates(_collect_device_status, interval_s=30)

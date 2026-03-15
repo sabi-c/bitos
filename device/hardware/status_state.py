@@ -8,6 +8,7 @@ class StatusState:
         self._lock = threading.Lock()
         self.wifi_symbol = "▣"
         self.battery_pct = 84
+        self.battery_text = "🔋84%"
         self.charging = False
         self.ai_online = True
         self.imessage_status = "unknown"
@@ -26,6 +27,8 @@ class StatusState:
 
     def bar_right(self) -> str:
         with self._lock:
+            if self.battery_text:
+                return self.battery_text
             if self.battery_pct < 10:
                 return f"⚡{self.battery_pct}%"
             arrow = "↑" if self.charging else ""
