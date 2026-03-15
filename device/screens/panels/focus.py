@@ -43,9 +43,9 @@ class FocusPanel(BaseScreen):
 
     def handle_action(self, action: str):
         if action == "SHORT_PRESS":
-            self._nav.activate_focused()
-        elif action == "LONG_PRESS":
             self._nav.move(1)
+        elif action == "LONG_PRESS":
+            self._nav.activate_focused()
         elif action == "DOUBLE_PRESS":
             self._go_back()
         elif action == "TRIPLE_PRESS":
@@ -125,7 +125,7 @@ class FocusPanel(BaseScreen):
             y += ROW_H_MIN
 
         # ── Key hint bar ──
-        hint = self._font_hint.render("SHORT:SEL \u00b7 LONG:NEXT \u00b7 DBL:BACK", False, DIM3)
+        hint = self._font_hint.render("SHORT:NEXT \u00b7 LONG:SEL \u00b7 DBL:BACK", False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
 
     def save_state(self) -> None:
