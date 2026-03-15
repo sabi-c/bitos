@@ -145,95 +145,61 @@ class ButtonHandler:
             self._emit(ButtonEvent.SHORT_PRESS)
 
 
-class WhisPlayBoardButtonHandler:
-    """Button handler that delegates to WhisPlayBoard for GPIO.
-
-    WhisPlayBoard owns all GPIO on the Whisplay HAT including the button pin.
-    We register a callback via the board's API — no direct RPi.GPIO usage.
-    """
+class GPIOButtonHandler:
+    GPIO_PIN_BCM = 11
+    POLL_INTERVAL = 0.02  # 20ms
 
     def __init__(self, on_event: Callable[[ButtonEvent], None]):
         self._on_event = on_event
-        self._press_times: list[float] = []
-        self._press_start: float | None = None
-        self._lock = threading.Lock()
+        self._last_state = False
+        self._press_time: Optional[float] = None
+        self._running = True
+        import RPi.GPIO as GPIO
 
+        GPIO.setwarnings(False)
+        GPIO.setmode(GPIO.BCM)
         try:
-            from hardware.whisplay_board import get_board
-            board = get_board()
-            if board is not None:
-                # Use whichever callback registration the board exposes
-                if hasattr(board, 'set_button_callback'):
-                    board.set_button_callback(self._raw_callback)
-                elif hasattr(board, 'set_key_callback'):
-                    board.set_key_callback(self._raw_callback)
+            GPIO.setup(self.GPIO_PIN_BCM, GPIO.IN)
         except Exception as e:
-            print(f"whisplay_button_init_failed: {e}")
+            print(f"button_setup_failed: {e}")
 
-    def _raw_callback(self, pin_state: int):
-        """Callback from WhisPlayBoard: pin_state 0=pressed, 1=released."""
-        now_ms = time.time() * 1000.0
-        if pin_state == 0:
-            with self._lock:
-                self._press_start = now_ms
-            return
-        with self._lock:
-            start_ms = self._press_start if self._press_start is not None else now_ms
-        duration_ms = now_ms - start_ms
-        self._handle_release(duration_ms=duration_ms, now_ms=now_ms)
+        self._thread = threading.Thread(target=self._poll, daemon=True)
+        self._thread.start()
 
-    def _handle_release(self, duration_ms: float, now_ms: float) -> None:
-        short_threshold_ms = SHORT_THRESHOLD * 1000.0
-        double_window_ms = DOUBLE_WINDOW * 1000.0
-        triple_window_ms = TRIPLE_WINDOW * 1000.0
+    def _poll(self):
+        import RPi.GPIO as GPIO
 
-        with self._lock:
-            if duration_ms >= short_threshold_ms:
-                self._press_times.clear()
-                self._on_event(ButtonEvent.LONG_PRESS)
-                return
+        while self._running:
+            try:
+                state = GPIO.input(self.GPIO_PIN_BCM)
+                pressed = state == GPIO.HIGH
+                if pressed != self._last_state:
+                    self._last_state = pressed
+                    if pressed:
+                        self._press_time = time.time()
+                    elif self._press_time:
+                        duration = time.time() - self._press_time
+                        self._press_time = None
+                        if duration > 1.5:
+                            self._on_event(ButtonEvent.LONG_PRESS)
+                        elif duration > 0.05:
+                            self._on_event(ButtonEvent.SHORT_PRESS)
+            except Exception:
+                pass
+            time.sleep(self.POLL_INTERVAL)
 
-            self._press_times.append(now_ms)
-            self._press_times = [t for t in self._press_times if (now_ms - t) < triple_window_ms]
-            count = len(self._press_times)
-
-        if count >= 3:
-            with self._lock:
-                self._press_times.clear()
-            self._on_event(ButtonEvent.TRIPLE_PRESS)
-            return
-
-        if count == 2:
-            def check_double():
-                time.sleep(double_window_ms / 1000.0)
-                with self._lock:
-                    if len(self._press_times) < 3:
-                        self._press_times.clear()
-                        self._on_event(ButtonEvent.DOUBLE_PRESS)
-
-            threading.Thread(target=check_double, daemon=True).start()
-            return
-
-        def check_single():
-            time.sleep(double_window_ms / 1000.0)
-            with self._lock:
-                if len(self._press_times) == 1:
-                    self._press_times.clear()
-                    self._on_event(ButtonEvent.SHORT_PRESS)
-
-        threading.Thread(target=check_single, daemon=True).start()
+    def stop(self):
+        self._running = False
 
 
 def create_button_handler():
     """Return a button handler for the current mode: WhisPlayBoard on Pi, keyboard/pygame on desktop."""
     if os.environ.get("BITOS_BUTTON", "").lower() == "gpio":
         handler = ButtonHandler()
-        # Attach WhisPlayBoard button — events feed into handler._emit
-        handler._whisplay = WhisPlayBoardButtonHandler(on_event=handler._emit)
+        # Poll GPIO button — events feed into handler._emit
+        handler._gpio = GPIOButtonHandler(on_event=handler._emit)
         # GPIO path: pygame events are ignored, update() is a no-op
-        original_handle = handler.handle_pygame_event
         handler.handle_pygame_event = lambda event: False
         handler.update = lambda: None
         return handler
     return ButtonHandler()
-
