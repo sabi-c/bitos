@@ -13,7 +13,21 @@ check() {
 }
 
 echo "Checking $SECRETS..."
-check ANTHROPIC_API_KEY
+
+# Check ANTHROPIC_API_KEY exists AND has a real value (not placeholder)
+if grep -q '^ANTHROPIC_API_KEY=' "$SECRETS" 2>/dev/null; then
+  KEY_VAL=$(grep '^ANTHROPIC_API_KEY=' "$SECRETS" | cut -d= -f2)
+  if [[ "$KEY_VAL" == "sk-ant-"* ]] || [[ "$KEY_VAL" == "sk-"* ]]; then
+    echo "  ✓ ANTHROPIC_API_KEY (real key)"
+  else
+    echo "  ✗ ANTHROPIC_API_KEY (placeholder — add real key)"
+    MISSING=$((MISSING+1))
+  fi
+else
+  echo "  ✗ ANTHROPIC_API_KEY MISSING"
+  MISSING=$((MISSING+1))
+fi
+
 check BITOS_DEVICE_TOKEN
 check BITOS_PIN_HASH
 check BITOS_BLE_SECRET

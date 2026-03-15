@@ -39,6 +39,16 @@ Ensure this exists in `/etc/bitos/secrets`:
 WHISPLAY_DRIVER_PATH=/home/pi/Whisplay/Driver/WhisPlay.py
 ```
 
+## Verification Steps
+
+Run these in order after setup:
+
+1. `bash scripts/verify_hardware.py`
+2. `bash scripts/set_audio_levels.sh`
+3. `bash scripts/test_audio.sh`
+4. `bash scripts/test_voice_loop.sh`
+5. `bash scripts/smoke_test.sh`
+
 ## Smoke test after deploy
 
 Run:
