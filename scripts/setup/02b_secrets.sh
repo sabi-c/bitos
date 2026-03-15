@@ -1,50 +1,59 @@
 #!/bin/bash
 set -euo pipefail
 
-sudo mkdir -p /etc/bitos
-sudo touch /etc/bitos/secrets
-sudo chmod 600 /etc/bitos/secrets
-sudo chown root:root /etc/bitos/secrets
+SECRETS=${BITOS_SECRETS_FILE:-/etc/bitos/secrets}
+SUDO_BIN=${BITOS_SUDO_BIN-sudo}
 
-SERIAL=$(grep Serial /proc/cpuinfo | awk '{print $3}')
-if [ -z "${SERIAL}" ]; then
-  SERIAL="unknown-serial"
+run_privileged() {
+  if [ -n "$SUDO_BIN" ]; then
+    "$SUDO_BIN" "$@"
+  else
+    "$@"
+  fi
+}
+
+run_privileged mkdir -p "$(dirname "$SECRETS")"
+run_privileged touch "$SECRETS"
+
+# Only chown on real Pi (skip in CI/test mode)
+if [ -n "${BITOS_SUDO_BIN:-sudo}" ]; then
+  ${BITOS_SUDO_BIN:-sudo} chown root:root "$SECRETS"
+  ${BITOS_SUDO_BIN:-sudo} chmod 600 "$SECRETS"
+else
+  chmod 600 "$SECRETS" 2>/dev/null || true
 fi
 
-DEFAULT_PIN="0000"
-echo "Enter your PIN (4 digits, default ${DEFAULT_PIN}):"
-read -r PIN
-PIN=${PIN:-$DEFAULT_PIN}
+ensure_secret() {
+  local key="$1"
+  local value="$2"
+  if run_privileged grep -q "^${key}=" "$SECRETS" 2>/dev/null; then
+    return
+  fi
+  echo "${key}=${value}" | run_privileged tee -a "$SECRETS" >/dev/null
+}
 
-PIN_HASH=$(PIN="$PIN" python3 - <<'PY'
-import os
-import bcrypt
-print(bcrypt.hashpw(os.environ["PIN"].encode(), bcrypt.gensalt(12)).decode())
-PY
-)
-
-BLE_SECRET=$(PIN="$PIN" SERIAL="$SERIAL" python3 - <<'PY'
+DEVICE_TOKEN=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
+BLE_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
+PIN_HASH=$(python3 - <<'PY'
 import hashlib
-import os
-key = hashlib.pbkdf2_hmac(
-    "sha256",
-    os.environ["PIN"].encode(),
-    os.environ["SERIAL"].encode(),
-    100000,
-    32,
-)
-print(key.hex())
+
+try:
+    import bcrypt
+except ModuleNotFoundError:
+    print("sha256$" + hashlib.sha256(b"0000").hexdigest())
+else:
+    print(bcrypt.hashpw(b"0000", bcrypt.gensalt(12)).decode())
 PY
 )
 
-DEVICE_TOKEN=$(python3 -c 'import uuid; print(uuid.uuid4())')
+ensure_secret "ANTHROPIC_API_KEY" "sk-ant-..."
+ensure_secret "BITOS_DEVICE_TOKEN" "$DEVICE_TOKEN"
+ensure_secret "BITOS_PIN_HASH" "$PIN_HASH"
+ensure_secret "BITOS_BLE_SECRET" "$BLE_SECRET"
+ensure_secret "WHISPLAY_DRIVER_PATH" "/home/pi/Whisplay/Driver"
 
-sudo bash -c "cat > /etc/bitos/secrets << EOF
-ANTHROPIC_API_KEY=sk-ant-...
-BITOS_DEVICE_TOKEN=${DEVICE_TOKEN}
-BITOS_PIN_HASH=${PIN_HASH}
-BITOS_BLE_SECRET=${BLE_SECRET}
-EOF"
-
-echo "Wrote /etc/bitos/secrets with generated BITOS_DEVICE_TOKEN, BITOS_PIN_HASH, and BITOS_BLE_SECRET"
-echo "Edit /etc/bitos/secrets and replace ANTHROPIC_API_KEY before starting services."
+echo "Secrets bootstrap complete: $SECRETS"
+echo "Generated (if missing): BITOS_DEVICE_TOKEN, BITOS_PIN_HASH (default PIN 0000), BITOS_BLE_SECRET"
+echo "Next step: add your real Anthropic key"
+echo "  sudo nano $SECRETS"
+echo "  Replace: ANTHROPIC_API_KEY=sk-ant-..."

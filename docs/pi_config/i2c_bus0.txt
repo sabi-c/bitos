@@ -1,0 +1,1 @@
+Error: Could not open file `/dev/i2c-0' or `/dev/i2c/0': No such file or directory

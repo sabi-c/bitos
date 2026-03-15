@@ -1,8 +1,19 @@
 #!/usr/bin/env python3
 """Quick smoke test. Run after boot: python scripts/smoke_test.py"""
 import os
+import platform
+import subprocess
 import sys
 import urllib.request
+
+
+def check_service(name: str) -> bool:
+    result = subprocess.run(
+        ["systemctl", "is-enabled", name],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
 
 
 def main() -> int:
@@ -28,6 +39,17 @@ def main() -> int:
         else None,
     )
     check("Font file exists", lambda: open("device/assets/fonts/PressStart2P.ttf", "rb").close())
+
+    machine = platform.machine().lower()
+    if machine.startswith("aarch") or machine == "armv7l":
+        check(
+            "bitos-server enabled",
+            lambda: (_ for _ in ()).throw(Exception("disabled")) if not check_service("bitos-server") else None,
+        )
+        check(
+            "bitos-device enabled",
+            lambda: (_ for _ in ()).throw(Exception("disabled")) if not check_service("bitos-device") else None,
+        )
 
     print("BITOS SMOKE TEST")
     print("─" * 30)

@@ -1,0 +1,1 @@
+gpio tool not found

@@ -1,0 +1,86 @@
+2:import json
+3:import logging
+4:import os
+11:import subprocess
+12:import time
+14:import httpx
+15:import pygame
+17:from display.driver import create_driver
+18:import display.tokens as tokens
+19:from display.tokens import FPS
+20:from input.handler import ButtonEvent, create_button_handler
+21:from notifications import NotificationPoller
+22:from overlays import NotificationQueue, NotificationToast, QROverlay
+23:from overlays.power import PowerOverlay
+24:from bluetooth import AuthManager, get_gatt_server
+25:from bluetooth.constants import PAIRING_MODE_TIMEOUT_SECONDS
+26:from bluetooth.characteristics import DeviceInfoCharacteristic, DeviceStatusCharacteristic, KeyboardInputCharacteristic, WiFiConfigCharacteristic, WiFiStatusCharacteristic
+27:from bluetooth.constants import build_pair_url, build_setup_url
+28:from bluetooth.network_manager import NetworkPriorityManager
+29:from bluetooth.wifi_manager import WiFiManager
+30:from audio import get_audio_pipeline
+31:from hardware import BatteryMonitor, LEDController, StatusPoller, StatusState, SystemMonitor
+32:from screens.manager import ScreenManager
+33:from screens.boot import BootScreen
+34:from screens.lock import LockScreen
+35:from screens.panels.home import HomePanel
+36:from screens.panels.chat import ChatPanel
+37:from screens.panels.focus import FocusPanel
+38:from screens.panels.notifications import NotificationsPanel
+39:from screens.panels.tasks import TasksPanel
+40:from screens.panels.messages import MessagesPanel
+41:from screens.panels.mail import MailPanel
+42:from screens.panels.captures import CapturesPanel
+43:from screens.panels.settings import (
+50:from screens.subscreens.integration_detail import IntegrationDetailPanel
+51:from client.api import BackendClient
+52:from storage.repository import DeviceRepository
+53:from integrations.adapters import create_runtime_adapter
+54:from integrations.queue import OutboundCommandQueue
+55:from integrations.runtime import OutboundWorkerRuntimeLoop
+56:from integrations.worker import OutboundCommandWorker
+61:def _read_device_serial() -> str:
+74:def _restore_state() -> dict | None:
+90:def _save_runtime_state(screen_mgr: ScreenManager, timestamp: float, path: str = "/tmp/bitos_state.json") -> None:
+108:def _run_startup_health_check(client: BackendClient, repository: DeviceRepository, startup_health: dict) -> dict:
+119:def _handle_main_loop_crash(error: Exception, crash_path: str = "/tmp/bitos_crash.json"):
+129:def _run_main_loop(driver, button, screen_mgr: ScreenManager, outbound_loop: OutboundWorkerRuntimeLoop):
+168:def main():
+169:    import sys, os
+172:    import RPi.GPIO as GPIO
+180:    from device.hardware.whisplay_board import get_board
+210:    def on_show_passkey(code: str):
+213:    def on_pairing_complete(success: bool):
+232:    def on_wifi_config(ssid: str, password: str, security: str, priority: int) -> bool:
+239:    def on_keyboard_input(target: str, text: str, cursor_pos: int) -> bool:
+250:    def _collect_device_status() -> dict:
+307:    def open_chat():
+311:    def on_home():
+330:    def open_focus():
+350:    def open_messages():
+355:    def open_mail():
+359:    def open_notifications():
+363:    def open_tasks():
+367:    def open_captures():
+371:    def open_settings():
+390:    def open_model_picker():
+393:    def open_agent_mode():
+396:    def open_sleep_timer():
+399:    def open_about():
+402:    def open_integration_detail(integration_name: str, status_data: dict):
+405:    def open_companion_app():
+417:    def _enter_offline_mode():
+422:    def _show_setup_qr_if_needed():
+423:        from pathlib import Path
+445:    def on_boot_complete():
+459:    def close_power_overlay():
+463:    def run_power_action(action: str):
+473:    def open_power_overlay():
+494:    def _dispatch_action(action: str):
+500:    def on_short():
+504:    def on_long():
+508:    def on_double():
+512:    def on_triple():
+516:            def _dismiss_capture():
+519:            def _saved(_capture_id: str, _text: str):
+535:    def on_power_gesture():

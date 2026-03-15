@@ -3,7 +3,9 @@ BITOS Chat Panel (Phase 2 — reliability UX)
 Text input via keyboard/button, streaming response rendered line-by-line.
 """
 import json
+from collections import deque
 import threading
+import time
 
 import pygame
 
@@ -56,8 +58,8 @@ class ChatPanel(BaseScreen):
     STATUS_DEGRADED = "degraded"
 
     ERROR_MESSAGES = {
-        "offline": "offline: start server",
-        "timeout": "timeout: retry",
+        "offline": "Server offline",
+        "timeout": "Server timeout",
         "auth": "auth failed",
         "rate_limit": "rate limited",
         "upstream": "provider busy",
@@ -66,17 +68,18 @@ class ChatPanel(BaseScreen):
         "unknown": "unknown error",
     }
 
-    def __init__(self, client: BackendClient, ui_settings: dict | None = None, repository: DeviceRepository | None = None, audio_pipeline: AudioPipeline | None = None, on_back=None):
+    def __init__(self, client: BackendClient, ui_settings: dict | None = None, repository: DeviceRepository | None = None, audio_pipeline: AudioPipeline | None = None, led=None, on_back=None):
         self._client = client
         self._cursor_anim = blink_cursor()
         self._repository = repository
         self._on_back = on_back
         self._messages_lock = threading.Lock()
         self._audio_pipeline = audio_pipeline
+        self._led = led
 
         # State
         self._input_text = ""
-        self._messages: list[dict] = []  # {"role": "user"|"assistant", "text": "..."}
+        self._messages = deque(maxlen=50)  # {"role": "user"|"assistant", "text": "..."}
         self._is_streaming = False
         self._scroll_offset = 0
         self._status = self.STATUS_CONNECTED
@@ -86,6 +89,7 @@ class ChatPanel(BaseScreen):
         self._session_id = None
         self._template_index = 0
         self._templates = list(DEFAULT_TEMPLATES)
+        self._resumed_until = 0.0
 
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
         self._font = load_ui_font("body", self._ui_settings)
@@ -102,10 +106,19 @@ class ChatPanel(BaseScreen):
                         self._templates = loaded
                 except Exception:
                     pass
-            self._session_id, restored = self._repository.load_latest_session_messages()
-            if restored:
-                with self._messages_lock:
-                    self._messages = [{"role": m["role"], "text": m["text"]} for m in restored]
+            self._resumed_until = 0.0
+            latest = self._repository.get_latest_session()
+            if latest:
+                age_seconds = time.time() - float(latest.get("created_at", 0.0))
+                if age_seconds <= 24 * 3600:
+                    self._session_id = int(latest["id"])
+                    restored = self._repository.get_session_messages(str(self._session_id), limit=10)
+                    if restored:
+                        with self._messages_lock:
+                            self._messages = deque(({"role": m["role"], "text": m["text"]} for m in restored), maxlen=50)
+                            self._status_detail = "SESSION RESTORED"
+                            self._resumed_until = time.time() + 2.0
+                            self._scroll_offset = 0
 
     def update(self, dt: float):
         self._cursor_anim.update(dt)
@@ -133,9 +146,27 @@ class ChatPanel(BaseScreen):
             self._input_text += event.unicode
 
     def handle_action(self, action: str):
+        if action == "SHORT_PRESS" and self._audio_pipeline and self._audio_pipeline.is_speaking():
+            # VERIFIED: SHORT_PRESS while TTS is active immediately stops speech and shows "speech stopped".
+            self._audio_pipeline.stop_speaking()
+            with self._messages_lock:
+                self._status_detail = "speech stopped"
+            return
+
         if self._showing_templates() and action == "SHORT_PRESS":
             if self._templates:
                 self._template_index = (self._template_index + 1) % len(self._templates)
+            return
+        if action == "SHORT_PRESS":
+            self._scroll_offset += 1
+            return
+
+        if action == "TRIPLE_PRESS":
+            self._session_id = self._repository.create_session(title="NEW CHAT") if self._repository else None
+            with self._messages_lock:
+                self._messages = deque(maxlen=50)
+                self._input_text = ""
+                self._status_detail = "new chat"
             return
 
         if action == "DOUBLE_PRESS":
@@ -144,6 +175,7 @@ class ChatPanel(BaseScreen):
             return
 
         if action == "LONG_PRESS":
+            # VERIFIED: LONG_PRESS in chat starts voice capture and status updates to "recording...".
             if self._showing_templates() and self._templates:
                 self._send_template_message(self._templates[self._template_index])
                 return
@@ -235,6 +267,8 @@ class ChatPanel(BaseScreen):
         if self._is_streaming or not self._audio_pipeline:
             return
         self._is_streaming = True
+        if self._led:
+            self._led.listening()
         with self._messages_lock:
             self._status = self.STATUS_CONNECTED
             self._status_detail = "recording..."
@@ -242,24 +276,34 @@ class ChatPanel(BaseScreen):
 
     def _do_voice_capture(self):
         import time as _time
+
+        timeout_seconds = 30
         try:
-            audio_path = self._audio_pipeline.record()
+            audio_path = self._audio_pipeline.record(max_seconds=timeout_seconds)
             if not audio_path:
                 self._is_streaming = False
+                if self._led:
+                    self._led.off()
                 return
-            _time.sleep(5)
+            _time.sleep(timeout_seconds)
             self._audio_pipeline.stop_recording()
+            with self._messages_lock:
+                self._status_detail = "Recording stopped (30s max)"
             text = self._audio_pipeline.transcribe(audio_path).strip()
         except Exception as exc:
             self._is_streaming = False
+            if self._led:
+                self._led.error()
             self._mark_failed("", "unknown", False)
             self._status_detail = f"voice err: {str(exc)[:20]}"
             return
 
         self._is_streaming = False
+        if self._led:
+            self._led.off()
         if not text:
             with self._messages_lock:
-                self._status_detail = ""
+                self._status_detail = "Didn't catch that — try again"
             return
         self._input_text = text
         self._send_message()
@@ -285,6 +329,8 @@ class ChatPanel(BaseScreen):
         self._last_failed_message = None
         self._last_error_retryable = False
 
+        if self._led:
+            self._led.thinking()
         thread = threading.Thread(target=self._stream_response, args=(text,), daemon=True)
         thread.start()
 
@@ -312,7 +358,14 @@ class ChatPanel(BaseScreen):
             with self._messages_lock:
                 self._messages.append({"role": "assistant", "text": ""})
 
-            for chunk in self._client.chat(message):
+            result = self._client.chat(message)
+            if isinstance(result, dict) and result.get("error"):
+                kind = str(result.get("kind", "unknown"))
+                retryable = bool(result.get("retryable", True))
+                self._mark_failed(message, kind, retryable, custom_copy=str(result.get("error")))
+                return
+
+            for chunk in result:
                 response_text += chunk
                 with self._messages_lock:
                     self._messages[-1]["text"] = response_text
@@ -322,6 +375,10 @@ class ChatPanel(BaseScreen):
 
             if self._audio_pipeline and response_text:
                 try:
+                    with self._messages_lock:
+                        self._status_detail = "◎ SPEAKING..."
+                    if self._led:
+                        self._led.speaking()
                     self._audio_pipeline.speak(response_text)
                 except Exception:
                     pass
@@ -337,16 +394,21 @@ class ChatPanel(BaseScreen):
             self._mark_failed(message, "unknown", True)
         finally:
             self._is_streaming = False
+            if self._led and self._status == self.STATUS_CONNECTED:
+                self._led.off()
 
-    def _mark_failed(self, message: str, kind: str, retryable: bool):
+    def _mark_failed(self, message: str, kind: str, retryable: bool, custom_copy: str | None = None):
         status = self.STATUS_OFFLINE if kind in ("offline", "network") else self.STATUS_DEGRADED
-        error_copy = self.ERROR_MESSAGES.get(kind, self.ERROR_MESSAGES["unknown"])
+        error_copy = custom_copy or self.ERROR_MESSAGES.get(kind, self.ERROR_MESSAGES["unknown"])
 
+        if self._led:
+            self._led.error()
         with self._messages_lock:
             self._status = status
             self._status_detail = error_copy
             self._last_error_retryable = retryable
             self._last_failed_message = message if retryable else None
+            self._input_text = message
             self._messages.append({"role": "assistant", "text": f"[{error_copy}]"})
 
         if self._repository and self._session_id is not None:
@@ -356,6 +418,8 @@ class ChatPanel(BaseScreen):
         return bool(self._last_failed_message and self._last_error_retryable and not self._is_streaming)
 
     def _status_copy(self) -> str:
+        if self._resumed_until and time.time() < self._resumed_until:
+            return "SESSION RESTORED"
         if self._status == self.STATUS_CONNECTED:
             return "connected"
         if self._status == self.STATUS_RETRYING:

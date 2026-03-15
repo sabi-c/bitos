@@ -1,0 +1,2 @@
+arecord: set_params:1398: Channels count non available
+mic test failed

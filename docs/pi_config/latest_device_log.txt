@@ -1,0 +1,50 @@
+Mar 15 03:09:13 bitos python[1374]:   File "/home/pi/bitos/device/main.py", line 187, in main
+Mar 15 03:09:13 bitos python[1374]:     driver.init()
+Mar 15 03:09:13 bitos python[1374]:     ~~~~~~~~~~~^^
+Mar 15 03:09:13 bitos python[1374]:   File "/home/pi/bitos/device/display/driver.py", line 119, in init
+Mar 15 03:09:13 bitos python[1374]:     self._board.display.image(black_image)
+Mar 15 03:09:13 bitos python[1374]:     ^^^^^^^^^^^^^^^^^^^
+Mar 15 03:09:13 bitos python[1374]: AttributeError: 'WhisPlayBoard' object has no attribute 'display'
+Mar 15 03:09:14 bitos python[1374]: pygame 2.6.1 (SDL 2.28.4, Python 3.13.5)
+Mar 15 03:09:14 bitos python[1374]: Hello from the pygame community. https://www.pygame.org/contribute.html
+Mar 15 03:09:14 bitos python[1374]: WARNING: button edge detection failed: Failed to add edge detection — button disabled
+Mar 15 03:09:14 bitos python[1374]: Detected hardware: Raspberry Pi Zero 2 W Rev 1.0, Backlight mode: PWM
+Mar 15 03:09:14 bitos python[1374]: wm8960 sound card detected.
+Mar 15 03:09:14 bitos python[1374]: WARNING: button edge detection failed: Failed to add edge detection — button disabled
+Mar 15 03:09:14 bitos python[1374]: Detected hardware: Raspberry Pi Zero 2 W Rev 1.0, Backlight mode: PWM
+Mar 15 03:09:14 bitos python[1374]: wm8960 sound card detected.
+Mar 15 03:09:14 bitos systemd[1]: bitos-device.service: Main process exited, code=exited, status=1/FAILURE
+Mar 15 03:09:14 bitos systemd[1]: bitos-device.service: Failed with result 'exit-code'.
+Mar 15 03:09:14 bitos systemd[1]: bitos-device.service: Consumed 2.997s CPU time.
+Mar 15 03:09:20 bitos systemd[1]: bitos-device.service: Scheduled restart job, restart counter is at 4.
+Mar 15 03:09:20 bitos systemd[1]: Starting bitos-device.service - BITOS Device Runtime...
+Mar 15 03:09:20 bitos bash[1426]: {"status":"ok","version":"0.1.0","build":"pre-hardware","commit":"6695662","provider":"anthropic","model":"claude-sonnet-4-6","settings_file":"server/data/ui_settings.json"}
+Mar 15 03:09:20 bitos systemd[1]: Started bitos-device.service - BITOS Device Runtime.
+Mar 15 03:09:22 bitos python[1429]: 03:09:22 [__main__] INFO: [BITOS] Starting device...
+Mar 15 03:09:23 bitos python[1429]: 03:09:23 [httpx] INFO: HTTP Request: GET http://localhost:8000/health "HTTP/1.1 200 OK"
+Mar 15 03:09:23 bitos python[1429]: 03:09:23 [__main__] INFO: [BITOS] Backend connected ✓
+Mar 15 03:09:23 bitos python[1429]: 03:09:23 [httpx] INFO: HTTP Request: GET http://localhost:8000/settings/ui "HTTP/1.1 200 OK"
+Mar 15 03:09:23 bitos python[1429]: 03:09:23 [__main__] INFO: [BITOS] UI settings loaded (font=press_start_2p, scale=1.0)
+Mar 15 03:09:23 bitos python[1429]: 03:09:23 [root] INFO: [BLE][MOCK] start
+Mar 15 03:09:23 bitos python[1429]: 03:09:23 [root] INFO: [BLE][MOCK] set_discoverable enabled=False timeout=120
+Mar 15 03:09:24 bitos python[1429]: 03:09:24 [httpx] INFO: HTTP Request: GET http://localhost:8000/health "HTTP/1.1 200 OK"
+Mar 15 03:09:24 bitos python[1429]: 03:09:24 [httpx] INFO: HTTP Request: GET http://localhost:8000/health "HTTP/1.1 200 OK"
+Mar 15 03:09:24 bitos python[1429]: 03:09:24 [httpx] INFO: HTTP Request: GET http://localhost:8000/health "HTTP/1.1 200 OK"
+Mar 15 03:09:24 bitos python[1429]: 03:09:24 [httpx] INFO: HTTP Request: GET http://localhost:8000/status/integrations "HTTP/1.1 200 OK"
+Mar 15 03:09:25 bitos python[1429]: 03:09:25 [system.monitor] INFO: CPU:61.4% RAM:253MB/416MB (60.8%) DISK:6.6% TEMP:40.8°C
+Mar 15 03:09:54 bitos python[1429]: 03:09:54 [httpx] INFO: HTTP Request: GET http://localhost:8000/health "HTTP/1.1 200 OK"
+Mar 15 03:09:54 bitos python[1429]: 03:09:54 [httpx] INFO: HTTP Request: GET http://localhost:8000/health "HTTP/1.1 200 OK"
+Mar 15 03:09:55 bitos python[1429]: 03:09:55 [httpx] INFO: HTTP Request: GET http://localhost:8000/status/integrations "HTTP/1.1 200 OK"
+Mar 15 03:09:56 bitos python[1429]: 03:09:56 [system.monitor] INFO: CPU:13.8% RAM:243MB/416MB (58.6%) DISK:6.6% TEMP:39.7°C
+Mar 15 03:10:24 bitos python[1429]: 03:10:24 [httpx] INFO: HTTP Request: GET http://localhost:8000/health "HTTP/1.1 200 OK"
+Mar 15 03:10:25 bitos python[1429]: 03:10:25 [httpx] INFO: HTTP Request: GET http://localhost:8000/health "HTTP/1.1 200 OK"
+Mar 15 03:10:25 bitos python[1429]: 03:10:25 [httpx] INFO: HTTP Request: GET http://localhost:8000/status/integrations "HTTP/1.1 200 OK"
+Mar 15 03:10:27 bitos python[1429]: 03:10:27 [system.monitor] INFO: CPU:6.3% RAM:248MB/416MB (59.8%) DISK:6.6% TEMP:39.7°C
+Mar 15 03:10:54 bitos python[1429]: 03:10:54 [httpx] INFO: HTTP Request: GET http://localhost:8000/health "HTTP/1.1 200 OK"
+Mar 15 03:10:55 bitos python[1429]: 03:10:55 [httpx] INFO: HTTP Request: GET http://localhost:8000/health "HTTP/1.1 200 OK"
+Mar 15 03:10:55 bitos python[1429]: 03:10:55 [httpx] INFO: HTTP Request: GET http://localhost:8000/status/integrations "HTTP/1.1 200 OK"
+Mar 15 03:10:58 bitos python[1429]: 03:10:58 [system.monitor] INFO: CPU:6.0% RAM:251MB/416MB (60.3%) DISK:6.6% TEMP:40.8°C
+Mar 15 03:11:24 bitos python[1429]: 03:11:24 [httpx] INFO: HTTP Request: GET http://localhost:8000/health "HTTP/1.1 200 OK"
+Mar 15 03:11:25 bitos python[1429]: 03:11:25 [httpx] INFO: HTTP Request: GET http://localhost:8000/health "HTTP/1.1 200 OK"
+Mar 15 03:11:26 bitos python[1429]: 03:11:26 [httpx] INFO: HTTP Request: GET http://localhost:8000/status/integrations "HTTP/1.1 200 OK"
+Mar 15 03:11:29 bitos python[1429]: 03:11:29 [system.monitor] INFO: CPU:6.3% RAM:252MB/416MB (60.7%) DISK:6.6% TEMP:40.8°C

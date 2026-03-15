@@ -3,31 +3,36 @@ BITOS Button Handler
 Processes raw button press/release events into gesture types.
 Desktop: Space bar = physical button.
 """
+
+from __future__ import annotations
+
 import os
-import threading
 import time
+import logging
 from enum import Enum, auto
-from typing import Callable, Optional
+from typing import Callable
 
 import pygame
 
 
+logger = logging.getLogger(__name__)
+
+
 class ButtonEvent(Enum):
-    SHORT_PRESS = auto()   # < 600ms tap
-    LONG_PRESS = auto()    # >= 600ms hold
-    DOUBLE_PRESS = auto()  # 2 taps within 400ms
-    TRIPLE_PRESS = auto()  # 3 taps within 600ms
-    POWER_GESTURE = auto() # 5 presses within power gesture window
-    HOLD_START = auto()    # Button down (for recording)
-    HOLD_END = auto()      # Button up (stop recording)
+    SHORT_PRESS = auto()
+    LONG_PRESS = auto()
+    DOUBLE_PRESS = auto()
+    TRIPLE_PRESS = auto()
+    POWER_GESTURE = auto()
+    HOLD_START = auto()
+    HOLD_END = auto()
 
 
-# Timing constants (seconds)
-DEBOUNCE_S = 0.030        # 30ms debounce
-LONG_PRESS_S = 0.800      # >=800ms hold = long press
-CLICK_TIMEOUT_S = 0.300   # Window for multi-tap detection
-POWER_GESTURE_COUNT = 5
-POWER_GESTURE_WINDOW_MS = 1200
+DEBOUNCE_S = 0.030
+LONG_PRESS_S = 0.800
+CLICK_TIMEOUT_S = 0.300
+POWER_PRESS_COUNT = 5
+POWER_WINDOW_S = 1.200
 
 # Back-compat aliases used internally
 DEBOUNCE_MIN = DEBOUNCE_S
@@ -37,33 +42,41 @@ TRIPLE_WINDOW = CLICK_TIMEOUT_S
 
 
 class ButtonHandler:
-    """Detects button gestures from raw press/release events."""
+    """Detect button gestures from raw press/release events."""
 
-    def __init__(self):
+    def __init__(self, active_screen_name_getter: Callable[[], str] | None = None):
         self._callbacks: dict[ButtonEvent, list[Callable]] = {e: [] for e in ButtonEvent}
         self._keyboard_mode = os.environ.get("BITOS_BUTTON", "").lower() == "keyboard"
-        self._poll_board_state = True  # Disabled when GPIO callbacks are registered
-        self._press_time: Optional[float] = None
-        self._release_times: list[float] = []
+        self._active_screen_name_getter = active_screen_name_getter
+
+        # Physical state / edge timing.
+        self._pressed = False
+        self._press_time: float = 0.0
+        self._last_edge_time: float = 0.0
+        self._raw_pressed = False
+        self._long_emitted_for_press = False
+
+        # Multi-click classification window.
+        self._click_count = 0
+        self._click_deadline: float | None = None
+
+        # Power gesture tracking.
         self._power_press_times: list[float] = []
-        self._is_pressed = False
-        self._long_press_fired = False
-        self._pending_check_time: Optional[float] = None
+
+        self._board = None
+        self._poll_board_state = True
 
     def on(self, event_type: ButtonEvent, callback: Callable):
-        """Register a callback for a button event."""
         self._callbacks[event_type].append(callback)
 
     def _emit(self, event_type: ButtonEvent):
-        """Fire all callbacks for an event type."""
         for cb in self._callbacks[event_type]:
             try:
                 cb()
-            except Exception as e:
-                print(f"[ButtonHandler] Callback error for {event_type.name}: {e}")
+            except Exception as exc:
+                print(f"[ButtonHandler] Callback error for {event_type.name}: {exc}")
 
     def handle_pygame_event(self, event: pygame.event.Event) -> bool:
-        """Process a Pygame keyboard event. Returns True when event is consumed as a button gesture."""
         if self._keyboard_mode and event.type == pygame.KEYDOWN:
             if event.key == pygame.K_RETURN:
                 self._emit(ButtonEvent.LONG_PRESS)
@@ -85,174 +98,146 @@ class ButtonHandler:
 
     def _on_press(self):
         now = time.time()
-        if self._is_pressed:
+        if now - self._last_edge_time < DEBOUNCE_S:
             return
-        if self._press_time and (now - self._press_time) < DEBOUNCE_MIN:
+        self._last_edge_time = now
+
+        if self._pressed:
             return
 
-        self._is_pressed = True
+        self._pressed = True
         self._press_time = now
-        self._long_press_fired = False
+        self._long_emitted_for_press = False
+        self._log_button_state(pressed=True)
 
-        cutoff = now - (POWER_GESTURE_WINDOW_MS / 1000.0)
+        cutoff = now - POWER_WINDOW_S
         self._power_press_times = [t for t in self._power_press_times if t >= cutoff]
         self._power_press_times.append(now)
-        if len(self._power_press_times) >= POWER_GESTURE_COUNT:
+        if len(self._power_press_times) >= POWER_PRESS_COUNT:
             self._power_press_times.clear()
-            self._release_times.clear()
-            self._pending_check_time = None
+            self._pressed = False
+            self._long_emitted_for_press = False
+            self._click_count = 0
+            self._click_deadline = None
             self._emit(ButtonEvent.POWER_GESTURE)
+            return
 
         self._emit(ButtonEvent.HOLD_START)
 
     def _on_release(self):
         now = time.time()
-        if not self._is_pressed:
+        if now - self._last_edge_time < DEBOUNCE_S:
+            return
+        if not self._pressed:
             return
 
-        self._is_pressed = False
+        self._last_edge_time = now
+        self._pressed = False
+        self._log_button_state(pressed=False)
         self._emit(ButtonEvent.HOLD_END)
 
-        if self._press_time is None:
+        if self._long_emitted_for_press:
+            self._long_emitted_for_press = False
+            self._click_count = 0
+            self._click_deadline = None
             return
 
-        hold_duration = now - self._press_time
-
-        # Long press
-        if hold_duration >= SHORT_THRESHOLD:
+        duration = now - self._press_time
+        if duration >= LONG_PRESS_S:
             self._emit(ButtonEvent.LONG_PRESS)
-            self._release_times.clear()
-            self._pending_check_time = None
+            self._click_count = 0
+            self._click_deadline = None
             return
 
-        # Short press — accumulate for multi-tap detection
-        self._release_times.append(now)
-        self._pending_check_time = now + TRIPLE_WINDOW
+        if self._click_deadline is None or now > self._click_deadline:
+            self._click_count = 1
+        else:
+            self._click_count = min(3, self._click_count + 1)
+        self._click_deadline = now + CLICK_TIMEOUT_S
 
-    def update(self):
-        """Call every frame to finalize multi-tap detection."""
-        if not self._poll_board_state:
-            return
-        if self._pending_check_time is None:
-            return
-
+    def update(self) -> None:
         now = time.time()
-        if now < self._pending_check_time:
+
+        if self._poll_board_state and self._board is None and not self._keyboard_mode:
+            try:
+                from hardware.whisplay_board import get_board
+
+                self._board = get_board()
+            except Exception:
+                self._board = None
+
+        if self._poll_board_state and self._board is not None:
+            pressed = self._board.button_pressed()
+            if pressed and not self._raw_pressed:
+                self._raw_pressed = True
+                self._on_press()
+            elif not pressed and self._raw_pressed:
+                self._raw_pressed = False
+                self._on_release()
+
+        if self._pressed and not self._long_emitted_for_press and now - self._press_time >= LONG_PRESS_S:
+            self._long_emitted_for_press = True
+            self._click_count = 0
+            self._click_deadline = None
+            self._emit(ButtonEvent.LONG_PRESS)
+
+        if not self._pressed and self._click_deadline is not None and now >= self._click_deadline:
+            if self._click_count == 1:
+                self._emit(ButtonEvent.SHORT_PRESS)
+            elif self._click_count == 2:
+                self._emit(ButtonEvent.DOUBLE_PRESS)
+            elif self._click_count >= 3:
+                self._emit(ButtonEvent.TRIPLE_PRESS)
+            self._click_count = 0
+            self._click_deadline = None
+
+    def _log_button_state(self, pressed: bool):
+        if not logger.isEnabledFor(logging.DEBUG):
             return
 
-        # Check accumulated taps
-        tap_count = len(self._release_times)
-        self._release_times.clear()
-        self._pending_check_time = None
-
-        if tap_count >= 3:
-            self._emit(ButtonEvent.TRIPLE_PRESS)
-        elif tap_count == 2:
-            self._emit(ButtonEvent.DOUBLE_PRESS)
-        elif tap_count == 1:
-            self._emit(ButtonEvent.SHORT_PRESS)
+        screen_name = "unknown"
+        if self._active_screen_name_getter is not None:
+            try:
+                screen_name = self._active_screen_name_getter()
+            except Exception:
+                screen_name = "unknown"
+        state = "pressed" if pressed else "released"
+        logger.debug("Button %s — active screen: %s", state, screen_name)
 
 
-class GPIOButtonHandler:
-    """GPIO-backed button handler for Pi hardware mode."""
+def create_button_handler(board=None, active_screen_name_getter: Callable[[], str] | None = None):
+    """Create a button handler, preferring WhisPlay board callbacks when available."""
+    import sys
 
-    GPIO_PIN = 11  # Board P11 = BCM 17
+    _on_pi = sys.platform == "linux" and os.path.exists("/proc/device-tree/model")
+    mode_raw = os.environ.get("BITOS_BUTTON", "")
+    mode_default = "gpio" if _on_pi else "keyboard"
+    mode = mode_raw if mode_raw else mode_default
+    logger.info(
+        "button_init platform=%s on_pi=%s BITOS_BUTTON=%r effective_mode=%s board=%s",
+        sys.platform,
+        _on_pi,
+        mode_raw,
+        mode,
+        board,
+    )
 
-    def __init__(self, on_event: Callable[[ButtonEvent], None]):
-        import RPi.GPIO as GPIO  # type: ignore
+    handler = ButtonHandler(active_screen_name_getter=active_screen_name_getter)
+    button_mode = mode.lower()
 
-        self._on_event = on_event
-        self._press_times: list[float] = []
-        self._press_start: float | None = None
-        self._lock = threading.Lock()
+    if board is None and button_mode == "gpio":
+        from hardware.whisplay_board import get_board
 
-        GPIO.setmode(GPIO.BOARD)
-        GPIO.setup(self.GPIO_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.add_event_detect(
-            self.GPIO_PIN,
-            GPIO.BOTH,
-            callback=self._raw_callback,
-            bouncetime=30,
-        )
+        board = get_board()
 
-    def _raw_callback(self, channel):
-        import RPi.GPIO as GPIO  # type: ignore
+    if board is not None:
+        handler._board = board
+        handler._poll_board_state = False
+        board.on_button_press(handler._on_press)
+        board.on_button_release(handler._on_release)
+        handler.handle_pygame_event = lambda event: False
+        return handler
 
-        now_ms = time.time() * 1000.0
-        if GPIO.input(channel) == GPIO.LOW:
-            with self._lock:
-                self._press_start = now_ms
-            return
-
-        with self._lock:
-            start_ms = self._press_start if self._press_start is not None else now_ms
-        duration_ms = now_ms - start_ms
-        self._handle_release(duration_ms=duration_ms, now_ms=now_ms)
-
-    def _handle_release(self, duration_ms: float, now_ms: float) -> None:
-        short_threshold_ms = SHORT_THRESHOLD * 1000.0
-        double_window_ms = DOUBLE_WINDOW * 1000.0
-        triple_window_ms = TRIPLE_WINDOW * 1000.0
-
-        with self._lock:
-            if duration_ms >= short_threshold_ms:
-                self._press_times.clear()
-                self._on_event(ButtonEvent.LONG_PRESS)
-                return
-
-            self._press_times.append(now_ms)
-            self._press_times = [t for t in self._press_times if (now_ms - t) < triple_window_ms]
-            count = len(self._press_times)
-
-        if count >= 3:
-            with self._lock:
-                self._press_times.clear()
-            self._on_event(ButtonEvent.TRIPLE_PRESS)
-            return
-
-        if count == 2:
-            def check_double():
-                time.sleep(double_window_ms / 1000.0)
-                with self._lock:
-                    if len(self._press_times) < 3:
-                        self._press_times.clear()
-                        self._on_event(ButtonEvent.DOUBLE_PRESS)
-
-            threading.Thread(target=check_double, daemon=True).start()
-            return
-
-        def check_single():
-            time.sleep(double_window_ms / 1000.0)
-            with self._lock:
-                if len(self._press_times) == 1:
-                    self._press_times.clear()
-                    self._on_event(ButtonEvent.SHORT_PRESS)
-
-        threading.Thread(target=check_single, daemon=True).start()
-
-
-import logging as _logging
-
-_logger = _logging.getLogger(__name__)
-
-
-def create_button_handler(board=None) -> ButtonHandler:
-    """Factory: create ButtonHandler and optionally wire GPIO callbacks.
-
-    When *board* provides a working GPIO pin (Pi hardware), GPIO edge
-    callbacks drive press/release directly and ``_poll_board_state``
-    is disabled so ``update()`` never double-fires.
-    """
-    handler = ButtonHandler()
-
-    try:
-        if board is None and os.environ.get("BITOS_BUTTON", "").lower() != "keyboard":
-            gpio_handler = GPIOButtonHandler(on_event=lambda ev: handler._emit(ev))
-            handler._poll_board_state = False
-            _logger.info("[Button] GPIO callbacks registered, poll gate disabled")
-            _ = gpio_handler  # prevent GC
-            return handler
-    except Exception as exc:
-        _logger.warning("[Button] GPIO init failed (%s), falling back to Pygame", exc)
-
+    if button_mode == "gpio":
+        print("button_board_unavailable: falling back to keyboard-only input")
     return handler

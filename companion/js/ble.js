@@ -23,6 +23,10 @@ class BitosCompanion {
     if (!navigator.bluetooth) {
       throw new Error('Web Bluetooth not available. Use Chrome or Safari (iOS 16.4+).');
     }
+    if (this.device && this.device.gatt && this.device.gatt.connected) {
+      console.warn('[BLE] Already connected, skipping re-connect');
+      return;
+    }
     this.device = await navigator.bluetooth.requestDevice({
       filters: [{ services: [BITOS_SERVICE] }],
       optionalServices: [BITOS_SERVICE],
@@ -101,6 +105,9 @@ class BitosCompanion {
 
   async sendWifiConfig(ssid, password, security = 'WPA2', priority = 100) {
     if (!this.sessionToken) throw new Error('Not authenticated');
+    if (!this.chars.WIFI_CONFIG || !this.chars.WIFI_STATUS) {
+      throw new Error('WiFi characteristics unavailable');
+    }
     const bleSecret = this._bleSecret ||
       sessionStorage.getItem('bitos_ble_secret');
     const encPw = await encryptWifiPassword(password, this.sessionToken, bleSecret);
@@ -110,20 +117,15 @@ class BitosCompanion {
     });
     await this.chars.WIFI_CONFIG.writeValueWithoutResponse(
       new TextEncoder().encode(payload));
-    // Wait for status update
-    return new Promise((res, rej) => {
-      const timer = setTimeout(() =>
-        rej(new Error('Timeout — device did not confirm')), 15000);
-      const handler = (evt) => {
-        clearTimeout(timer);
-        const s = JSON.parse(new TextDecoder().decode(evt.target.value));
-        this.chars.WIFI_STATUS.removeEventListener(
-          'characteristicvaluechanged', handler);
-        s.connected ? res(s) : rej(new Error(s.last_error || 'Failed'));
-      };
-      this.chars.WIFI_STATUS.addEventListener(
-        'characteristicvaluechanged', handler);
-      this.chars.WIFI_STATUS.startNotifications();
-    });
+
+    // Poll for status instead of relying on notifications.
+    for (let i = 0; i < 15; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const raw = await this.chars.WIFI_STATUS.readValue();
+      const s = JSON.parse(new TextDecoder().decode(raw));
+      if (s.connected) return s;
+      if (s.last_error) throw new Error(s.last_error);
+    }
+    throw new Error('Timeout — device did not confirm WiFi');
   }
 }

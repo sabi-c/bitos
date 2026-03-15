@@ -1,49 +1,41 @@
 """
 BITOS Display Driver
 Abstract display interface + Pygame implementation for desktop development.
-ST7789 hardware driver is a stub — will be ported from whisplay.py in Phase 5.
+ST7789 hardware driver delegates to WhisPlayBoard, which owns all HAT GPIO.
 """
+
+from __future__ import annotations
+
 import logging
 import os
-import time
 from abc import ABC, abstractmethod
 
 import pygame
 
-from display.tokens import (
-    PHYSICAL_W, PHYSICAL_H, SCALE, WINDOW_W, WINDOW_H, BLACK, FPS
-)
+from display.tokens import PHYSICAL_H, PHYSICAL_W, WINDOW_H, WINDOW_W, BLACK, FPS
 
 logger = logging.getLogger(__name__)
 
 
 class DisplayDriver(ABC):
-    """Abstract display interface."""
-
     @abstractmethod
     def init(self):
-        """Initialize the display."""
         pass
 
     @abstractmethod
     def get_surface(self) -> pygame.Surface:
-        """Return the internal rendering surface (240×280)."""
         pass
 
     @abstractmethod
     def update(self):
-        """Push the internal surface to the actual display."""
         pass
 
     @abstractmethod
     def quit(self):
-        """Clean up display resources."""
         pass
 
 
 class PygameDriver(DisplayDriver):
-    """Desktop simulator: renders 240×280 internal surface scaled 2× to a 480×560 window."""
-
     def __init__(self):
         self._surface = None
         self._window = None
@@ -61,7 +53,6 @@ class PygameDriver(DisplayDriver):
         return self._surface
 
     def update(self):
-        # Scale internal surface to window
         scaled = pygame.transform.scale(self._surface, (WINDOW_W, WINDOW_H))
         self._window.blit(scaled, (0, 0))
         pygame.display.flip()
@@ -73,148 +64,90 @@ class PygameDriver(DisplayDriver):
     def get_clock(self):
         return self._clock
 
-    def capture_frame_bytes(self) -> bytes:
-        """Capture current frame as JPEG bytes (for web preview)."""
-        try:
-            import io
-            raw = pygame.image.tostring(self._surface, "RGB")
-            from PIL import Image
-            img = Image.frombytes("RGB", (PHYSICAL_W, PHYSICAL_H), raw)
-            # Scale up for preview
-            img = img.resize((WINDOW_W, WINDOW_H), Image.NEAREST)
-            buf = io.BytesIO()
-            img.save(buf, format="JPEG", quality=80)
-            return buf.getvalue()
-        except Exception:
-            return b""
-
 
 class ST7789Driver(DisplayDriver):
-    """
-    # WHY THIS EXISTS: renders Pygame surface to physical
-    # Whisplay HAT ST7789 LCD via SPI on Pi Zero 2W.
-    # Only instantiated when BITOS_DISPLAY=st7789.
-    """
+    """Pushes frames using WhisPlayBoard.draw_image(...)."""
 
     WIDTH = 240
     HEIGHT = 280
 
-    # Pin assignments (BCM numbering)
-    DC_PIN = 27  # GPIO27 = Board P13
-    RST_PIN = 4  # GPIO4  = Board P7
-    SPI_BUS = 0
-    SPI_DEV = 0
-
-    def __init__(self):
-        self._spi = None
-        self._gpio = None
+    def __init__(self, board=None):
         self._surface: pygame.Surface | None = None
+        self._board = board
 
     def init(self):
-        try:
-            import spidev
-            import RPi.GPIO as GPIO  # type: ignore
-        except ModuleNotFoundError as e:
-            logger.error("st7789_init_failed", extra={"error": str(e)})
-            raise NotImplementedError("ST7789 dependencies are unavailable on this platform") from e
+        if self._board is None:
+            from hardware.whisplay_board import get_board
 
-        try:
-            pygame.init()
-            self._surface = pygame.Surface((self.WIDTH, self.HEIGHT))
-            self._surface.fill(BLACK)
+            self._board = get_board()
+        if self._board is None:
+            raise RuntimeError("WhisPlayBoard unavailable: get_board() returned None")
 
-            self._gpio = GPIO
-            self._spi = spidev.SpiDev()
-            self._spi.open(self.SPI_BUS, self.SPI_DEV)
-            self._spi.max_speed_hz = 40_000_000
-            self._spi.mode = 0b11
+        pygame.init()
+        self._surface = pygame.Surface((self.WIDTH, self.HEIGHT))
+        self._surface.fill(BLACK)
 
-            GPIO.setmode(GPIO.BCM)
-            GPIO.setup(self.DC_PIN, GPIO.OUT)
-            GPIO.setup(self.RST_PIN, GPIO.OUT)
-            self._reset()
-            self._init_display()
-        except Exception as e:
-            logger.error("st7789_init_failed", extra={"error": str(e)})
-            raise
-
-    def _reset(self):
-        if self._gpio is None:
-            return
-        self._gpio.output(self.RST_PIN, self._gpio.HIGH)
-        time.sleep(0.1)
-        self._gpio.output(self.RST_PIN, self._gpio.LOW)
-        time.sleep(0.1)
-        self._gpio.output(self.RST_PIN, self._gpio.HIGH)
-        time.sleep(0.1)
-
-    def _init_display(self):
-        # ST7789 init sequence for 240x280
-        self._write_cmd(0x01)  # software reset
-        time.sleep(0.15)
-        self._write_cmd(0x11)  # sleep out
-        time.sleep(0.5)
-        self._write_cmd(0x3A, [0x05])  # pixel format RGB565
-        self._write_cmd(0x36, [0x00])  # memory access control
-        self._write_cmd(0x2A, [0x00, 0x00, 0x00, 0xEF])  # col addr 240
-        self._write_cmd(0x2B, [0x00, 0x00, 0x01, 0x17])  # row addr 280
-        self._write_cmd(0x21)  # invert on (Whisplay needs this)
-        self._write_cmd(0x29)  # display on
-
-    def _write_cmd(self, cmd: int, data: list[int] | None = None):
-        if self._gpio is None or self._spi is None:
-            return
-        self._gpio.output(self.DC_PIN, self._gpio.LOW)
-        self._spi.writebytes([cmd])
-        if data:
-            self._gpio.output(self.DC_PIN, self._gpio.HIGH)
-            self._spi.writebytes(data)
+        self._board.fill_screen(0)
+        self._board.set_backlight(100)
+        self._board.previous_frame = None
 
     def get_surface(self) -> pygame.Surface:
         if self._surface is None:
             raise RuntimeError("ST7789 surface unavailable: call init() first")
         return self._surface
 
-    def render(self, surface: pygame.Surface) -> None:
-        """Convert pygame surface to RGB565 bytes and write to display."""
-        if self._gpio is None or self._spi is None:
-            return
-
-        if surface.get_size() != (self.WIDTH, self.HEIGHT):
-            surface = pygame.transform.scale(surface, (self.WIDTH, self.HEIGHT))
-
-        raw = pygame.image.tostring(surface, "RGB")
-        rgb565 = bytearray()
-        for i in range(0, len(raw), 3):
-            r, g, b = raw[i], raw[i + 1], raw[i + 2]
-            rgb565.append((r & 0xF8) | (g >> 5))
-            rgb565.append(((g & 0x1C) << 3) | (b >> 3))
-
-        self._write_cmd(0x2C)
-        self._gpio.output(self.DC_PIN, self._gpio.HIGH)
-
-        chunk = 4096
-        data = bytes(rgb565)
-        for i in range(0, len(data), chunk):
-            self._spi.writebytes(list(data[i : i + chunk]))
+    @staticmethod
+    def _rgb888_to_rgb565(raw_rgb: bytes) -> list[int]:
+        payload = bytearray((len(raw_rgb) // 3) * 2)
+        out_i = 0
+        for i in range(0, len(raw_rgb), 3):
+            r = raw_rgb[i]
+            g = raw_rgb[i + 1]
+            b = raw_rgb[i + 2]
+            rgb565 = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
+            payload[out_i] = (rgb565 >> 8) & 0xFF
+            payload[out_i + 1] = rgb565 & 0xFF
+            out_i += 2
+        return list(payload)
 
     def update(self):
-        self.render(self.get_surface())
+        if self._board is None or self._surface is None:
+            return
+        try:
+            raw_rgb = pygame.image.tostring(self._surface, "RGB")
+            if self._board.previous_frame == raw_rgb:
+                return
+            payload = self._rgb888_to_rgb565(raw_rgb)
+            self._board.draw_image(0, 0, self.WIDTH, self.HEIGHT, payload)
+            self._board.previous_frame = raw_rgb
+        except Exception as exc:
+            logger.debug("st7789_update_failed error=%s", exc)
+
+    def display(self, frame):
+        """Compatibility helper for callers that pass PIL images or raw RGB565 bytes."""
+        if self._board is None:
+            raise RuntimeError("WhisPlayBoard unavailable: call init() before display()")
+
+        if hasattr(frame, "convert"):
+            rgb = frame.convert("RGB").tobytes("raw", "RGB")
+            payload = self._rgb888_to_rgb565(rgb)
+        elif isinstance(frame, (bytes, bytearray)):
+            payload = list(frame)
+        else:
+            raise TypeError("display(frame) expects PIL image or RGB565 byte payload")
+
+        self._board.draw_image(0, 0, self.WIDTH, self.HEIGHT, payload)
+
+    def set_brightness(self, level: int) -> None:
+        if self._board is not None:
+            self._board.set_backlight(level)
 
     def quit(self):
-        try:
-            if self._spi is not None:
-                self._spi.close()
-        finally:
-            if self._gpio is not None:
-                self._gpio.cleanup()
-            pygame.quit()
+        pygame.quit()
 
 
-def create_driver() -> DisplayDriver:
-    """Factory: create the appropriate display driver based on environment."""
+def create_driver(board=None) -> DisplayDriver:
     mode = os.environ.get("BITOS_DISPLAY", "pygame").lower()
     if mode == "st7789":
-        return ST7789Driver()
-    else:
-        return PygameDriver()
+        return ST7789Driver(board=board)
+    return PygameDriver()

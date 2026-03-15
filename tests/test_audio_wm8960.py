@@ -1,11 +1,16 @@
 import os
-import unittest
-from pathlib import Path
 import sys
+import tempfile
+import unittest
+import wave
+from pathlib import Path
+
+import struct
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "device"))
 
 from audio.pipeline import MockAudioPipeline, WM8960Pipeline, get_audio_pipeline
+from audio.recorder import AudioRecorder
 
 
 class AudioWM8960Tests(unittest.TestCase):
@@ -44,6 +49,33 @@ class AudioWM8960Tests(unittest.TestCase):
     def test_mock_speak_completes(self):
         p = MockAudioPipeline()
         self.assertIsNone(p.speak("hello"))
+
+    def test_stereo_to_mono_wav_averages_channels(self):
+        left = [1000, -3000, 2000]
+        right = [3000, 1000, -2000]
+        interleaved = []
+        for lch, rch in zip(left, right):
+            interleaved.extend([lch, rch])
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = Path(tmpdir) / "stereo.wav"
+            dst = Path(tmpdir) / "mono.wav"
+
+            with wave.open(str(src), "wb") as wav:
+                wav.setnchannels(2)
+                wav.setsampwidth(2)
+                wav.setframerate(48000)
+                wav.writeframes(struct.pack("<" + "h" * len(interleaved), *interleaved))
+
+            AudioRecorder().stereo_to_mono_wav(str(src), str(dst))
+
+            with wave.open(str(dst), "rb") as wav:
+                self.assertEqual(wav.getnchannels(), 1)
+                raw = wav.readframes(wav.getnframes())
+                out = list(struct.unpack("<" + "h" * wav.getnframes(), raw))
+
+        expected = [int((lch + rch) / 2.0) for lch, rch in zip(left, right)]
+        self.assertEqual(out, expected)
 
 
 if __name__ == "__main__":

@@ -4,11 +4,13 @@ from __future__ import annotations
 import os
 import sqlite3
 import time
+import uuid
+import json
 from contextlib import closing
 
 
 DEFAULT_DB_PATH = "device/data/bitos.db"
-LATEST_SCHEMA_VERSION = 4
+LATEST_SCHEMA_VERSION = 5
 
 
 MIGRATIONS: dict[int, str] = {
@@ -93,6 +95,18 @@ MIGRATIONS: dict[int, str] = {
 
     CREATE INDEX IF NOT EXISTS idx_notifications_created
       ON notifications(created_at DESC);
+    """,
+    5: """
+    CREATE TABLE IF NOT EXISTS quick_captures (
+        id TEXT PRIMARY KEY,
+        text TEXT NOT NULL,
+        context TEXT DEFAULT '',
+        sent_to_vikunja INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_quick_captures_created
+      ON quick_captures(created_at DESC);
     """,
 }
 
@@ -260,7 +274,7 @@ class DeviceRepository:
                 """
                 SELECT id, type, app_name, message, time_str, read, source_id, created_at
                 FROM notifications
-                ORDER BY datetime(created_at) DESC, id DESC
+                ORDER BY datetime(created_at) DESC, rowid DESC
                 LIMIT ?
                 """,
                 (limit,),
@@ -279,7 +293,7 @@ class DeviceRepository:
                 DELETE FROM notifications
                 WHERE id IN (
                     SELECT id FROM notifications
-                    ORDER BY datetime(created_at) DESC, id DESC
+                    ORDER BY datetime(created_at) DESC, rowid DESC
                     LIMIT -1 OFFSET ?
                 )
                 """,
@@ -327,6 +341,92 @@ class DeviceRepository:
                 (now_iso,),
             ).fetchall()
             return [dict(row) for row in rows]
+
+    def save_quick_capture(self, text: str, context: str = "") -> str:
+        """Saves capture, returns id."""
+        capture_id = str(uuid.uuid4())[:8]
+        with closing(self._connect()) as conn:
+            conn.execute(
+                """
+                INSERT INTO quick_captures
+                (id, text, context, created_at)
+                VALUES (?, ?, ?, datetime('now'))
+                """,
+                (capture_id, text, context or ""),
+            )
+            conn.commit()
+        return capture_id
+
+    def get_recent_captures(self, limit: int = 10) -> list[dict]:
+        """Returns most recent captures newest first."""
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                """
+                SELECT id, text, context, sent_to_vikunja, created_at
+                FROM quick_captures
+                ORDER BY datetime(created_at) DESC, rowid DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def get_capture_count(self) -> int:
+        with closing(self._connect()) as conn:
+            row = conn.execute("SELECT COUNT(*) AS c FROM quick_captures").fetchone()
+            return int(row["c"]) if row else 0
+
+    def mark_capture_sent_to_vikunja(self, capture_id: str) -> None:
+        with closing(self._connect()) as conn:
+            conn.execute("UPDATE quick_captures SET sent_to_vikunja = 1 WHERE id = ?", (capture_id,))
+            conn.commit()
+
+    def cache_today_tasks(self, tasks: list[dict]) -> None:
+        self.set_setting("tasks_today_cache", json.dumps(tasks))
+
+    def get_cached_today_tasks(self) -> list[dict]:
+        raw = self.get_setting("tasks_today_cache", "")
+        if not raw:
+            return []
+        try:
+            payload = json.loads(raw)
+            return payload if isinstance(payload, list) else []
+        except Exception:
+            return []
+
+    def get_latest_session(self) -> dict | None:
+        """Returns most recent session with messages."""
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                """
+                SELECT s.id, s.created_at,
+                       COUNT(m.id) as msg_count
+                FROM sessions s
+                LEFT JOIN messages m ON m.session_id = s.id
+                GROUP BY s.id
+                HAVING msg_count > 0
+                ORDER BY s.created_at DESC
+                LIMIT 1
+                """
+            ).fetchone()
+            if not row:
+                return None
+            return {"id": row[0], "created_at": row[1], "msg_count": row[2]}
+
+    def get_session_messages(self, session_id: str, limit: int = 10) -> list[dict]:
+        """Returns last N messages for a session."""
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                """
+                SELECT role, text, created_at
+                FROM messages
+                WHERE session_id = ?
+                ORDER BY created_at DESC, id DESC
+                LIMIT ?
+                """,
+                (session_id, limit),
+            ).fetchall()
+            return [dict(row) for row in reversed(rows)]
 
     def queue_enqueue_command(self, domain: str, operation: str, payload: str, max_attempts: int = 3) -> int:
         now = time.time()

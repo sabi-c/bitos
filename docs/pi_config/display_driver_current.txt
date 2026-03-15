@@ -1,0 +1,46 @@
+3:Abstract display interface + Pygame implementation for desktop development.
+15:from display.tokens import PHYSICAL_H, PHYSICAL_W, WINDOW_H, WINDOW_W, BLACK, FPS
+22:    def init(self):
+26:    def get_surface(self) -> pygame.Surface:
+30:    def update(self):
+34:    def quit(self):
+39:    def __init__(self):
+44:    def init(self):
+46:        pygame.display.set_caption("BITOS")
+47:        self._window = pygame.display.set_mode((WINDOW_W, WINDOW_H))
+52:    def get_surface(self) -> pygame.Surface:
+55:    def update(self):
+58:        pygame.display.flip()
+61:    def quit(self):
+64:    def get_clock(self):
+69:    """Pushes frames using WhisPlayBoard.draw_image(...)."""
+74:    def __init__(self, board=None):
+76:        self._board = board
+78:    def init(self):
+79:        if self._board is None:
+80:            from hardware.whisplay_board import get_board
+82:            self._board = get_board()
+83:        if self._board is None:
+84:            raise RuntimeError("WhisPlayBoard unavailable: get_board() returned None")
+90:        self._board.fill_screen(0)
+91:        self._board.set_backlight(100)
+93:    def get_surface(self) -> pygame.Surface:
+99:    def _rgb888_to_rgb565(raw_rgb: bytes) -> list[int]:
+112:    def update(self):
+113:        if self._board is None or self._surface is None:
+116:            raw_rgb = pygame.image.tostring(self._surface, "RGB")
+117:            if self._board.previous_frame == raw_rgb:
+120:            self._board.draw_image(0, 0, self.WIDTH, self.HEIGHT, payload)
+121:            self._board.previous_frame = raw_rgb
+125:    def display(self, frame):
+126:        """Compatibility helper for callers that pass PIL images or raw RGB565 bytes."""
+127:        if self._board is None:
+128:            raise RuntimeError("WhisPlayBoard unavailable: call init() before display()")
+136:            raise TypeError("display(frame) expects PIL image or RGB565 byte payload")
+138:        self._board.draw_image(0, 0, self.WIDTH, self.HEIGHT, payload)
+140:    def set_brightness(self, level: int) -> None:
+141:        if self._board is not None:
+142:            self._board.set_backlight(level)
+144:    def quit(self):
+148:def create_driver(board=None) -> DisplayDriver:
+151:        return ST7789Driver(board=board)

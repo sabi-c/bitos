@@ -1,27 +1,35 @@
-"""BITOS screen base abstractions."""
-from abc import ABC, abstractmethod
 import pygame
+from typing import TYPE_CHECKING
+from input.handler import ButtonEvent
 
+class Screen:
+    """Base class for all BITOS screens."""
+    SCREEN_NAME: str = "SCREEN"
 
-class BaseScreen(ABC):
-    """Abstract base for all screens."""
+    def __init__(self):
+        self._manager = None
 
-    @abstractmethod
-    def render(self, surface: pygame.Surface):
-        """Draw this screen to the surface."""
+    def on_enter(self) -> None: pass
+    def on_exit(self) -> None: pass
+    def on_pause(self) -> None: pass
+    def on_resume(self) -> None: pass
+    def update(self, dt: float) -> None: pass
 
-    @abstractmethod
-    def handle_input(self, event: pygame.event.Event):
-        """Process keyboard/mouse input events."""
+    def handle_event(self, event: ButtonEvent) -> bool:
+        if event == ButtonEvent.DOUBLE_PRESS:
+            if self._manager:
+                self._manager.pop()
+            return True
+        return False
 
-    def handle_action(self, action: str):
-        """Process high-level button actions (SHORT_PRESS, LONG_PRESS, etc.)."""
+    def draw(self, surface: pygame.Surface) -> None:
+        raise NotImplementedError
 
-    def update(self, dt: float):
-        """Update logic per frame. Override if needed."""
+    def get_hint(self) -> str:
+        return "[tap] scroll  [hold] select  [2x] back"
 
-    def on_enter(self):
-        """Called when this screen becomes active."""
+    def get_breadcrumb(self) -> str:
+        return self.SCREEN_NAME
 
-    def on_exit(self):
-        """Called when this screen is removed."""
+# Alias so manager.py can import either name
+BaseScreen = Screen

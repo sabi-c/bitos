@@ -18,14 +18,18 @@
     <script src="./js/crypto.js"></script>
     <script src="./js/auth.js"></script>
     <script>
-      const EXPECTED = "42edacede1532e7c44cef406185c9ecbd9ceee22bd35f4944560a55de06a6abf";
-      const got = deriveBleSecret("0000", "DESKTOP-DEV-001");
-      const ok = got === EXPECTED;
-      const el = document.getElementById("result");
-      el.className = ok ? "pass" : "fail";
-      el.textContent = ok
-        ? `PASS: ${got}`
-        : `FAIL: got ${got}, expected ${EXPECTED}`;
+      async function runTest() {
+        const EXPECTED = "42edacede1532e7c44cef406185c9ecbd9ceee22bd35f4944560a55de06a6abf";
+        const got = await deriveBleSecret("0000", "DESKTOP-DEV-001");
+        const ok = got === EXPECTED;
+        const el = document.getElementById("result");
+        el.className = ok ? "pass" : "fail";
+        el.textContent = ok
+          ? `PASS: ${got}`
+          : `FAIL: got ${got}, expected ${EXPECTED}`;
+      }
+
+      runTest();
     </script>
   </body>
 </html>

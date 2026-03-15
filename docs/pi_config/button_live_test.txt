@@ -1,0 +1,14 @@
+Warning: GPIO pin 22 for red LED cannot drive LOW reliably; using input-pulldown RGB workaround.
+Warning: GPIO pin 18 for green LED cannot drive LOW reliably; using input-pulldown RGB workaround.
+Warning: GPIO pin 16 for blue LED cannot drive LOW reliably; using input-pulldown RGB workaround.
+Detected hardware: Raspberry Pi Zero 2 W Rev 1.0, Backlight mode: PWM
+wm8960 sound card detected.
+BUTTON_PIN: 11
+button_press_callback: None
+button_release_callback: None
+Reading button for 3 seconds - PRESS THE BUTTON NOW
+BUTTON PRESSED at 1.3s - GPIO HIGH
+BUTTON PRESSED at 1.4s - GPIO HIGH
+BUTTON PRESSED at 2.0s - GPIO HIGH
+BUTTON PRESSED at 2.1s - GPIO HIGH
+BUTTON PRESSED at 2.2s - GPIO HIGH

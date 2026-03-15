@@ -1,0 +1,16 @@
+Detected hardware: Raspberry Pi Zero 2 W Rev 1.0, Backlight mode: PWM
+wm8960 sound card detected.
+=== ATTRIBUTES ===
+_current_b: int = 0
+_current_g: int = 0
+_current_r: int = 0
+backlight_mode: bool = True
+backlight_pwm: SoftPWM = <WhisPlay.SoftPWM object at 0x7faa945ba0>
+blue_pwm: SoftPWM = <WhisPlay.SoftPWM object at 0x7faa8e2e90>
+button_press_callback: NoneType = None
+button_release_callback: NoneType = None
+green_pwm: SoftPWM = <WhisPlay.SoftPWM object at 0x7faa8e2d50>
+platform: str = 'rpi'
+previous_frame: NoneType = None
+red_pwm: SoftPWM = <WhisPlay.SoftPWM object at 0x7faa949a90>
+spi: SpiDev = <SpiDev object at 0x7faa750b30>

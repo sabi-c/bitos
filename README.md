@@ -1,148 +1,158 @@
 # BITOS
 
-![CI](https://github.com/sabi-c/bitos/actions/workflows/ci.yml/badge.svg)
+Pocket AI companion. Hold button → speak → Claude answers.
+Pi Zero 2W + Whisplay HAT + PiSugar 3.
 
-A pocket AI companion device. Pi Zero 2W + Whisplay HAT + PiSugar 3.
+## Flash & Boot (30 min)
+1. Edit `scripts/cloud-init/user-data`
+   → add SSH key (`cat ~/.ssh/id_rsa.pub`)
+   → add GitHub username
+2. Flash SD: Pi Imager → Pi OS Lite 64-bit
+3. `make flash`  ← copies cloud-init to SD
+4. Insert SD, power on, wait 15 min
+5. `ssh pi@bitos`
+6. `bash ~/bitos/scripts/day_one.sh`  ← does everything
 
-Hold the button, ask Claude something, hear it answer.
-
-## Quick Start
-
+## Desktop Dev
 ```bash
-# 1. git clone + cd
-git clone git@github.com:sabi-c/bitos.git
-cd bitos
-
-# 2. cp .env.template .env, then edit ANTHROPIC_API_KEY
-cp .env.template .env
-
-# 3. install dependencies
-pip install -r requirements.txt
-
-# 4. terminal 1
-make run-server
-
-# 5. terminal 2
-make run-dev
+cp .env.template .env  # add ANTHROPIC_API_KEY
+make run-server        # terminal 1
+make run-dev           # terminal 2
+# SPACE=scroll ENTER=select BACKSPACE=back TAB=capture
 ```
 
-That's it — Pygame window opens, SPACE/ENTER/BACKSPACE to navigate.
+## Troubleshooting
+See `docs/TROUBLESHOOTING.md`.
+Pocket AI device for daily planning and voice interaction, built for Raspberry Pi Zero 2W + Whisplay HAT + PiSugar 3.
+
+## What it does
+Hold the button, speak, and Claude answers through the speaker.
+The UI is 1-bit pixel-style on a 240×280 display with single-button navigation.
+
+## Quick Start (desktop dev)
+1. `git clone <repo-url> && cd bitos`
+2. `cp .env.template .env` and add `ANTHROPIC_API_KEY`
+3. `pip install -r requirements.txt`
+4. `make run-server` (terminal 1)
+5. `make run-dev` (terminal 2)
+
+Keyboard mapping in desktop mode:
+- `SPACE` = short
+- `ENTER` = long
+- `BACKSPACE` = back
+- `TAB` = quick-capture
+
+## First Boot on Hardware
+See `docs/planning/FIRST_BOOT.md`.
+
+Short version:
+1. Flash SD card.
+2. Copy cloud-init: `scripts/cloud-init/user-data`.
+3. Power on and wait ~15 minutes.
+4. `ssh pi@bitos`
+5. Add API key.
+6. `sudo systemctl start bitos`
 
 ## Architecture
+`Device (Pygame/ST7789) → HTTP → Server (FastAPI) → Claude API`
 
-## Current Delivery Status
+Single button model:
+- `SHORT` = scroll
+- `LONG` = select
+- `DOUBLE` = back
+- `TRIPLE` = capture
 
-- Phase 4 shell set is complete (lock/home/chat/settings/focus/notifications overlay).
-- BLE foundation slices `P5-007`, `P5-008`, and `P5-009` are done (WiFi config/status, device status notify, keyboard routing).
-- Next up: `P5-010` NetworkManager priority + BT PAN baseline and `P5-011` QR companion pairing flow.
+## Current Status
+- Phase 5 complete (BLE foundation, WiFi provisioning, companion PWA)
+- Phase 6 in progress (resilience, shutdown, offline UI)
+- CI: passing on main
+- Companion PWA: https://bitos-p8xw.onrender.com
 
-```
-Device (Pygame/ST7789) ──HTTP──▶ Server (FastAPI) ──▶ Claude API
-```
+## Companion App
+Scan the device QR code to open the companion in Safari (iPhone) or Chrome (Mac/Android).
+It provisions WiFi over BLE when the device has no network.
 
-- **Device:** 240×280 pixel display, 1-bit monochrome aesthetic, single button input
-- **Server:** FastAPI backend, streams Claude responses via SSE
-- **Web Preview:** MJPEG stream for testing on mobile browsers
+## Development
+Three environments:
 
-## UI Settings Catalog (Backend-driven)
+| Environment | Key env values |
+|---|---|
+| DESKTOP | `BITOS_DISPLAY=pygame`, `BITOS_AUDIO=mock`, `BITOS_BUTTON=keyboard` |
+| PI-DEV | `BITOS_DISPLAY=st7789`, `BITOS_AUDIO=hw:0`, `BITOS_BUTTON=gpio` |
+| PI-PROD | same as PI-DEV |
 
-BITOS now exposes backend-managed UI settings so theming/layout adjustments are cataloged and reproducible:
-
-```bash
-# Fetch editable settings schema/catalog
-curl http://localhost:8000/settings/catalog
-
-# Fetch current effective settings
-curl http://localhost:8000/settings/ui
-
-# Update one or more settings
-curl -X PUT http://localhost:8000/settings/ui \
-  -H "Content-Type: application/json" \
-  -d '{"font_scale": 1.15, "layout_density": "compact"}'
-
-# Verify required HTML reference pages exist before UI porting
-make audit-reference-ui
-```
-
-Settings persistence path defaults to `server/data/ui_settings.json` and can be overridden with `UI_SETTINGS_FILE`.
-
-
-## Local Persistence (SQLite)
-
-The device runtime now initializes a local SQLite database for sessions/messages/settings/events.
-
-- Default path: `device/data/bitos.db`
-- Override with: `BITOS_DB_FILE`
-- Migration/version tracking is handled automatically at startup
-
-## LLM Bridge (Provider-agnostic)
-
-BITOS now treats chat generation as a provider bridge instead of a single hardcoded backend model.
-
-- Configure provider via `LLM_PROVIDER` (`anthropic`, `openai`, `openclaw`, `nanoclaw`, `echo`)
-- Anthropic uses `ANTHROPIC_API_KEY` + `MODEL_NAME`
-- OpenAI/OpenClaw/NanoClaw use OpenAI-compatible `/chat/completions` settings (`*_API_KEY`, `*_BASE_URL`, `*_MODEL`)
-- Shared prompt can be tuned with `BITOS_SYSTEM_PROMPT`
-
-This keeps the device/UI layer unchanged while swapping model providers or self-hosted agent runtimes.
-
-## OS Bridge Direction (Tasks/Messages/Email/Calendar)
-
-The architecture direction is to keep UI and providers decoupled via adapters and queues:
-
-1. LLM bridge for prompt/response generation (this phase)
-2. Domain adapters for task/message/email/calendar actions (next phases)
-3. Local command queue + retries + permission gates for external writes
-
-This allows routing to API-key providers or local agent runtimes (OpenClaw/NanoClaw) without rewriting screens.
-
-### Outbound Worker Runtime (Phase 3)
-
-The device loop now runs a bounded outbound worker pump each frame cadence to process queued task/message/email/calendar actions without blocking render/input.
-
-- Adapter mode is configurable via `BITOS_ADAPTER_MODE`:
-  - `echo` (default): local deterministic success adapter for simulator/dev
-  - `disabled`: intentionally unavailable adapter to exercise retry/dead-letter behavior
-- Queue transitions to `retrying` and `dead_letter` emit concise runtime logs for observability.
-
-## Extending Navigation
-
-For button-first menu screens, use the shared navigation primitives in `device/screens/components/nav.py`:
-
-- `NavItem` defines label/status/enablement/action
-- `VerticalNavController` handles focus movement + activation
-
-This keeps new pages lightweight: define items, render rows, and map selected actions to screen transitions.
-
-Phase 4 started with a `FocusPanel` timer shell wired from Home (`FOCUS`) using the same navigation primitives and tiny-screen copy constraints. NotificationsPanel and SettingsPanel routes are wired from Home (`NOTIFS`, `SETTINGS`), and Settings is now persistence-wired (toggles + model/agent/sleep/about detail screens). NotificationToast overlay infrastructure is also integrated in `ScreenManager` for above-screen transient alerts.
-
-## Next Handoff Package
-
-If handing implementation to a new contributor/agent, start here:
-
-- `docs/planning/HANDOFF_NEXT_AGENT.md` — current state + immediate execution plan for the next iteration
-- `docs/planning/TASK_TRACKER.md` — canonical backlog/status updates
-- `docs/planning/IMPLEMENTATION_PLAN_NEXT.md` — sequencing and acceptance criteria
+Useful commands:
+- `make run-dev` — desktop simulator
+- `make run-server` — FastAPI backend
+- `make run-both` — run both
+- `make verify-hw` — hardware check (run on Pi)
+- `make deploy` — push code to Pi
+- `make ship` — deploy + restart + logs
 
 ## Docs
+### Planning docs (`docs/planning/`)
 
-| Document | Purpose |
+| File | Purpose |
 |---|---|
-| docs/planning/MAC_AI_SERVICE.md | Multi-agent Mac service + collab-electron pattern |
-| companion/README.md | Companion PWA setup, local dev, and deployment notes |
-| docs/planning/COMPANION_APP.md | Companion app scope, security expectations, and MVP acceptance criteria |
-| docs/planning/FIRST_BOOT.md | First-boot provisioning flow, state machine, and failure handling |
-| docs/BLUETOOTH_NETWORK_SPEC.md | BLE provisioning/status contract and network behavior expectations |
-| docs/BACKEND_SPEC.md | Backend endpoint, auth, provider, and error contract specification |
+| `AGENT_DOCS_SPRINT_PROMPT.md` | Agent sprint prompt template and workflow notes. |
+| `COMPANION_APP.md` | Companion PWA scope, behavior, and acceptance criteria. |
+| `DEVELOPMENT_PRACTICES.md` | Coding and development norms. |
+| `FIRST_BOOT.md` | First-boot checklist and bring-up flow. |
+| `FUNCTIONALITY_ROADMAP.md` | Product-surface roadmap details by capability. |
+| `HANDOFF_NEXT_AGENT.md` | Immediate next-agent execution handoff. |
+| `IMPLEMENTATION_PLAN_NEXT.md` | Sequenced execution plan for current phases. |
+| `MAC_AI_SERVICE.md` | Phase 10 multi-agent Mac service plan. |
+| `OFFLINE_AI.md` | Offline AI strategy (Piper/whisper.cpp/llama.cpp). |
+| `SECURITY_DECISIONS.md` | Security decision log (SD-001 through SD-010). |
+| `TASK_TRACKER.md` | Canonical backlog and iteration log. |
 
-- [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) — Phase 1 build plan
-- [ROADMAP.md](ROADMAP.md) — Full project roadmap
-- [docs/planning/IMPLEMENTATION_PLAN_NEXT.md](docs/planning/IMPLEMENTATION_PLAN_NEXT.md) — Detailed implementation sequencing for Phases 2–4
-- [docs/planning/TASK_TRACKER.md](docs/planning/TASK_TRACKER.md) — Canonical backlog + per-iteration log for all contributors/agents
-- [docs/planning/HANDOFF_NEXT_AGENT.md](docs/planning/HANDOFF_NEXT_AGENT.md) — Practical takeover brief and next-slice implementation notes
-- [docs/reference-ui/README.md](docs/reference-ui/README.md) — Canonical location and naming conventions for imported HTML UI reference files
-- [companion/README.md](companion/README.md) — Companion PWA workflow for BLE Wi-Fi provisioning
+### Spec and reference docs (`docs/`)
 
-## License
+| File | Purpose |
+|---|---|
+| `BACKEND_SPEC.md` | Server API and runtime behavior contract. |
+| `BLUETOOTH_NETWORK_SPEC.md` | BLE + WiFi provisioning protocol contract. |
+| `reports/` | Audits and readiness reports (quality, dependencies, boot, architecture). |
+| `adr/` | Architecture decision records for major design choices. |
+| `reference-ui/README.md` | UI reference source location conventions. |
 
-Private. All rights reserved.
+## Agent Modes
+Producer / Hacker / Clown / Monk / Storyteller / Director.
+Set in **Settings → Agent Mode**. Modes change Claude personality and context.
+Live task list + battery status are injected into prompts.
+
+## Security
+Security decisions are documented in `docs/planning/SECURITY_DECISIONS.md` (SD-001 through SD-010).
+
+## Mac Mini Setup (backend brain)
+
+The Mac mini runs the AI server, task management,
+and bridges to iMessage, Gmail, and calendar.
+
+### One-command setup
+```bash
+git clone git@github.com:sabi-c/bitos.git
+cd bitos
+make setup
+```
+
+This installs:
+- BITOS FastAPI server (auto-starts on login)
+- Vikunja task manager (Docker, port 3456)
+- Checks for BlueBubbles + Tailscale
+- Prepares Pi SD cloud-init files in the same session
+- Runs smoke test to confirm everything works
+
+### After setup
+Then run `make push-secrets` to point your Pi to this Mac mini.
+
+- `make mac-status` check everything is running
+- `make mac-logs` watch server logs
+- `make mac-restart` apply `.env` changes
+
+### Connecting the Pi
+The Pi needs to know your Mac mini's address.
+On Pi: `sudo nano /etc/bitos/secrets`
+Set: `SERVER_URL=http://<tailscale-ip>:8000`
+
+With Tailscale: `mac_setup.sh` sets this automatically.

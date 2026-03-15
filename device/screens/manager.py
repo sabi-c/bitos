@@ -1,5 +1,7 @@
 """BITOS Screen Manager: stack + simple route transitions."""
+import gc
 import pygame
+import warnings
 
 import display.tokens as tokens
 from display.tokens import BLACK, WHITE
@@ -11,8 +13,14 @@ class ScreenManager:
     """Manages a stack of screens. Top screen receives render + input."""
 
     def __init__(self, notification_queue: NotificationQueue | None = None, status_state=None):
+        warnings.warn(
+            "device.screens.manager.ScreenManager is deprecated; use device.ui.screen_manager.ScreenManager",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._stack: list[BaseScreen] = []
         self._flash_frames = 0
+        self._last_frame_hash = None
         self.notification_queue = notification_queue or NotificationQueue()
         self._notification_shade: NotificationShade | None = None
         self._passkey_overlay: PasskeyOverlay | None = None
@@ -33,13 +41,13 @@ class ScreenManager:
         self._emit_active_screen_status()
 
     def pop(self) -> BaseScreen | None:
-        if not self._stack:
+        if len(self._stack) <= 1:
             return None
         screen = self._stack.pop()
         screen.on_exit()
-        if self._stack:
-            self._flash_frames = 2
-            self._stack[-1].on_enter()
+        gc.collect()
+        self._flash_frames = 2
+        self._stack[-1].on_enter()
         self._emit_active_screen_status()
         return screen
 
@@ -134,6 +142,10 @@ class ScreenManager:
         return self._stack[-1] if self._stack else None
 
     def handle_input(self, event: pygame.event.Event):
+        if self._active_overlay:
+            keyboard_handler = getattr(self._active_overlay, "handle_keyboard_input", None)
+            if callable(keyboard_handler) and keyboard_handler(event):
+                return
         if self.notification_queue.handle_input(event):
             return
         if self.current:
@@ -174,6 +186,7 @@ class ScreenManager:
         if self._flash_frames > 0:
             surface.fill(WHITE)
             self._flash_frames -= 1
+            self._last_frame_hash = None
             return
 
         surface.fill(BLACK)
@@ -185,7 +198,7 @@ class ScreenManager:
     def _render_status_bar(self, surface: pygame.Surface) -> None:
         if self._status_state is None:
             return
-        if self.current and getattr(self.current, '_owns_status_bar', False):
+        if self.current and getattr(self.current, "_owns_status_bar", False):
             return
         left = self._status_state.bar_left()
         right = self._status_state.bar_right()

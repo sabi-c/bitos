@@ -73,6 +73,15 @@ For **every implementation iteration** (code or docs):
 
 | ID | Phase | Workstream | Task | Owner | Status | Updated | Notes |
 |---|---|---|---|---|---|---|---|
+| AUDIT-002 | Phase 6 | Stability/Audit | Post-integration comprehensive audit and fixes | GPT-5.2-Codex | done | 2026-03-14 | Completed 8-check audit, fixed import/nav/endpoints/env/client/back-nav issues, and published `docs/reports/POST_INTEGRATION_AUDIT.md` |
+| MAIL-RESEARCH-001 | Phase 3 | Messaging/Email | Gmail MCP integration research report and adapter planning | GPT-5.2-Codex | done | 2026-03-14 | Added `docs/planning/EMAIL_INTEGRATION.md` with MCP call patterns, tool-use schemas, adapter design, UI mapping, permission tiers, and risks |
+| MSGS-RESEARCH-001 | Phase 3 | Messaging/iMessage | BlueBubbles iMessage integration research report and implementation plan | GPT-5.2-Codex | done | 2026-03-14 | Added `docs/planning/IMESSAGE_INTEGRATION.md` with endpoint/auth/webhook/adapter design recommendations |
+| MSGS-001 | Phase 3 | Messaging/iMessage | BlueBubbles adapter + messages panel + home unread wiring | GPT-5.2-Codex | done | 2026-03-14 | Implemented server/device message flows, UI panel states, and tests for adapter/endpoints/panel behavior |
+| MSGS-002 | Phase 3 | Messaging/iMessage | BlueBubbles settings, status, companion wiring | GPT-5.2-Codex | done | 2026-03-14 | Added integration status/settings endpoints, device poller+settings UI wiring, companion settings page, and coverage tests |
+| POLISH-001 | Phase 2 | UX/Install | End-to-end system polish + one-command SD flash + diagnostics | GPT-5.2-Codex | done | 2026-03-14 | Added flash script, boot diagnostics, error handling polish, UI verification trail, README one-pager |
+| MAC-SETUP-001 | Phase 10 | Mac Backend | Mac mini one-command bootstrap (`scripts/mac_setup.sh` + Make targets + docs + tests) | GPT-5.2-Codex | done | 2026-03-14 | Added Mac bootstrap flow, launchd service wiring, docs updates, and validation tests |
+| BOOT-POLISH-001 | Phase 10 | Setup/Updates | Single command setup from IDE + OTA update flow + companion update controls | GPT-5.2-Codex | done | 2026-03-14 | Added setup orchestrator script, OTA endpoints/script, update UI, Makefile targets, and validation tests |
+| FUNC-001 | Phase 2 | UX/Data | Quick capture end-to-end + tasks panel + chat session restore | GPT-5.2-Codex | done | 2026-03-14 | Implemented overlay/panels/API wiring, persistence, and tests |
 | P2-001 | Phase 2 | WS-A App Shell | Add lock screen + route from boot | GPT-5.2-Codex | done | 2026-03-14 | Implemented boot -> lock -> home flow in device runtime; added shell flow tests |
 | P0-002 | Phase 0 | Planning | Publish explicit handoff brief for next contributor with immediate next slice | GPT-5.2-Codex | done | 2026-03-14 | Added `docs/planning/HANDOFF_NEXT_AGENT.md` and linked it from key docs |
 | P0-AUDIT-002 | Phase 0 | Quality Audit | Run repository test coverage audit and publish prioritized coverage report | GPT-5.2-Codex | done | 2026-03-14 | Added `docs/reports/TEST_COVERAGE.md` with untested modules and priority targets |
@@ -114,18 +123,18 @@ For **every implementation iteration** (code or docs):
 | P5-012b | Phase 5 | WS-H Companion PWA | Implement Web Bluetooth transport and characteristic wiring | GPT-5.2-Codex | done | 2026-03-14 | Added `companion/js/ble.js` with BITOS UUIDs, connect/auth/wifi status flow |
 | P5-012c | Phase 5 | WS-H Companion PWA | Implement PBKDF2 + HMAC auth parity with device AuthManager | GPT-5.2-Codex | done | 2026-03-14 | Added `companion/js/auth.js` matching nonce+timestamp HMAC payload semantics |
 | P5-012d | Phase 5 | WS-H Companion PWA | Implement HKDF + AES-GCM Wi-Fi password encryption parity | GPT-5.2-Codex | done | 2026-03-14 | Added `companion/js/crypto.js` matching wifi-key HKDF and AES-128-GCM payload format |
-| P5-012e | Phase 5 | WS-H Companion PWA | Add installable PWA polish (icons, service worker, offline shell) | unassigned | todo | 2026-03-14 | Planned follow-up for production PWA install experience |
+| P5-012e | Phase 5 | WS-H Companion PWA | Add installable PWA polish (icons, service worker, offline shell) | GPT-5.2-Codex | done | 2026-03-14 | Companion `pair.html` shipped with installable flow + manifest/service-worker path validated. |
 | P5-012f | Phase 5 | WS-H Companion PWA | Add companion integration validation checklist and QA matrix | unassigned | todo | 2026-03-14 | Planned cross-platform BLE setup QA coverage |
 | P5-010 | Phase 5 | WS-G Bluetooth Foundation | NetworkManager priority config + BT PAN fallback | GPT-5.2-Codex | done | 2026-03-14 | Implemented NetworkPriorityManager + nmcli setup script with WiFi priority/BT PAN baseline. |
 | P5-011a | Phase 5 | WS-H Companion | Add QROverlay class + qrcode dependency | GPT-5.2-Codex | done | 2026-03-14 | Implemented QROverlay and qrcode dependency surface (with fallback-safe generation). |
 | P5-011b | Phase 5 | WS-H Companion | Wire QROverlay into boot no-network flow | GPT-5.2-Codex | done | 2026-03-14 | Boot no-network flow now shows setup QR overlay and enables temporary discoverability. |
 | P5-011c | Phase 5 | WS-H Companion | Wire QROverlay into Settings → Pair Companion App | GPT-5.2-Codex | done | 2026-03-14 | Settings panel now includes Companion App row and pairing QR overlay action. |
 | P5-011d | Phase 5 | WS-H Companion | Add DEVICE_INFO characteristic (serial, read-only) | GPT-5.2-Codex | done | 2026-03-14 | Implemented read-only DEVICE_INFO characteristic and server wiring for companion reads. |
-| P5-012a | Phase 5 | WS-H Companion | companion/setup.html — WiFi provisioning PWA | unassigned | todo | 2026-03-14 | Planned PWA setup surface |
-| P5-012b | Phase 5 | WS-H Companion | companion/js/ble.js — Web Bluetooth wrapper | unassigned | todo | 2026-03-14 | Planned BLE transport wrapper |
-| P5-012c | Phase 5 | WS-H Companion | companion/js/auth.js — HMAC (must match Python) | unassigned | todo | 2026-03-14 | Planned auth parity with device |
-| P5-012d | Phase 5 | WS-H Companion | companion/js/crypto.js — AES-GCM encrypt | unassigned | todo | 2026-03-14 | Planned WiFi payload encryption |
-| P5-012e | Phase 5 | WS-H Companion | companion/pair.html — full pairing flow | unassigned | todo | 2026-03-14 | Planned companion pairing flow |
+| P5-012a | Phase 5 | WS-H Companion | companion/setup.html — WiFi provisioning PWA | GPT-5.2-Codex | done | 2026-03-14 | Shipped companion setup provisioning surface. |
+| P5-012b | Phase 5 | WS-H Companion | companion/js/ble.js — Web Bluetooth wrapper | GPT-5.2-Codex | done | 2026-03-14 | Shipped Web Bluetooth transport wrapper for characteristic calls. |
+| P5-012c | Phase 5 | WS-H Companion | companion/js/auth.js — HMAC (must match Python) | GPT-5.2-Codex | done | 2026-03-14 | Shipped HMAC auth parity implementation aligned to device flow. |
+| P5-012d | Phase 5 | WS-H Companion | companion/js/crypto.js — AES-GCM encrypt | GPT-5.2-Codex | done | 2026-03-14 | Shipped AES-GCM payload encryption parity for WiFi provisioning. |
+| P5-012e | Phase 5 | WS-H Companion | companion/pair.html — full pairing flow | GPT-5.2-Codex | done | 2026-03-14 | `companion/pair.html` shipped for end-to-end pairing flow. |
 | P5-012f | Phase 5 | WS-H Companion | Render/GitHub Pages deploy workflow | unassigned | todo | 2026-03-14 | Planned companion hosting pipeline |
 | P6-001 | Phase 6 | WS-I Resilience | 5-press graceful shutdown + state save | unassigned | todo | 2026-03-14 | Planned resilience improvement |
 | P6-002 | Phase 6 | WS-I Resilience | Offline mode UI states + status bar indicators | unassigned | todo | 2026-03-14 | Planned offline UX hardening |
@@ -141,8 +150,10 @@ For **every implementation iteration** (code or docs):
 | P8-001 | Phase 8 | WS-K AI Core | Global workspace class + schema | unassigned | todo | 2026-03-14 | Planned shared memory foundation |
 | P8-002 | Phase 8 | WS-K AI Core | Morning brief background worker (8am) | unassigned | todo | 2026-03-14 | Planned proactive summary worker |
 | P8-003 | Phase 8 | WS-K AI Core | Session distiller (post-conversation) | unassigned | todo | 2026-03-14 | Planned summarization pipeline |
-| P8-004 | Phase 8 | WS-K AI Core | Agent mode system prompt injection on server | unassigned | todo | 2026-03-14 | Planned server injection slice |
+| P8-004 | Phase 8 | WS-K AI Core | Agent mode system prompt injection on server | GPT-5.2-Codex | done | 2026-03-14 | Implemented server-side agent mode prompt injection and settings wiring. |
 | P8-005 | Phase 8 | WS-K AI Core | Proactive notifications (3/day rate limit) | unassigned | todo | 2026-03-14 | Planned rate-limited proactive alerts |
+| P8-004b | Phase 8 | WS-K AI Core | Agent mode persona catalog + UI exposure | GPT-5.2-Codex | done | 2026-03-14 | Producer/Hacker/Clown/Monk/Storyteller/Director modes wired through settings and prompts. |
+| CONV-001 | Phase 8 | WS-K AI Core | Conversation template prompts shipped for mode-aware chat starts | GPT-5.2-Codex | done | 2026-03-14 | Chat templates shipped and integrated into runtime prompt construction. |
 | P9-001 | Phase 9 | WS-L Extensions | PWA companion app (Web Bluetooth) | unassigned | todo | 2026-03-14 | Planned companion app rollout |
 | P9-002 | Phase 9 | WS-L Extensions | BLE keyboard input → device compose fields | unassigned | todo | 2026-03-14 | Planned input handoff completion |
 | P9-003 | Phase 9 | WS-L Extensions | Wake word via openWakeWord (opt-in) | unassigned | todo | 2026-03-14 | Planned wake word integration |
@@ -212,3 +223,12 @@ For **every implementation iteration** (code or docs):
 
 - [x] DEPS-001 — Integrate key external libraries
 - [x] DEPS-002 — Port key external repos into BITOS
+- [x] DAY-ONE-001 — First hardware session hardening
+
+| 2026-03-14 | GPT-5.2-Codex | work | this-commit | Completed MSGS-RESEARCH-001 BlueBubbles iMessage integration research report (research-only; no implementation code) | `docs/planning/IMESSAGE_INTEGRATION.md`, `docs/planning/TASK_TRACKER.md` | Next: validate endpoint/payload details against live BlueBubbles docs from an environment with outbound access, then begin adapter implementation slice |
+
+| 2026-03-14 | GPT-5.2-Codex | work | this-commit | Completed MAIL-RESEARCH-001 Gmail MCP integration research report (research-only; no implementation code) | `docs/planning/EMAIL_INTEGRATION.md`, `docs/planning/TASK_TRACKER.md` | Next: confirm live Gmail MCP tool argument/response schemas via `tools/list` from an environment with connector access before adapter implementation |
+
+| 2026-03-14 | GPT-5.2-Codex | work | this-commit | Completed MAC-SETUP-001 Mac mini one-command bootstrap (script + Makefile controls + docs + tests) | `scripts/mac_setup.sh`, `Makefile`, `README.md`, `GETTING_STARTED.md`, `tests/test_mac_setup.py`, `docs/planning/TASK_TRACKER.md` | Next: validate on a real Mac mini environment and refine any launchctl edge cases |
+
+| 2026-03-14 | GPT-5.2-Codex | work | this-commit | Completed BOOT-POLISH-001 with OTA endpoints, companion update page, and one-command setup/update tooling | `server/main.py`, `companion/settings.html`, `scripts/setup_everything.sh`, `scripts/ota_update.sh`, `scripts/setup/03_resilience.sh`, `version.py`, `Makefile`, `tests/test_ota.py`, `GETTING_STARTED.md`, `README.md`, `docs/planning/TASK_TRACKER.md` | Next: run end-to-end validation on physical Mac mini + Pi and tune update timeout/logging behavior |
