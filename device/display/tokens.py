@@ -28,10 +28,10 @@ FONT_NAME = "PressStart2P"
 FONT_PATH = "assets/fonts/PressStart2P.ttf"
 
 FONT_SIZES = {
-    "title": 10,
+    "title": 16,
     "body": 8,
     "small": 6,
-    "hint": 4,
+    "hint": 5,
 }
 
 # ── Borders & Padding ─────────────────────────────────────────
