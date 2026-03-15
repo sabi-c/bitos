@@ -27,6 +27,7 @@ from bluetooth.characteristics import DeviceInfoCharacteristic, DeviceStatusChar
 from bluetooth.constants import build_pair_url, build_setup_url
 from bluetooth.network_manager import NetworkPriorityManager
 from bluetooth.wifi_manager import WiFiManager
+from ble import BITOSBleService
 from audio import get_audio_pipeline
 from hardware import BatteryMonitor, LEDController, StatusPoller, StatusState, SystemMonitor
 from screens.manager import ScreenManager
@@ -218,6 +219,21 @@ def main():
         )
 
     wifi_manager = WiFiManager()
+    ble_service = BITOSBleService()
+
+    def on_ble_message(text: str):
+        logger.info("[BLE] message -> chat route pending: %r", text)
+
+    def on_ble_connect():
+        logger.info("[BLE] phone connected")
+
+    def on_ble_disconnect():
+        logger.info("[BLE] phone disconnected")
+
+    ble_service.on_message(on_ble_message)
+    ble_service.on_connect(on_ble_connect)
+    ble_service.on_disconnect(on_ble_disconnect)
+
     network_manager = NetworkPriorityManager()
     status_poller = StatusPoller(status_state, client, battery_monitor, network_manager, led=led)
     wifi_status_char = WiFiStatusCharacteristic()
@@ -480,6 +496,7 @@ def main():
     status_poller.start()
     monitor.start()
     led.off()
+    ble_service.start()
     gatt_server.start()
     gatt_server.set_discoverable(False)
     device_status_char.start_periodic_updates(_collect_device_status, interval_s=30)
