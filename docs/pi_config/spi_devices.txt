@@ -1,0 +1,2 @@
+crw-rw---- 1 root spi 153, 0 Mar 15 02:24 /dev/spidev0.0
+crw-rw---- 1 root spi 153, 1 Mar 15 02:24 /dev/spidev0.1
