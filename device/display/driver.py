@@ -71,14 +71,15 @@ class ST7789Driver(DisplayDriver):
     WIDTH = 240
     HEIGHT = 280
 
-    def __init__(self):
+    def __init__(self, board=None):
         self._surface: pygame.Surface | None = None
-        self._board = None
+        self._board = board
 
     def init(self):
-        from hardware.whisplay_board import get_board
+        if self._board is None:
+            from hardware.whisplay_board import get_board
 
-        self._board = get_board()
+            self._board = get_board()
         if self._board is None:
             raise RuntimeError("WhisPlayBoard unavailable: get_board() returned None")
 
@@ -113,8 +114,11 @@ class ST7789Driver(DisplayDriver):
             return
         try:
             raw_rgb = pygame.image.tostring(self._surface, "RGB")
+            if self._board.previous_frame == raw_rgb:
+                return
             payload = self._rgb888_to_rgb565(raw_rgb)
             self._board.draw_image(0, 0, self.WIDTH, self.HEIGHT, payload)
+            self._board.previous_frame = raw_rgb
         except Exception as exc:
             logger.debug("st7789_update_failed error=%s", exc)
 
@@ -141,8 +145,8 @@ class ST7789Driver(DisplayDriver):
         pygame.quit()
 
 
-def create_driver() -> DisplayDriver:
+def create_driver(board=None) -> DisplayDriver:
     mode = os.environ.get("BITOS_DISPLAY", "pygame").lower()
     if mode == "st7789":
-        return ST7789Driver()
+        return ST7789Driver(board=board)
     return PygameDriver()

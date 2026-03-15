@@ -166,29 +166,18 @@ def _run_main_loop(driver, button, screen_mgr: ScreenManager, outbound_loop: Out
 
 
 def main():
-    import sys, os
-    sys.path.insert(0, os.environ.get(
-      'WHISPLAY_DRIVER_PATH', '/home/pi/Whisplay/Driver'))
-    import RPi.GPIO as GPIO
-    GPIO.setwarnings(False)
-    try:
-        GPIO.remove_event_detect(11)
-    except Exception:
-        pass
-    GPIO.cleanup()
-
     from device.hardware.whisplay_board import get_board
     board = get_board()
 
     logger.info("[BITOS] Starting device...")
     start_time = time.time()
 
-    driver = create_driver()
+    driver = create_driver(board=board)
     driver.init()
 
-    button = create_button_handler()
+    button = create_button_handler(board=board)
     audio_pipeline = get_audio_pipeline()
-    led = LEDController()
+    led = LEDController(board=board)
     monitor = SystemMonitor(interval=30)
     battery_monitor = BatteryMonitor()
     client = BackendClient()
