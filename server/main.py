@@ -613,12 +613,100 @@ async def get_battery():
 
 @app.get("/dashboard")
 async def get_dashboard():
-    return {"status": "not_implemented"}
+    """Aggregated snapshot for device home screen: time, tasks, messages, mail, system."""
+    now = datetime.now(timezone.utc)
+
+    # Tasks
+    vikunja = VikunjaAdapter()
+    try:
+        tasks = vikunja.get_today_tasks()
+    except Exception:
+        tasks = []
+
+    # Messages
+    msg_adapter = BlueBubblesAdapter()
+    try:
+        msg_unread = msg_adapter.get_unread_count()
+    except Exception:
+        msg_unread = 0
+
+    # Mail
+    gmail = GmailAdapter()
+    try:
+        mail_unread = gmail.get_unread_count()
+    except Exception:
+        mail_unread = 0
+
+    # System
+    mem = psutil.virtual_memory()
+    battery_pct = 0
+    charging = False
+    try:
+        from device.storage.repository import DeviceRepository
+        repo = DeviceRepository()
+        battery_pct = int(repo.get_setting("battery_pct", 0) or 0)
+        charging = str(repo.get_setting("charging", "false")).lower() == "true"
+    except Exception:
+        pass
+
+    return {
+        "timestamp": now.isoformat(),
+        "tasks": {"items": tasks[:5], "total": len(tasks)},
+        "messages": {"unread": msg_unread},
+        "mail": {"unread": mail_unread},
+        "system": {
+            "cpu_percent": psutil.cpu_percent(interval=0.1),
+            "ram_percent": mem.percent,
+            "battery": {"pct": battery_pct, "charging": charging},
+        },
+        "ai": {
+            "provider": llm_bridge.provider,
+            "model": llm_bridge.model,
+        },
+    }
 
 
 @app.get("/brief")
 async def get_brief():
-    return {"status": "not_implemented"}
+    """Morning-brief summary: tasks, unread counts, weather-ready structure."""
+    vikunja = VikunjaAdapter()
+    try:
+        tasks = vikunja.get_today_tasks()
+    except Exception:
+        tasks = []
+
+    msg_adapter = BlueBubblesAdapter()
+    try:
+        msg_unread = msg_adapter.get_unread_count()
+    except Exception:
+        msg_unread = 0
+
+    gmail = GmailAdapter()
+    try:
+        mail_unread = gmail.get_unread_count()
+        mail_threads = gmail.get_inbox(limit=3)
+    except Exception:
+        mail_unread = 0
+        mail_threads = []
+
+    now = datetime.now()
+    hour = now.hour
+    if hour < 12:
+        greeting = "Good morning"
+    elif hour < 17:
+        greeting = "Good afternoon"
+    else:
+        greeting = "Good evening"
+
+    task_names = [t.get("title", t.get("text", "")) for t in tasks[:5]]
+
+    return {
+        "greeting": greeting,
+        "date": now.strftime("%A, %B %-d"),
+        "tasks": {"items": task_names, "total": len(tasks)},
+        "messages": {"unread": msg_unread},
+        "mail": {"unread": mail_unread, "recent": mail_threads[:3]},
+    }
 
 @app.post("/shutdown")
 async def shutdown():
