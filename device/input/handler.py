@@ -155,12 +155,23 @@ class ButtonHandler:
 
 def create_button_handler(board=None, active_screen_name_getter: Callable[[], str] | None = None):
     """Create a button handler, preferring WhisPlay board callbacks when available."""
-    mode = os.environ.get("BITOS_BUTTON", "")
-    logger.info("button_handler mode=%s board=%s", mode, board)
+    import sys
+
+    _on_pi = sys.platform == "linux" and os.path.exists("/proc/device-tree/model")
+    mode_raw = os.environ.get("BITOS_BUTTON", "")
+    mode_default = "gpio" if _on_pi else "keyboard"
+    mode = mode_raw if mode_raw else mode_default
+    logger.info(
+        "button_init platform=%s on_pi=%s BITOS_BUTTON=%r effective_mode=%s board=%s",
+        sys.platform,
+        _on_pi,
+        mode_raw,
+        mode,
+        board,
+    )
 
     handler = ButtonHandler(active_screen_name_getter=active_screen_name_getter)
-    _on_pi = sys.platform == "linux" and os.path.exists("/proc/device-tree/model")
-    button_mode = os.environ.get("BITOS_BUTTON", "gpio" if _on_pi else "keyboard").lower()
+    button_mode = mode.lower()
 
     if board is None and button_mode == "gpio":
         from hardware.whisplay_board import get_board
