@@ -1,67 +1,96 @@
-## WhisPlayBoard
+# BITOS Hardware API Reference
+## Last verified: 2026-03-15
 
-Methods verified from `docs/whisplay/WhisPlay_methods.txt`:
+## Platform
+Raspberry Pi Zero 2W Rev 1.0 | BCM2837 | 512MB RAM
+OS: Raspberry Pi OS Lite 64-bit (Bookworm/Trixie)
+Python: 3.13.5
 
-- `__init__(self)`: Initializes GPIO, SPI, display state, backlight, RGB PWM, and button callbacks.
-- `_button_event_rpi(self, channel)`: Raspberry Pi interrupt callback that dispatches press/release handlers.
-- `_button_monitor_radxa(self)`: Radxa polling loop for button transitions.
-- `_button_press_event(self, channel)`: Internal helper that invokes registered press callback.
-- `_button_release_event(self, channel)`: Internal helper that invokes registered release callback.
-- `_create_rpi_rgb_pwm(self, pin, color_name)`: Creates software PWM for RGB channels on RPi.
-- `_detect_hardware_version(self)`: Detects platform variant and sets backlight mode.
-- `_detect_wm8960(self)`: Detects WM8960 audio card presence.
-- `_gpio_input(self, pin)`: Cross-platform GPIO input wrapper.
-- `_gpio_output(self, pin, value)`: Cross-platform GPIO output wrapper.
-- `_init_display(self)`: Sends panel init command sequence.
-- `_init_radxa(self)`: Configures Radxa GPIO and SPI.
-- `_init_rpi(self)`: Configures Raspberry Pi GPIO and SPI.
-- `_reset_lcd(self)`: Performs panel hardware reset sequence.
-- `_rpi_pin_can_drive_low(self, pin)`: Verifies an RPi GPIO pin can sink current.
-- `_rpi_set_backlight_state(self, value)`: Drives active-low backlight pin on RPi.
-- `_rpi_set_rgb_output_state(self, pin, value)`: Drives RGB pins in output mode on RPi.
-- `_rpi_set_rgb_sink_state(self, pin, value)`: Drives RGB pins with pulldown sink fallback on RPi.
-- `_send_command(self, cmd, *args)`: Sends a display command and optional command parameters.
-- `_send_data(self, data)`: Sends raw display data bytes over SPI.
-- `button_pressed(self)`: Returns current button state (`True` when pressed).
-- `cleanup(self)`: Stops PWM, closes SPI, and releases GPIO resources.
-- `draw_image(self, x, y, width, height, pixel_data)`: Draws RGB565 image payload in a region.
-- `draw_line(self, x0, y0, x1, y1, color)`: Draws a line in RGB565 color.
-- `draw_pixel(self, x, y, color)`: Draws a single pixel in RGB565 color.
-- `fill_screen(self, color)`: Fills full panel with one RGB565 color.
-- `on_button_press(self, callback)`: Registers callback for button press.
-- `on_button_release(self, callback)`: Registers callback for button release.
-- `set_backlight(self, brightness)`: Sets backlight level (0-100).
-- `set_backlight_mode(self, mode)`: Switches between PWM and simple on/off backlight modes.
-- `set_rgb(self, r, g, b)`: Sets RGB LED color.
-- `set_rgb_fade(self, r_target, g_target, b_target, duration_ms=100)`: Fades RGB LED to target color.
-- `set_window(self, x0, y0, x1, y1, use_horizontal=0)`: Sets panel drawing window.
+## WhisPlayBoard API
+File: /home/pi/Whisplay/Driver/WhisPlay.py
+Import: from WhisPlay import WhisPlayBoard
+
+### Methods (verified from live device)
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| draw_image | (x, y, width, height, pixel_data) | Push RGB565 frame to ST7789 |
+| fill_screen | (color) | Fill display with solid color |
+| set_backlight | (brightness: 0-100) | Set LCD backlight level |
+| set_rgb | (r, g, b) | Set RGB LED color |
+| set_rgb_fade | (r, g, b, duration_ms=100) | Fade RGB LED |
+| on_button_press | (callback: Callable) | Register press callback |
+| on_button_release | (callback: Callable) | Register release callback |
+| button_pressed | () -> bool | Read current button state |
+| cleanup | () | Release GPIO resources |
+
+### Attributes (verified)
+- platform: str = 'rpi'
+- backlight_mode: bool = True (PWM)
+- button_press_callback: Callable | None
+- button_release_callback: Callable | None
+- previous_frame: bytes | None (frame dedup)
+- spi: SpiDev
+
+### Critical Rules
+1. Init WhisPlayBoard ONCE via get_board() singleton
+2. NO GPIO.cleanup() before WhisPlayBoard init
+3. NO GPIO.setmode() before WhisPlayBoard init
+4. Button uses GPIO 11 (physical pin 23) — WhisPlayBoard owns it
+5. Register button via on_button_press/on_button_release ONLY
 
 ## GPIO Pin Map
+| BCM | Physical | Owner | Purpose |
+|-----|----------|-------|---------|
+| 7 | 26 | spi0 CS1 | SPI chip select 1 |
+| 8 | 24 | spi0 CS0 | SPI chip select 0 (display) |
+| 9 | 21 | WhisPlayBoard | SPI MISO |
+| 10 | 19 | WhisPlayBoard | SPI MOSI |
+| 11 | 23 | WhisPlayBoard | SPI CLK + Button input |
+| 16 | 36 | WhisPlayBoard | RGB LED Blue (input-pulldown mode) |
+| 18 | 12 | WhisPlayBoard | RGB LED Green (input-pulldown mode) |
+| 22 | 15 | WhisPlayBoard | RGB LED Red (input-pulldown mode) |
 
-| Pin | BCM | Owner | Used For |
-|---|---:|---|---|
-| 7 | 4 | WhisPlayBoard | LCD reset (`RST_PIN`) |
-| 11 | 17 | WhisPlayBoard | User button input (`BUTTON_PIN`) |
-| 13 | 27 | WhisPlayBoard | LCD data/command (`DC_PIN`) |
-| 15 | 22 | WhisPlayBoard | LCD backlight (`LED_PIN`, active-low) |
-| 16 | 23 | WhisPlayBoard | RGB LED blue channel (`BLUE_PIN`) |
-| 18 | 24 | WhisPlayBoard | RGB LED green channel (`GREEN_PIN`) |
-| 22 | 25 | WhisPlayBoard | RGB LED red channel (`RED_PIN`) |
-| 19 | 10 | SPI0 | LCD SPI MOSI |
-| 23 | 11 | SPI0 | LCD SPI SCLK |
-| 24 | 8 | SPI0 | LCD SPI CE0 |
+## I2C Devices (Bus 1 only — Bus 0 not available)
+| Address | Device | Purpose |
+|---------|--------|---------|
+| 0x1A (UU) | WM8960 | Audio codec (kernel-owned) |
+| 0x57 | PiSugar 3 | Battery management |
+| 0x68 | DS3231 | RTC (inside PiSugar 3) |
 
-## I2C Devices
+## SPI
+- /dev/spidev0.0 — ST7789 display (via WhisPlayBoard)
+- /dev/spidev0.1 — available
 
-| Address | Bus | Device | Purpose |
-|---|---:|---|---|
-| `0x1a` | 1 | WM8960 codec (`UU`) | Audio capture/playback codec |
-| `0x57` | 1 | PiSugar 3 battery manager | Battery percent/charging/voltage telemetry |
-| `0x68` | 1 | RTC (`UU`) | Real-time clock source |
+## Display
+- Controller: ST7789
+- Resolution: 240x280
+- Color: RGB565 (16-bit)
+- Interface: SPI0
+- Push frame: board.draw_image(0, 0, 240, 280, rgb565_bytes)
+- Clear: board.fill_screen(0)
+- Backlight: board.set_backlight(0-100)
 
-## ALSA
+## Audio (WM8960)
+- ALSA card: wm8960-soundcard (index 0)
+- ALSA device string: hw:0,0
+- REQUIRED format: channels=2 stereo, rate=48000Hz, S16_LE
+- Record: arecord -D hw:0,0 -f S16_LE -r 48000 -c 2
+- Play: pygame.mixer.pre_init(48000, -16, 2, 4096)
+- Key mixer controls:
+  - Speaker Playback Volume: max 127 (currently 109)
+  - Capture Volume: max 63 (currently 39)
+  - Playback Volume: max 255 (currently 255)
 
-| Card | Device | Controls |
-|---|---|---|
-| `0: wm8960soundcard (wm8960-soundcard)` | `0: bcm2835-i2s-wm8960-hifi` | Capture Volume, Capture Switch, Playback Volume, Speaker Playback Volume, Headphone Playback Volume, ADC PCM Capture Volume |
-| `1: vc4hdmi (vc4-hdmi)` | `0: MAI PCM i2s-hifi-0` | HDMI playback path (no WM8960 mixer controls) |
+## Battery (PiSugar 3)
+- I2C: bus=1, addr=0x57
+- Percentage: reg 0x2a (0-100, read 100 = 100%)
+- Voltage high: reg 0x22
+- Voltage low: reg 0x23
+- Voltage = ((reg[0x22] & 0x3f) << 8 | reg[0x23]) / 1000.0
+- Status: reg 0x02 (bit7=charging)
+
+## Services
+- bitos-server: uvicorn on port 8000
+- bitos-device: pygame device runtime
+- Both enabled and auto-restart
+- Device requires server health before starting

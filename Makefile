@@ -82,7 +82,7 @@ verify-hw:
 	python scripts/verify_hardware.py
 
 smoke-test:
-	@bash scripts/smoke_test.sh
+	@ssh pi@bitos 'cd ~/bitos && bash scripts/smoke_test.sh'
 
 run-pi:
 	BITOS_DISPLAY=st7789 \
