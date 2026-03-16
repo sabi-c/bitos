@@ -139,6 +139,11 @@ class BackendClient:
             "battery_pct": battery_pct,
             "web_search": web_search,
             "memory": memory,
+            "response_format_hint": (
+                "Keep responses concise and structured. Use short paragraphs "
+                "separated by blank lines. Aim for under 800 characters total "
+                "— the device displays text in pages of ~250 characters each."
+            ),
         }
         if model:
             payload["model"] = model
