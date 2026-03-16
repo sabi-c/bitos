@@ -124,6 +124,13 @@ class ChatPanel(BaseScreen):
         self._health = ServiceHealth()
         self._health_checked = False
 
+        # Pagination state
+        self._pages: list[list[str]] = []
+        self._current_page: int = 0
+        self._page_revealed: list[bool] = []
+        self._page_typewriter: TypewriterRenderer | None = None
+        self._context_header: str = ""
+
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
         self._font = load_ui_font("body", self._ui_settings)
         self._font_small = load_ui_font("small", self._ui_settings)
@@ -172,6 +179,14 @@ class ChatPanel(BaseScreen):
                 pass
             else:
                 self._mode = ChatMode.IDLE
+
+        # Tick page typewriter
+        if self._page_typewriter and not self._page_typewriter.finished:
+            self._page_typewriter.update(dt)
+        elif self._page_typewriter and self._page_typewriter.finished:
+            if self._current_page < len(self._page_revealed):
+                self._page_revealed[self._current_page] = True
+            self._page_typewriter = None
 
     def handle_input(self, event: pygame.event.Event):
         if event.type != pygame.KEYDOWN:
@@ -232,6 +247,15 @@ class ChatPanel(BaseScreen):
         elif action == "DOUBLE_PRESS":
             self._mode = ChatMode.ACTIONS
             self._action_template_index = 0
+        elif action == "TRIPLE_PRESS":
+            if len(self._pages) > 1:
+                # Mark current page as revealed
+                if self._current_page < len(self._page_revealed):
+                    self._page_revealed[self._current_page] = True
+                self._page_typewriter = None
+                # Cycle to next page
+                self._current_page = (self._current_page + 1) % len(self._pages)
+                self._start_page_typewriter()
 
     def _handle_recording(self, action: str):
         if action == "SHORT_PRESS" and not self._quick_talk:
@@ -279,6 +303,22 @@ class ChatPanel(BaseScreen):
             self._mode = ChatMode.IDLE
             with self._messages_lock:
                 self._status_detail = ""
+
+    def _start_page_typewriter(self) -> None:
+        """Start typewriter for current page if not yet revealed."""
+        if not self._pages or self._current_page >= len(self._pages):
+            self._page_typewriter = None
+            return
+        if self._current_page < len(self._page_revealed) and self._page_revealed[self._current_page]:
+            self._page_typewriter = None
+            return
+        page_text = "\n".join(self._pages[self._current_page])
+        speed = "slow"
+        if self._repository:
+            saved_speed = self._repository.get_setting("text_speed", None)
+            if saved_speed:
+                speed = str(saved_speed)
+        self._page_typewriter = TypewriterRenderer(page_text, speed=speed)
 
     def _get_action_bar_content(self) -> list[tuple[str, str]]:
         """Return action bar items for the current mode."""

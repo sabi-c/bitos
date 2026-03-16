@@ -231,5 +231,56 @@ class ChatModeTests(unittest.TestCase):
         self.assertEqual(pages[0][-1], "")  # empty line at end of page 1
 
 
+    def test_triple_press_advances_page(self):
+        panel = self._make_panel()
+        panel._pages = [["page1 line"], ["page2 line"], ["page3 line"]]
+        panel._page_revealed = [True, False, False]
+        panel._current_page = 0
+        panel.handle_action("TRIPLE_PRESS")
+        self.assertEqual(panel._current_page, 1)
+
+    def test_triple_press_cycles_around(self):
+        panel = self._make_panel()
+        panel._pages = [["p1"], ["p2"]]
+        panel._page_revealed = [True, True]
+        panel._current_page = 1
+        panel.handle_action("TRIPLE_PRESS")
+        self.assertEqual(panel._current_page, 0)
+
+    def test_triple_press_reveals_current_page(self):
+        panel = self._make_panel()
+        panel._pages = [["p1 line1", "p1 line2"], ["p2"]]
+        panel._page_revealed = [False, False]
+        panel._current_page = 0
+        panel._page_typewriter = MagicMock()
+        panel._page_typewriter.finished = False
+        panel.handle_action("TRIPLE_PRESS")
+        self.assertTrue(panel._page_revealed[0])
+        self.assertEqual(panel._current_page, 1)
+
+    def test_no_triple_press_without_pages(self):
+        panel = self._make_panel()
+        panel._pages = []
+        panel._current_page = 0
+        panel.handle_action("TRIPLE_PRESS")
+        self.assertEqual(panel._current_page, 0)
+
+    def test_page_typewriter_created_on_first_view(self):
+        panel = self._make_panel()
+        panel._pages = [["hello world", "second line"]]
+        panel._page_revealed = [False]
+        panel._current_page = 0
+        panel._start_page_typewriter()
+        self.assertIsNotNone(panel._page_typewriter)
+
+    def test_page_typewriter_skipped_on_revisit(self):
+        panel = self._make_panel()
+        panel._pages = [["hello world"]]
+        panel._page_revealed = [True]
+        panel._current_page = 0
+        panel._start_page_typewriter()
+        self.assertIsNone(panel._page_typewriter)
+
+
 if __name__ == "__main__":
     unittest.main()
