@@ -35,6 +35,11 @@ class LLMBridge:
     def stream_text(self, message: str, system_prompt: str | None = None, model_override: str | None = None) -> Generator[str, None, None]:
         raise NotImplementedError
 
+    def complete_text(self, prompt: str, system_prompt: str | None = None, model_override: str | None = None) -> tuple[str, int, int]:
+        """Non-streaming completion. Returns (response_text, input_tokens, output_tokens)."""
+        text = "".join(self.stream_text(prompt, system_prompt=system_prompt, model_override=model_override))
+        return text, 0, 0
+
 
 class AnthropicBridge(LLMBridge):
     def __init__(self, api_key: str, model: str):
@@ -55,6 +60,22 @@ class AnthropicBridge(LLMBridge):
         ) as stream:
             for text in stream.text_stream:
                 yield text
+
+    def complete_text(self, prompt: str, system_prompt: str | None = None, model_override: str | None = None) -> tuple[str, int, int]:
+        """Non-streaming completion. Returns (response_text, input_tokens, output_tokens)."""
+        if not self._api_key:
+            raise RuntimeError("ANTHROPIC_API_KEY not configured")
+
+        active_model = model_override or self.model
+        client = anthropic.Anthropic(api_key=self._api_key)
+        response = client.messages.create(
+            model=active_model,
+            max_tokens=1024,
+            messages=[{"role": "user", "content": prompt}],
+            system=system_prompt or SYSTEM_PROMPT,
+        )
+        text = "".join(block.text for block in response.content if hasattr(block, "text"))
+        return text, response.usage.input_tokens, response.usage.output_tokens
 
 
 class OpenAICompatibleBridge(LLMBridge):
