@@ -94,6 +94,7 @@ class BackendClient:
         mode = "producer"
         tasks_today: list[str] = []
         battery_pct: int | None = None
+        location: dict | None = None
         web_search = True
         memory = True
         ai_model = ""
@@ -106,6 +107,11 @@ class BackendClient:
             ai_model = str(repository.get_setting("ai_model", "") or "")
             tasks_today = [str(t.get("title", "")).strip() for t in repository.list_incomplete_tasks(limit=3)]
             tasks_today = [t for t in tasks_today if t]
+            # Load cached geolocation if available
+            import json as _json
+            raw_loc = repository.get_setting("geolocation", default=None)
+            if raw_loc:
+                location = _json.loads(raw_loc) if isinstance(raw_loc, str) else raw_loc
         except Exception as exc:
             logging.debug("chat_context_load_failed error=%s", exc)
 
@@ -116,7 +122,7 @@ class BackendClient:
             logging.debug("battery_read_failed error=%s", exc)
 
         try:
-            return self._stream_chat_sse(message, mode, tasks_today, battery_pct, web_search, memory, ai_model)
+            return self._stream_chat_sse(message, mode, tasks_today, battery_pct, web_search, memory, ai_model, location)
         except Exception as exc:
             kind, message_copy = self._http_error_message(exc)
             retryable = kind in {"offline", "timeout", "network", "server"}
@@ -131,6 +137,7 @@ class BackendClient:
         web_search: bool = True,
         memory: bool = True,
         model: str = "",
+        location: dict | None = None,
     ) -> Generator[str, None, None]:
         """Yield text chunks from the /chat SSE stream in real time."""
         payload: dict = {
@@ -148,6 +155,8 @@ class BackendClient:
         }
         if model:
             payload["model"] = model
+        if location:
+            payload["location"] = location
         with httpx.stream(
             "POST",
             f"{self.base_url}/chat",

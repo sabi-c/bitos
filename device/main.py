@@ -60,6 +60,7 @@ from screens.subscreens.integration_detail import IntegrationDetailPanel
 from overlays.power import PowerOverlay
 
 from client.api import BackendClient
+from network.geolocation import detect_and_set_timezone
 from storage.repository import DeviceRepository
 from integrations.adapters import create_runtime_adapter
 from integrations.queue import OutboundCommandQueue
@@ -186,6 +187,15 @@ def main():
     client = BackendClient()
     repository = DeviceRepository()
     repository.initialize()
+
+    # Detect timezone from IP geolocation in background (like greeting fetch)
+    threading.Thread(
+        target=detect_and_set_timezone,
+        kwargs={"repository": repository},
+        daemon=True,
+        name="geolocation",
+    ).start()
+
     notification_queue = NotificationQueue(repository=repository)
     status_state = StatusState()
     screen_mgr = ScreenManager(notification_queue=notification_queue, status_state=status_state)
