@@ -42,6 +42,10 @@ class LockScreen(BaseScreen):
         self._flash_until: float = 0.0      # time.time() when flash ends
         self._flash_color = _RED
 
+        # Bypass overlay state
+        self._bypass_message: str | None = None
+        self._bypass_until: float = 0.0
+
 
         logging.getLogger(__name__).info(
             "lock_screen pin_len=%d", len(self._pin),
@@ -149,6 +153,16 @@ class LockScreen(BaseScreen):
         hint2_y = hint1_y + hint1.get_height() + 4
         surface.blit(hint2, (hint2_x, hint2_y))
 
+        # ── Bypass overlay ──
+        if self._bypass_message and time.time() < self._bypass_until:
+            overlay = pygame.Surface((PHYSICAL_W, 32))
+            overlay.fill(WHITE)
+            msg = self._font_body.render(self._bypass_message, False, BLACK)
+            overlay.blit(msg, ((PHYSICAL_W - msg.get_width()) // 2,
+                               (32 - msg.get_height()) // 2))
+            surface.blit(overlay, (0, PHYSICAL_H // 2 - 16))
+            return  # skip battery during bypass flash
+
         # ── Battery ──
         try:
             batt = BatteryMonitor().get_status()
@@ -197,6 +211,16 @@ class LockScreen(BaseScreen):
             self._entered.clear()
             self._current_digit = 0
             self._cycling = False
+
+    def bypass_unlock(self):
+        """5-press bypass: show brief overlay then unlock."""
+        if self._is_unlocking:
+            return
+        self._bypass_message = "BYPASS PASSCODE"
+        self._bypass_until = time.time() + 0.6
+        # Delayed unlock after overlay shows
+        import threading
+        threading.Timer(0.6, self._unlock).start()
 
     def _unlock(self):
         if self._is_unlocking:

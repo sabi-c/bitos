@@ -29,9 +29,6 @@ from display.tokens import (
 from display.animator import orb_rotate, blink_cursor
 
 
-logger = logging.getLogger(__name__)
-
-
 class BootDiagnostics:
     CHECKS = ["display", "button", "audio", "network", "api_key", "battery"]
 

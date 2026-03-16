@@ -10,8 +10,6 @@ from screens.components import NavItem, VerticalNavController
 
 class HomePanel(BaseScreen):
     """Home panel with focusable sidebar entries and action routing."""
-    _owns_status_bar = True
-
     _owns_status_bar: bool = True
 
     def __init__(
@@ -43,7 +41,6 @@ class HomePanel(BaseScreen):
         self._on_open_settings = on_open_settings
         self._on_show_shade = on_show_shade
         self._repository = repository
-        self._client = None
         self._status_state = status_state
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
         self._client = client

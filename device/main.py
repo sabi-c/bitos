@@ -213,7 +213,7 @@ def main():
         # Dev bypass: 5-press on lock screen skips PIN
         current = screen_mgr.current if hasattr(screen_mgr, 'current') else None
         if isinstance(current, LockScreen):
-            current._unlock()
+            current.bypass_unlock()
             return
         open_power_overlay()
 

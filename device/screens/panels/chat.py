@@ -8,6 +8,8 @@ import time
 
 import pygame
 
+logger = logging.getLogger(__name__)
+
 from screens.base import BaseScreen
 from display.tokens import (
     BLACK,
@@ -447,7 +449,7 @@ class ChatPanel(BaseScreen):
                 self._status_detail = "transcribing..."
             text = self._audio_pipeline.transcribe(audio_path).strip()
         except Exception as exc:
-            logging.getLogger(__name__).error("voice_capture_failed: %s", exc, exc_info=True)
+            logger.error("voice_capture_failed: %s", exc, exc_info=True)
             self._mode = ChatMode.IDLE
             if self._led:
                 self._led.error()
@@ -548,7 +550,7 @@ class ChatPanel(BaseScreen):
                         self._led.speaking()
                     self._audio_pipeline.speak(response_text)
                 except Exception as tts_exc:
-                    logging.getLogger(__name__).error("tts_failed: %s", tts_exc)
+                    logger.error("tts_failed: %s", tts_exc)
 
             with self._messages_lock:
                 self._status = self.STATUS_CONNECTED
@@ -558,7 +560,7 @@ class ChatPanel(BaseScreen):
         except BackendChatError as exc:
             self._mark_failed(message, exc.kind, exc.retryable)
         except Exception as exc:
-            logging.getLogger(__name__).error("stream_response_failed: %s", exc, exc_info=True)
+            logger.error("stream_response_failed: %s", exc, exc_info=True)
             self._mark_failed(message, "unknown", True, custom_copy=f"error: {str(exc)[:30]}")
         finally:
             self._is_streaming = False
