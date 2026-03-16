@@ -1,6 +1,8 @@
 """Runtime UI theme helpers (fed by backend settings)."""
 from __future__ import annotations
 
+from functools import lru_cache
+
 import pygame
 
 _FONT_CACHE: dict[tuple[str, int], pygame.font.Font] = {}
@@ -73,6 +75,15 @@ def load_ui_font(role: str, ui_settings: dict) -> pygame.font.Font:
 
     _FONT_CACHE[cache_key] = font
     return font
+
+
+@lru_cache(maxsize=16)
+def get_font(size: int) -> pygame.font.Font:
+    """Load a font at the given pixel size, with fallback to system monospace."""
+    try:
+        return pygame.font.Font(FONT_PATH, size)
+    except Exception:
+        return pygame.font.SysFont("monospace", size)
 
 
 def ui_line_height(font: pygame.font.Font, ui_settings: dict) -> int:

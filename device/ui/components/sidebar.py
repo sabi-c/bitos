@@ -5,21 +5,18 @@ Matches bitos-nav-v2.html .sidebar specification.
 
 import pygame
 
-from device.ui.fonts import get_font
-from device.ui.font_sizes import SIDEBAR_ITEM
-
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-GRAY_444 = (68, 68, 68)
-GRAY_AAA = (170, 170, 170)
-GRAY_080808 = (8, 8, 8)
-GRAY_0A = (10, 10, 10)
+from device.display.theme import get_font
+from device.display.tokens import (
+    FONT_SIZE_SIDEBAR_ITEM,
+    WHITE, BLACK,
+    GRAY_44, GRAY_AA, GRAY_08, GRAY_0A,
+)
 
 SEP_COLOR = GRAY_0A
 
 SIDEBAR_W = 84
 ITEM_H = 27  # padding top+bottom + 12px font (27*9=243 fits in 248px)
-FONT_SIZE = SIDEBAR_ITEM
+FONT_SIZE = FONT_SIZE_SIDEBAR_ITEM
 PAD_X = 7
 PAD_Y = 7
 
@@ -56,7 +53,7 @@ class Sidebar:
                 pygame.draw.rect(surface, WHITE, (x, iy, SIDEBAR_W - 2, ITEM_H))
                 text_color = BLACK
             else:
-                text_color = GRAY_444
+                text_color = GRAY_44
 
             text_surf = font.render(label, False, text_color)
             # Clip text if wider than sidebar

@@ -7,14 +7,11 @@ from datetime import datetime
 
 import pygame
 
-from device.ui.fonts import get_font
-from device.ui.font_sizes import STATUS_BAR
-
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
+from device.display.theme import get_font
+from device.display.tokens import FONT_SIZE_STATUS_BAR, WHITE, BLACK
 
 BAR_H = 20
-FONT_SIZE = STATUS_BAR
+FONT_SIZE = FONT_SIZE_STATUS_BAR
 PAD_X = 6
 
 

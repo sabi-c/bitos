@@ -24,6 +24,18 @@ DIM3 = (102, 102, 102)   # 40%
 DIM4 = (51, 51, 51)       # 20%
 HAIRLINE = (26, 26, 26)   # Subtle borders
 
+# Extended grays (migrated from ui/panels/base.py)
+GRAY_08 = (8, 8, 8)
+GRAY_0A = (10, 10, 10)
+GRAY_11 = (17, 17, 17)
+GRAY_1A = (26, 26, 26)
+GRAY_22 = (34, 34, 34)
+GRAY_33 = (51, 51, 51)
+GRAY_44 = (68, 68, 68)
+GRAY_55 = (85, 85, 85)
+GRAY_66 = (102, 102, 102)
+GRAY_AA = (170, 170, 170)
+
 # ── Typography ─────────────────────────────────────────────────
 FONT_REGISTRY = {
     "press_start_2p": "assets/fonts/PressStart2P.ttf",
@@ -41,6 +53,18 @@ FONT_SIZES = {
     "small": 10,
     "hint": 8,
 }
+
+# Font size named constants (migrated from ui/font_sizes.py)
+FONT_SIZE_TIME_LARGE = 24
+FONT_SIZE_TIMER = 20
+FONT_SIZE_TITLE = 16
+FONT_SIZE_BODY = 12
+FONT_SIZE_SIDEBAR_ITEM = 12
+FONT_SIZE_CAPTION = 10
+FONT_SIZE_SMALL = 10
+FONT_SIZE_HINT = 8
+FONT_SIZE_STATUS_BAR = 10
+FONT_SIZE_PANEL_HEADER = 12
 
 # ── Borders & Padding ─────────────────────────────────────────
 BORDER_OUTER = 2   # px, screen edge

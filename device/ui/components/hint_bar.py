@@ -5,15 +5,12 @@ Matches bitos-nav-v2.html .kh specification.
 
 import pygame
 
-from device.ui.fonts import get_font
-from device.ui.font_sizes import HINT
-
-GRAY_111 = (17, 17, 17)
-GRAY_0A = (10, 10, 10)
+from device.display.theme import get_font
+from device.display.tokens import FONT_SIZE_HINT, GRAY_11, GRAY_0A
 
 SEP_COLOR = GRAY_0A
 
-FONT_SIZE = HINT  # 8px, lowest acceptable size on 218 PPI
+FONT_SIZE = FONT_SIZE_HINT  # 8px, lowest acceptable size on 218 PPI
 PAD_X = 6
 PAD_Y = 2
 DEFAULT_HINT = "SHORT:NEXT \u00b7 DBL:SELECT \u00b7 LONG:BACK"
@@ -33,5 +30,5 @@ class HintBar:
         pygame.draw.line(surface, SEP_COLOR, (0, y), (width, y))
 
         # Text centered
-        hint_surf = font.render(self.text, False, GRAY_111)
+        hint_surf = font.render(self.text, False, GRAY_11)
         surface.blit(hint_surf, ((width - hint_surf.get_width()) // 2, y + PAD_Y))
