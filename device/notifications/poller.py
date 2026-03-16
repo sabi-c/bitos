@@ -18,6 +18,8 @@ class NotificationPoller:
         self._thread: threading.Thread | None = None
         self._last_health_state: bool | None = None
         self._notified_overdue_task_ids: set[str] = set()
+        # Optional callback for interactive banners (set by main.py)
+        self.on_banner: callable | None = None
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -62,6 +64,9 @@ class NotificationPoller:
             source_id="health",
         )
         self._queue.push_record(record)
+        # Show interactive banner for AI status changes
+        if self.on_banner:
+            self.on_banner("CLAUDE", "C", message)
 
     def _poll_overdue_tasks(self) -> None:
         overdue = self._repository.list_overdue_tasks(date.today().isoformat())

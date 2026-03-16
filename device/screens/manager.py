@@ -6,6 +6,7 @@ import warnings
 import display.tokens as tokens
 from display.tokens import BLACK, WHITE
 from overlays import NotificationQueue, NotificationShade, PasskeyOverlay
+from overlays.notification_banner import NotificationBanner
 from screens.base import BaseScreen
 
 
@@ -25,6 +26,7 @@ class ScreenManager:
         self._notification_shade: NotificationShade | None = None
         self._passkey_overlay: PasskeyOverlay | None = None
         self._active_overlay = None
+        self._active_banner: NotificationBanner | None = None
         self._device_status_char = None
         self._status_state = status_state
         try:
@@ -103,6 +105,17 @@ class ScreenManager:
     def _on_pairing_cancelled(self) -> None:
         self._passkey_overlay = None
 
+    def show_banner(self, banner: NotificationBanner) -> None:
+        """Show an interactive notification banner that captures all gestures."""
+        self._active_banner = banner
+
+    def dismiss_banner(self) -> None:
+        self._active_banner = None
+
+    @property
+    def active_banner(self) -> NotificationBanner | None:
+        return self._active_banner
+
     def push_overlay(self, overlay) -> None:
         self._active_overlay = overlay
 
@@ -152,6 +165,10 @@ class ScreenManager:
             self.current.handle_input(event)
 
     def handle_action(self, action: str):
+        if self._active_banner and self._active_banner.handle_action(action):
+            if self._active_banner and self._active_banner.dismissed:
+                self._active_banner = None
+            return
         if self._active_overlay and self._active_overlay.handle_input(action):
             return
         if self._passkey_overlay and self._passkey_overlay.handle_input(action):
@@ -165,6 +182,8 @@ class ScreenManager:
 
     def update(self, dt: float):
         dt_ms = int(max(0.0, dt) * 1000)
+        if self._active_banner and not self._active_banner.tick(dt_ms):
+            self._active_banner = None
         self.notification_queue.tick(dt_ms)
         if self._active_overlay and not self._active_overlay.tick(dt_ms):
             self._active_overlay = None
@@ -174,6 +193,9 @@ class ScreenManager:
             self.current.update(dt)
 
     def render_overlay(self, surface: pygame.Surface):
+        if self._active_banner:
+            self._active_banner.render(surface)
+            return  # banner covers everything
         if self._notification_shade:
             self._notification_shade.render(surface, tokens)
         if self._passkey_overlay:

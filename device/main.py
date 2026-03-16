@@ -26,6 +26,7 @@ from display.tokens import FPS
 from input.handler import ButtonEvent, create_button_handler
 from notifications import NotificationPoller
 from overlays import NotificationQueue, NotificationToast, QROverlay
+from overlays.notification_banner import NotificationBanner
 from bluetooth import AuthManager, get_gatt_server
 from bluetooth.characteristics import DeviceInfoCharacteristic, DeviceStatusCharacteristic, KeyboardInputCharacteristic, WiFiConfigCharacteristic, WiFiStatusCharacteristic
 from bluetooth.constants import build_setup_url
@@ -221,6 +222,36 @@ def main():
     button.on(ButtonEvent.POWER_GESTURE, _on_power_gesture)
 
     notification_poller = NotificationPoller(queue=notification_queue, api_client=client, repository=repository)
+
+    def show_proactive_notification(app: str, icon: str, message: str):
+        """Show an interactive notification banner that wakes the screen.
+
+        Called from notification poller or heartbeat when agent has something to say.
+        """
+        was_sleeping = idle_mgr.state in ("dim", "sleep")
+        idle_mgr.wake()
+
+        def on_banner_reply(mode: str):
+            """Route reply to chat panel — open it if needed."""
+            logger.info("[Banner] reply mode=%s", mode)
+            # TODO: open chat panel with recording pre-started
+
+        def on_banner_dismiss():
+            logger.info("[Banner] dismissed")
+
+        banner = NotificationBanner(
+            app=app,
+            icon=icon,
+            message=message,
+            time_str=time.strftime("%H:%M"),
+            was_sleeping=was_sleeping,
+            on_reply=on_banner_reply,
+            on_dismiss=on_banner_dismiss,
+        )
+        screen_mgr.show_banner(banner)
+
+    # Expose to poller so it can trigger banners for high-priority notifications
+    notification_poller.on_banner = show_proactive_notification
 
     # SD-002: BLE auth bootstrap binds device identity + shared secret before any protected characteristic writes.
     auth_manager = AuthManager(
