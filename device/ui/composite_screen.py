@@ -1,16 +1,19 @@
 """CompositeScreen — full 240x280 layout with sidebar navigation.
 
 Extends BaseScreen so the old ScreenManager can push/pop it.
-Composes: StatusBar (20px top) | Sidebar (84px left) + RightPanel (156x248) | HintBar (12px bottom).
+Composes: StatusBar (20px) | Sidebar (84px left) + RightPanel (156x208) | HintBar (20px).
+All zones respect SAFE_INSET=16 to avoid corner-clipped areas.
 
 ┌─────────────────────────────────┐ 0
-│         STATUS BAR (20px)       │
-├──────────┬──────────────────────┤ 20
+│          (16px inset)           │
+│         STATUS BAR (20px)       │ 16
+├──────────┬──────────────────────┤ 36
 │ SIDEBAR  │   RIGHT PANEL       │
-│  84px    │    156x248px        │
+│  84px    │    156x208px        │
 │          │  [panel.render()]   │
-├──────────┴──────────────────────┤ 268
-│      HINT BAR (12px)           │
+├──────────┴──────────────────────┤ 244
+│      HINT BAR (20px)           │
+│          (16px inset)           │
 └─────────────────────────────────┘ 280
 """
 
@@ -18,7 +21,7 @@ from __future__ import annotations
 
 import pygame
 
-from device.display.tokens import PHYSICAL_W, PHYSICAL_H, SIDEBAR_W, CONTENT_W, STATUS_BAR_H
+from device.display.tokens import PHYSICAL_W, PHYSICAL_H, SIDEBAR_W, CONTENT_W, STATUS_BAR_H, SAFE_INSET
 from device.ui.components.sidebar import Sidebar, ITEMS
 from device.ui.components.status_bar import StatusBar
 from device.ui.components.hint_bar import HintBar
@@ -26,8 +29,10 @@ from device.screens.base import BaseScreen
 
 BLACK = (0, 0, 0)
 
-HINT_BAR_H = 12
-RIGHT_PANEL_H = PHYSICAL_H - STATUS_BAR_H - HINT_BAR_H  # 250
+HINT_BAR_H = 20  # Upgraded action bar height (was 12)
+CONTENT_TOP = SAFE_INSET + STATUS_BAR_H  # 36
+CONTENT_BOTTOM = PHYSICAL_H - SAFE_INSET - HINT_BAR_H  # 244
+RIGHT_PANEL_H = CONTENT_BOTTOM - CONTENT_TOP  # 208
 
 
 class CompositeScreen(BaseScreen):
@@ -51,7 +56,7 @@ class CompositeScreen(BaseScreen):
         self._status_bar = StatusBar()
         self._hint_bar = HintBar()
 
-        # Subsurface for right panel rendering (156x250)
+        # Subsurface for right panel rendering (156x208)
         self._right_surface = pygame.Surface((CONTENT_W, RIGHT_PANEL_H))
 
     # ── Lifecycle ────────────────────────────────────────────────
@@ -67,22 +72,22 @@ class CompositeScreen(BaseScreen):
     def render(self, surface: pygame.Surface) -> None:
         surface.fill(BLACK)
 
-        # Status bar at top (full width, 18px)
-        self._status_bar.render(surface, y=0, width=PHYSICAL_W)
+        # Status bar at top (full width, 20px, below SAFE_INSET)
+        self._status_bar.render(surface, y=SAFE_INSET, width=PHYSICAL_W)
 
-        # Sidebar on left (84px wide, from y=18 to y=268)
-        self._sidebar.render(surface, x=0, y=STATUS_BAR_H, height=RIGHT_PANEL_H)
+        # Sidebar on left (84px wide, from y=36 to y=244)
+        self._sidebar.render(surface, x=0, y=CONTENT_TOP, height=RIGHT_PANEL_H)
 
-        # Right panel (156x250, positioned at x=84, y=18)
+        # Right panel (156x208, positioned at x=84, y=36)
         label = self._sidebar.items[self._sidebar.selected_index]
         panel = self._right_panels.get(label)
         if panel is not None:
             self._right_surface.fill(BLACK)
             panel.render(self._right_surface)
-            surface.blit(self._right_surface, (SIDEBAR_W, STATUS_BAR_H))
+            surface.blit(self._right_surface, (SIDEBAR_W, CONTENT_TOP))
 
-        # Hint bar at bottom (full width, 12px)
-        self._hint_bar.render(surface, y=PHYSICAL_H - HINT_BAR_H, width=PHYSICAL_W)
+        # Hint bar at bottom (full width, 20px)
+        self._hint_bar.render(surface, y=CONTENT_BOTTOM, width=PHYSICAL_W)
 
     def draw(self, surface: pygame.Surface) -> None:
         """Alias for ScreenManager compatibility (calls render)."""
