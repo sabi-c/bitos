@@ -8,7 +8,8 @@ import pygame
 from device.ui.fonts import get_font
 from device.ui.font_sizes import HINT
 
-from device.ui.panels.base import GRAY_111, GRAY_0A
+GRAY_111 = (17, 17, 17)
+GRAY_0A = (10, 10, 10)
 
 SEP_COLOR = GRAY_0A
 

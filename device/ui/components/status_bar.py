@@ -10,7 +10,8 @@ import pygame
 from device.ui.fonts import get_font
 from device.ui.font_sizes import STATUS_BAR
 
-from device.ui.panels.base import WHITE, BLACK
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
 
 BAR_H = 20
 FONT_SIZE = STATUS_BAR

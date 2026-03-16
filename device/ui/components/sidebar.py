@@ -8,7 +8,12 @@ import pygame
 from device.ui.fonts import get_font
 from device.ui.font_sizes import SIDEBAR_ITEM
 
-from device.ui.panels.base import WHITE, BLACK, GRAY_444, GRAY_AAA, GRAY_080808, GRAY_0A
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+GRAY_444 = (68, 68, 68)
+GRAY_AAA = (170, 170, 170)
+GRAY_080808 = (8, 8, 8)
+GRAY_0A = (10, 10, 10)
 
 SEP_COLOR = GRAY_0A
 
