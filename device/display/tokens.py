@@ -48,10 +48,10 @@ FONT_PATH = FONT_REGISTRY[DEFAULT_FONT_FAMILY]
 FONT_SIZES = {
     "time_large": 24,
     "timer": 20,
-    "title": 16,
-    "body": 12,
-    "small": 10,
-    "hint": 8,
+    "title": 18,
+    "body": 14,
+    "small": 11,
+    "hint": 9,
 }
 
 # Font size named constants (migrated from ui/font_sizes.py)

@@ -77,6 +77,13 @@ def load_ui_font(role: str, ui_settings: dict) -> pygame.font.Font:
     return font
 
 
+def load_ui_font_bold(role: str, ui_settings: dict) -> pygame.font.Font:
+    """Load a bold variant of a UI font."""
+    font = load_ui_font(role, ui_settings)
+    font.set_bold(True)
+    return font
+
+
 @lru_cache(maxsize=16)
 def get_font(size: int) -> pygame.font.Font:
     """Load a font at the given pixel size, with fallback to system monospace."""
