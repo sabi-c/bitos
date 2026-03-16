@@ -75,6 +75,11 @@
   </div>
 
   <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+  </script>
+  <script>
     const params = new URLSearchParams(location.search);
     const SERVER = params.get('server')
       || sessionStorage.getItem('bitos_server')

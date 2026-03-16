@@ -15,6 +15,11 @@
     <h1>Crypto Parity Known Vector</h1>
     <p>Validates JS <code>deriveBleSecret("0000", "DESKTOP-DEV-001")</code> against Python PBKDF2 output.</p>
     <p id="result">Running…</p>
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+      }
+    </script>
     <script src="./js/crypto.js"></script>
     <script src="./js/auth.js"></script>
     <script>

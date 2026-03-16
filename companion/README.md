@@ -1,13 +1,13 @@
 # BITOS Companion PWA
 
-Hosted at: https://bitos-companion.onrender.com
+Hosted at: https://bitos-p8xw.onrender.com
 (or GitHub Pages — see deployment notes)
 
 ## Source of truth files
 - Real BLE implementation: `companion/js/ble.js`
 - Real auth implementation: `companion/js/auth.js`
 - Real crypto helpers: `companion/js/crypto.js`
-- Legacy mock stub (kept for compatibility): `companion/ble.js`
+- Service worker for offline support: `companion/sw.js`
 
 ## Local testing
 1. Start a static server from the repository root:
