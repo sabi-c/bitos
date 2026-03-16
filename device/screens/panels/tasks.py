@@ -6,7 +6,7 @@ import threading
 import pygame
 
 from screens.base import BaseScreen
-from display.tokens import BLACK, WHITE, DIM2, DIM3, PHYSICAL_W, PHYSICAL_H, STATUS_BAR_H, ROW_H_MIN
+from display.tokens import BLACK, WHITE, DIM2, DIM3, DIM4, HAIRLINE, PHYSICAL_W, PHYSICAL_H, STATUS_BAR_H, ROW_H_MIN
 from display.theme import merge_runtime_ui_settings, load_ui_font
 
 
@@ -73,14 +73,23 @@ class TasksPanel(BaseScreen):
             self._tasks[self._cursor]["done"] = True
             self._confirm_complete = False
 
+    def _render_skeleton(self, surface, y, count=4):
+        """Render skeleton loading rows with step blink."""
+        blink = (pygame.time.get_ticks() // 800) % 2 == 0
+        color = DIM3 if blink else DIM4
+        for _ in range(count):
+            pygame.draw.rect(surface, color, (8, y + 4, PHYSICAL_W - 48, 8))
+            pygame.draw.rect(surface, HAIRLINE, (PHYSICAL_W - 36, y + 4, 28, 8))
+            pygame.draw.line(surface, HAIRLINE, (0, y + ROW_H_MIN - 1), (PHYSICAL_W, y + ROW_H_MIN - 1))
+            y += ROW_H_MIN
+
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
         title = self._font_small.render("TASKS", False, WHITE)
         surface.blit(title, (6, (STATUS_BAR_H - title.get_height()) // 2))
 
         if self._state == "loading":
-            s = self._font_body.render("FETCHING TASKS...", False, DIM2)
-            surface.blit(s, ((PHYSICAL_W - s.get_width()) // 2, PHYSICAL_H // 2))
+            self._render_skeleton(surface, STATUS_BAR_H + 12)
             return
         if self._state == "empty":
             s = self._font_body.render("NO TASKS TODAY ✓", False, DIM2)

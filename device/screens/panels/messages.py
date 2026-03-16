@@ -7,7 +7,7 @@ import time
 import pygame
 
 from display.theme import load_ui_font, merge_runtime_ui_settings
-from display.tokens import BLACK, DIM2, DIM3, PAD_WIDGET, PHYSICAL_H, PHYSICAL_W, ROW_H_MIN, STATUS_BAR_H, WHITE
+from display.tokens import BLACK, DIM2, DIM3, DIM4, HAIRLINE, PAD_WIDGET, PHYSICAL_H, PHYSICAL_W, ROW_H_MIN, STATUS_BAR_H, WHITE
 from screens.base import BaseScreen
 
 
@@ -176,6 +176,16 @@ class MessagesPanel(BaseScreen):
         self._draft_text = draft or transcript
         self._state = self.STATE_CONFIRM_SEND
 
+    def _render_skeleton(self, surface, y, count=4):
+        """Render skeleton loading rows with step blink."""
+        blink = (pygame.time.get_ticks() // 800) % 2 == 0
+        color = DIM3 if blink else DIM4
+        for _ in range(count):
+            pygame.draw.rect(surface, color, (8, y + 4, PHYSICAL_W - 48, 8))
+            pygame.draw.rect(surface, HAIRLINE, (PHYSICAL_W - 36, y + 4, 28, 8))
+            pygame.draw.line(surface, HAIRLINE, (0, y + ROW_H_MIN - 1), (PHYSICAL_W, y + ROW_H_MIN - 1))
+            y += ROW_H_MIN
+
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
         if self._state == self.STATE_LIST:
@@ -196,8 +206,7 @@ class MessagesPanel(BaseScreen):
         self._render_status_bar(surface, "MESSAGES")
         content_y = STATUS_BAR_H + CONTENT_TOP_PAD
         if self._loading:
-            txt = self._font_body.render("LOADING...", False, DIM2)
-            surface.blit(txt, ((PHYSICAL_W - txt.get_width()) // 2, PHYSICAL_H // 2))
+            self._render_skeleton(surface, content_y)
         elif not self._conversations:
             txt = self._font_body.render("NO MESSAGES", False, DIM2)
             surface.blit(txt, ((PHYSICAL_W - txt.get_width()) // 2, PHYSICAL_H // 2))
