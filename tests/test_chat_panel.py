@@ -159,9 +159,9 @@ class ChatModeTests(unittest.TestCase):
         content = panel._get_action_bar_content()
         self.assertEqual(len(content), 3)
         labels = [c[1] for c in content]
-        self.assertIn("RECORD", labels)
-        self.assertIn("TALK", labels)
-        self.assertIn("ACTIONS", labels)
+        self.assertIn("rec", labels)
+        self.assertIn("talk", labels)
+        self.assertIn("act", labels)
 
     def test_field_recording_action_bar(self):
         panel = self._make_panel()
@@ -170,8 +170,8 @@ class ChatModeTests(unittest.TestCase):
         content = panel._get_action_bar_content()
         self.assertEqual(len(content), 2)
         labels = [c[1] for c in content]
-        self.assertIn("STOP & SEND", labels)
-        self.assertIn("CANCEL", labels)
+        self.assertIn("send", labels)
+        self.assertIn("cancel", labels)
 
     def test_quick_talk_action_bar(self):
         panel = self._make_panel()
@@ -179,7 +179,7 @@ class ChatModeTests(unittest.TestCase):
         panel._quick_talk = True
         content = panel._get_action_bar_content()
         self.assertEqual(len(content), 1)
-        self.assertEqual(content[0][1], "RELEASE TO SEND")
+        self.assertEqual(content[0][1], "release")
 
     def test_streaming_action_bar_empty(self):
         panel = self._make_panel()

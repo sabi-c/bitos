@@ -350,15 +350,18 @@ class ChatPanel(BaseScreen):
     def _get_action_bar_content(self) -> list[tuple[str, str]]:
         """Return action bar items for the current mode."""
         if self._mode == ChatMode.IDLE:
-            return [("tap", "RECORD"), ("hold", "TALK"), ("double", "ACTIONS")]
+            items = [("tap", "rec"), ("hold", "talk"), ("double", "act")]
+            if len(self._pages) > 1:
+                items.append(("triple", "next"))
+            return items
         elif self._mode == ChatMode.RECORDING:
             if self._quick_talk:
-                return [("hold", "RELEASE TO SEND")]
-            return [("tap", "STOP & SEND"), ("hold", "CANCEL")]
+                return [("hold", "release")]
+            return [("tap", "send"), ("hold", "cancel")]
         elif self._mode == ChatMode.ACTIONS:
-            return [("tap", "NEXT"), ("double", "SELECT"), ("hold", "BACK")]
+            return [("tap", "next"), ("double", "select"), ("hold", "back")]
         elif self._mode == ChatMode.SPEAKING:
-            return [("tap", "STOP")]
+            return [("tap", "stop")]
         return []  # STREAMING — render plain text instead
 
     @staticmethod
@@ -415,7 +418,6 @@ class ChatPanel(BaseScreen):
 
         # Recording indicator or connection status
         if self._mode == ChatMode.RECORDING:
-            # Pulsing red dot
             pulse = (pygame.time.get_ticks() // 500) % 2 == 0
             rec_color = (255, 60, 60) if pulse else DIM1
             rec_surface = self._font_small.render("\u25cfREC", False, rec_color)
@@ -429,18 +431,92 @@ class ChatPanel(BaseScreen):
             surface.blit(status_surface, (status_x, SAFE_INSET + (STATUS_BAR_H - status_surface.get_height()) // 2))
 
         # ── Layout calculations ──
-        action_menu_h = self._ACTION_ROW_H * 3
-        hint_h = self._HINT_H
+        hint_px = 14
         msg_area_top = SAFE_INSET + STATUS_BAR_H + 2
-        msg_area_bottom = PHYSICAL_H - SAFE_INSET - action_menu_h - hint_h - 2
+        msg_area_bottom = PHYSICAL_H - SAFE_INSET - hint_px
 
-        # ── Messages area ──
+        # ── Content area ──
+        if self._pages:
+            self._render_paginated(surface, msg_area_top, msg_area_bottom)
+        else:
+            self._render_conversation(surface, msg_area_top, msg_area_bottom)
+
+        # ── Streaming indicator ──
+        if self._is_streaming:
+            dots = "." * ((pygame.time.get_ticks() // 400) % 4)
+            indicator = self._font_small.render(dots, False, DIM3)
+            surface.blit(indicator, (SAFE_INSET, msg_area_bottom - 14))
+
+        # ── Overlays (on top of page content) ──
+        if self._mode == ChatMode.ACTIONS:
+            overlay_h = self._ACTION_ROW_H * 3 + 4
+            overlay_top = msg_area_bottom - overlay_h
+            pygame.draw.rect(surface, BLACK, (0, overlay_top, PHYSICAL_W, overlay_h + hint_px + SAFE_INSET))
+            pygame.draw.line(surface, HAIRLINE, (0, overlay_top), (PHYSICAL_W, overlay_top))
+            self._render_actions_submenu(surface, overlay_top + 2)
+        elif self._mode == ChatMode.RECORDING:
+            overlay_top = msg_area_bottom - self._ACTION_ROW_H
+            pygame.draw.rect(surface, BLACK, (0, overlay_top, PHYSICAL_W, self._ACTION_ROW_H + hint_px + SAFE_INSET))
+            elapsed = int(time.time() - self._recording_start_time)
+            rec_surf = self._font.render(f"RECORDING  {elapsed}s", False, WHITE)
+            surface.blit(rec_surf, (SAFE_INSET, overlay_top + 2))
+        elif self._voice_step and self._voice_step not in ("", "SENDING"):
+            overlay_h = self._ACTION_ROW_H * 3
+            overlay_top = msg_area_bottom - overlay_h
+            pygame.draw.rect(surface, BLACK, (0, overlay_top, PHYSICAL_W, overlay_h + hint_px + SAFE_INSET))
+            self._render_voice_callout(surface, overlay_top)
+
+        # ── Hint line (compact, always visible) ──
+        hint_y = PHYSICAL_H - SAFE_INSET - hint_px
+        bar_center_y = hint_y + hint_px // 2
+        bar_content = self._get_action_bar_content()
+        if bar_content:
+            self._render_hint_line(surface, bar_center_y, bar_content)
+        else:
+            step_label = self._voice_step.lower() if self._voice_step else "listening"
+            stream_text = self._font_small.render(f"{step_label}...", False, DIM3)
+            surface.blit(stream_text, ((PHYSICAL_W - stream_text.get_width()) // 2, bar_center_y - stream_text.get_height() // 2))
+
+    def _render_paginated(self, surface: pygame.Surface, top: int, bottom: int) -> None:
+        """Render current page with context header and page indicator."""
+        y = top
+
+        # Context header (1 line, dimmed)
+        if self._context_header:
+            header_surf = self._font_small.render(self._context_header, False, DIM2)
+            surface.blit(header_surf, (SAFE_INSET, y))
+            y += self._line_height
+
+        # Page text
+        page = self._pages[self._current_page] if self._current_page < len(self._pages) else []
+
+        if self._page_typewriter and not self._page_typewriter.finished:
+            visible = self._page_typewriter.get_visible_text()
+            display_lines = self._wrap_text(visible, PHYSICAL_W - SAFE_INSET * 2)
+        else:
+            display_lines = page
+
+        for line_text in display_lines:
+            if y + self._line_height > bottom - self._line_height:
+                break
+            text_surface = self._font.render(line_text, False, WHITE)
+            surface.blit(text_surface, (SAFE_INSET, y))
+            y += self._line_height
+
+        # Page indicator (centered, small font, DIM1) — only if 2+ pages
+        if len(self._pages) > 1:
+            indicator = f"{self._current_page + 1}/{len(self._pages)}"
+            ind_surf = self._font_small.render(indicator, False, DIM1)
+            ind_x = (PHYSICAL_W - ind_surf.get_width()) // 2
+            surface.blit(ind_surf, (ind_x, bottom - self._line_height))
+
+    def _render_conversation(self, surface: pygame.Surface, top: int, bottom: int) -> None:
+        """Render full conversation history (non-paginated fallback)."""
         with self._messages_lock:
             snapshot = list(self._messages)
 
-        # If typewriter is active, override last assistant message with revealed text
         if self._typewriter and snapshot and snapshot[-1]["role"] == "assistant":
-            snapshot = list(snapshot)  # make mutable copy
+            snapshot = list(snapshot)
             snapshot[-1] = {"role": "assistant", "text": self._typewriter.get_visible_text()}
 
         visible_lines = []
@@ -451,79 +527,52 @@ class ChatPanel(BaseScreen):
             for line in lines:
                 visible_lines.append((line, color))
 
-        msg_y = msg_area_top
-        max_visible = int((msg_area_bottom - msg_area_top) / self._line_height)
+        msg_y = top
+        max_visible = int((bottom - top) / self._line_height)
         start = max(0, len(visible_lines) - max_visible - self._scroll_offset)
         for line_text, color in visible_lines[start:]:
-            if msg_y > msg_area_bottom:
+            if msg_y > bottom:
                 break
             text_surface = self._font.render(line_text, False, color)
             surface.blit(text_surface, (SAFE_INSET, msg_y))
             msg_y += self._line_height
 
-        # ── Streaming indicator / retry hint ──
-        if self._is_streaming:
-            dots = "." * ((pygame.time.get_ticks() // 400) % 4)
-            indicator = self._font_small.render(dots, False, DIM3)
-            surface.blit(indicator, (4, msg_area_bottom - 8))
-        elif self._can_retry():
+        # Retry hint
+        if not self._is_streaming and self._can_retry():
             hint = self._font_small.render("DBL: retry", False, DIM1)
-            surface.blit(hint, (4, msg_area_bottom - 8))
+            surface.blit(hint, (SAFE_INSET, bottom - 14))
 
+        # Queue status
         queue_status = self._queue_status_copy()
         if queue_status:
             queue_surface = self._font_small.render(queue_status, False, DIM2)
-            queue_x = max(96, PHYSICAL_W - queue_surface.get_width() - 4)
-            surface.blit(queue_surface, (queue_x, msg_area_bottom - 8))
+            queue_x = max(96, PHYSICAL_W - queue_surface.get_width() - SAFE_INSET)
+            surface.blit(queue_surface, (queue_x, bottom - 14))
 
-        # ── Action area ──
-        action_top = PHYSICAL_H - SAFE_INSET - action_menu_h - hint_h
-        pygame.draw.line(surface, HAIRLINE, (0, action_top - 1), (PHYSICAL_W, action_top - 1))
+    def _render_hint_line(self, surface: pygame.Surface, center_y: int, items: list[tuple[str, str]]) -> None:
+        """Render compact gesture hint line at bottom."""
+        rendered = []
+        for icon_type, label in items:
+            label_surf = self._font_small.render(label, False, DIM1)
+            rendered.append((icon_type, label_surf))
 
-        if self._mode == ChatMode.ACTIONS:
-            self._render_actions_submenu(surface, action_top)
-        elif self._mode == ChatMode.RECORDING:
-            # Show recording elapsed + pipeline step
-            elapsed = int(time.time() - self._recording_start_time)
-            rec_text = f"RECORDING  {elapsed}s"
-            rec_surf = self._font.render(rec_text, False, WHITE)
-            surface.blit(rec_surf, (SAFE_INSET, action_top + 2))
-        elif self._voice_step and self._voice_step not in ("", "SENDING"):
-            # Show pipeline step callout (VALIDATING, TRANSCRIBING, ERROR)
-            self._render_voice_callout(surface, action_top)
-
-        # ── Action bar (gesture icons + labels) ──
-        hint_y = PHYSICAL_H - SAFE_INSET - hint_h
-        pygame.draw.line(surface, HAIRLINE, (0, hint_y), (PHYSICAL_W, hint_y))
-        bar_center_y = hint_y + hint_h // 2
-        bar_content = self._get_action_bar_content()
-
-        if bar_content:
-            # Render gesture icons with labels, evenly spaced
-            items = []
-            for icon_type, label in bar_content:
-                label_surf = self._font_small.render(label, False, DIM2)
-                items.append((icon_type, label_surf))
-
-            total_w = sum(8 + 4 + s.get_width() for _, s in items)
-            spacing = (PHYSICAL_W - total_w) // (len(items) + 1)
-            bx = spacing
-            for icon_type, label_surf in items:
-                ic = (bx + 4, bar_center_y)
-                if icon_type == "tap":
-                    pygame.draw.circle(surface, DIM2, ic, 3, 1)
-                elif icon_type == "double":
-                    pygame.draw.circle(surface, DIM2, ic, 3, 1)
-                    pygame.draw.circle(surface, DIM2, ic, 1, 1)
-                elif icon_type == "hold":
-                    pygame.draw.circle(surface, DIM2, ic, 3, 0)
-                surface.blit(label_surf, (bx + 12, bar_center_y - label_surf.get_height() // 2))
-                bx += 12 + label_surf.get_width() + spacing
-        else:
-            # Plain text mode (STREAMING) — show voice step if active
-            step_label = self._voice_step.lower() if self._voice_step else "listening"
-            stream_text = self._font_small.render(f"{step_label}...", False, DIM3)
-            surface.blit(stream_text, ((PHYSICAL_W - stream_text.get_width()) // 2, bar_center_y - stream_text.get_height() // 2))
+        total_w = sum(8 + 2 + s.get_width() for _, s in rendered)
+        spacing = max(4, (PHYSICAL_W - total_w) // (len(rendered) + 1))
+        bx = spacing
+        for icon_type, label_surf in rendered:
+            ic = (bx + 3, center_y)
+            if icon_type == "tap":
+                pygame.draw.circle(surface, DIM1, ic, 2, 1)
+            elif icon_type == "double":
+                pygame.draw.circle(surface, DIM1, ic, 2, 1)
+                pygame.draw.circle(surface, DIM1, ic, 1, 1)
+            elif icon_type == "hold":
+                pygame.draw.circle(surface, DIM1, ic, 2, 0)
+            elif icon_type == "triple":
+                for offset in (-3, 0, 3):
+                    pygame.draw.circle(surface, DIM1, (ic[0] + offset, ic[1]), 2, 1)
+            surface.blit(label_surf, (bx + 8, center_y - label_surf.get_height() // 2))
+            bx += 8 + label_surf.get_width() + spacing
 
     def _render_actions_submenu(self, surface: pygame.Surface, top_y: int):
         """Render the templates sub-menu in the action area."""
