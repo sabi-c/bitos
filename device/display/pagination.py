@@ -7,7 +7,7 @@ from __future__ import annotations
 import pygame
 
 
-def split_into_pages(lines: list[str], lines_per_page: int, max_pages: int = 4) -> list[list[str]]:
+def split_into_pages(lines: list[str], lines_per_page: int, max_pages: int = 10) -> list[list[str]]:
     """Split wrapped lines into pages, preferring paragraph boundaries.
 
     Args:
@@ -63,8 +63,8 @@ def split_into_pages(lines: list[str], lines_per_page: int, max_pages: int = 4) 
 def wrap_text(text: str, font: pygame.font.Font, max_width: int) -> list[str]:
     """Word-wrap text to fit within max_width using font metrics.
 
-    Handles explicit newlines and wraps at character level when a word
-    exceeds the available width.
+    Wraps at word boundaries. Falls back to character-level wrapping only
+    when a single word exceeds the available width.
 
     Args:
         text: The text to wrap.
@@ -74,20 +74,42 @@ def wrap_text(text: str, font: pygame.font.Font, max_width: int) -> list[str]:
     Returns:
         List of wrapped line strings.
     """
-    lines = []
-    current = ""
-    for char in text:
-        if char == "\n":
-            lines.append(current)
-            current = ""
+    lines: list[str] = []
+
+    for paragraph in text.split("\n"):
+        if not paragraph:
+            lines.append("")
             continue
-        test = current + char
-        w = font.size(test)[0]
-        if w <= max_width:
-            current = test
-        else:
+
+        words = paragraph.split(" ")
+        current = ""
+
+        for word in words:
+            # Test if adding this word (with space) fits
+            test = f"{current} {word}".strip() if current else word
+            if font.size(test)[0] <= max_width:
+                current = test
+            else:
+                # Current line is full — push it
+                if current:
+                    lines.append(current)
+
+                # Check if the word itself fits on a fresh line
+                if font.size(word)[0] <= max_width:
+                    current = word
+                else:
+                    # Word too long — character-level wrap
+                    current = ""
+                    for char in word:
+                        test_char = current + char
+                        if font.size(test_char)[0] <= max_width:
+                            current = test_char
+                        else:
+                            if current:
+                                lines.append(current)
+                            current = char
+
+        if current:
             lines.append(current)
-            current = char
-    if current:
-        lines.append(current)
+
     return lines or [""]

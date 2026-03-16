@@ -545,7 +545,7 @@ class ChatPanel(BaseScreen):
         if bar_content:
             self._render_hint_line(surface, bar_center_y, bar_content)
         else:
-            step_label = self._voice_step.lower() if self._voice_step else "listening"
+            step_label = self._voice_step.lower() if self._voice_step else "thinking"
             stream_text = self._font_small.render(f"{step_label}...", False, DIM3)
             surface.blit(stream_text, ((PHYSICAL_W - stream_text.get_width()) // 2, bar_center_y - stream_text.get_height() // 2))
 
@@ -736,6 +736,8 @@ class ChatPanel(BaseScreen):
     def _start_recording(self):
         if self._mode == ChatMode.RECORDING or not self._audio_pipeline:
             return
+        # Clear any stale voice step (e.g., ERROR from previous attempt)
+        self._voice_step = ""
 
         # Run health check on first recording attempt
         if not self._health_checked:
@@ -838,8 +840,7 @@ class ChatPanel(BaseScreen):
                     self._led.error()
                 return
 
-            # ── Step 5: Transcribe ──
-            self._mode = ChatMode.STREAMING
+            # ── Step 5: Transcribe (stay in RECORDING mode so user sees status) ──
             self._set_voice_step("TRANSCRIBING")
             logger.info("voice_step=TRANSCRIBING engine=%s",
                         getattr(self._audio_pipeline, '_stt_engine', '?'))
