@@ -29,7 +29,7 @@ class PreviewPanel:
             on_action: callback(action_key) when an item is executed
         """
         self.items = items
-        self.selected_index = 0
+        self.selected_index = -1  # No highlight until submenu is entered
         self._on_action = on_action
 
     def handle_action(self, action: str) -> bool:
@@ -38,6 +38,8 @@ class PreviewPanel:
             self.selected_index = (self.selected_index + 1) % len(self.items)
             return True
         elif action == "DOUBLE_PRESS":
+            if self.selected_index < 0:
+                return False  # Not focused yet
             item = self.items[self.selected_index]
             self._on_action(item["action"])
             return True

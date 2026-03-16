@@ -135,6 +135,23 @@ class CompositeScreenTests(unittest.TestCase):
         cs.handle_action("DOUBLE_PRESS")
         self.assertEqual(panel.selected_index, 0)
 
+    # ── Preview panel: no highlight in sidebar mode ─────────────────
+
+    def test_submenu_no_highlight_in_sidebar_mode(self):
+        """When sidebar is focused, preview panel should have selected_index = -1."""
+        panel = _make_preview_panel()
+        cs = CompositeScreen(right_panels={"HOME": panel})
+        panel = cs._active_panel()
+        self.assertEqual(panel.selected_index, -1)
+
+    def test_submenu_highlights_first_on_enter(self):
+        """DOUBLE_PRESS from sidebar sets selected_index to 0."""
+        panel = _make_preview_panel()
+        cs = CompositeScreen(right_panels={"HOME": panel})
+        cs.handle_action("DOUBLE_PRESS")
+        panel = cs._active_panel()
+        self.assertEqual(panel.selected_index, 0)
+
     # ── Submenu: SHORT scrolls items ──────────────────────────────
 
     def test_short_in_submenu_scrolls_items(self):
