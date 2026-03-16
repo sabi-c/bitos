@@ -19,6 +19,7 @@ from display.tokens import (
     PHYSICAL_W,
     PHYSICAL_H,
     STATUS_BAR_H,
+    SAFE_INSET,
 )
 from display.animator import blink_cursor
 from display.theme import merge_runtime_ui_settings, load_ui_font, ui_line_height
@@ -71,7 +72,7 @@ class ChatPanel(BaseScreen):
 
     # Layout constants
     _ACTION_ROW_H = 18
-    _HINT_H = 12
+    _HINT_H = 20
 
     def __init__(self, client: BackendClient, ui_settings: dict | None = None, repository: DeviceRepository | None = None, audio_pipeline: AudioPipeline | None = None, led=None, on_back=None):
         self._client = client
@@ -213,9 +214,9 @@ class ChatPanel(BaseScreen):
         surface.fill(BLACK)
 
         # ── Status bar (20px) ──
-        pygame.draw.line(surface, HAIRLINE, (0, STATUS_BAR_H - 1), (PHYSICAL_W, STATUS_BAR_H - 1))
+        pygame.draw.line(surface, HAIRLINE, (0, SAFE_INSET + STATUS_BAR_H - 1), (PHYSICAL_W, SAFE_INSET + STATUS_BAR_H - 1))
         header_text = self._font_small.render("CHAT", False, WHITE)
-        surface.blit(header_text, (6, (STATUS_BAR_H - header_text.get_height()) // 2))
+        surface.blit(header_text, (SAFE_INSET, SAFE_INSET + (STATUS_BAR_H - header_text.get_height()) // 2))
 
         # Recording indicator or connection status
         if self._status_detail == "recording...":
@@ -223,20 +224,20 @@ class ChatPanel(BaseScreen):
             pulse = (pygame.time.get_ticks() // 500) % 2 == 0
             rec_color = (255, 60, 60) if pulse else DIM1
             rec_surface = self._font_small.render("\u25cfREC", False, rec_color)
-            rec_x = PHYSICAL_W - rec_surface.get_width() - 6
-            surface.blit(rec_surface, (rec_x, (STATUS_BAR_H - rec_surface.get_height()) // 2))
+            rec_x = PHYSICAL_W - rec_surface.get_width() - SAFE_INSET
+            surface.blit(rec_surface, (rec_x, SAFE_INSET + (STATUS_BAR_H - rec_surface.get_height()) // 2))
         else:
             status_copy = self._status_copy()
             status_color = self._status_color()
             status_surface = self._font_small.render(status_copy, False, status_color)
-            status_x = max(70, PHYSICAL_W - status_surface.get_width() - 6)
-            surface.blit(status_surface, (status_x, (STATUS_BAR_H - status_surface.get_height()) // 2))
+            status_x = max(70, PHYSICAL_W - status_surface.get_width() - SAFE_INSET)
+            surface.blit(status_surface, (status_x, SAFE_INSET + (STATUS_BAR_H - status_surface.get_height()) // 2))
 
         # ── Layout calculations ──
         action_menu_h = self._ACTION_ROW_H * 3
         hint_h = self._HINT_H
-        msg_area_top = STATUS_BAR_H + 2
-        msg_area_bottom = PHYSICAL_H - action_menu_h - hint_h - 2
+        msg_area_top = SAFE_INSET + STATUS_BAR_H + 2
+        msg_area_bottom = PHYSICAL_H - SAFE_INSET - action_menu_h - hint_h - 2
 
         # ── Messages area ──
         with self._messages_lock:
@@ -246,7 +247,7 @@ class ChatPanel(BaseScreen):
         for msg in snapshot:
             prefix = "> " if msg["role"] == "user" else ""
             color = DIM2 if msg["role"] == "user" else WHITE
-            lines = self._wrap_text(prefix + msg["text"], PHYSICAL_W - 8)
+            lines = self._wrap_text(prefix + msg["text"], PHYSICAL_W - SAFE_INSET * 2)
             for line in lines:
                 visible_lines.append((line, color))
 
@@ -257,7 +258,7 @@ class ChatPanel(BaseScreen):
             if msg_y > msg_area_bottom:
                 break
             text_surface = self._font.render(line_text, False, color)
-            surface.blit(text_surface, (4, msg_y))
+            surface.blit(text_surface, (SAFE_INSET, msg_y))
             msg_y += self._line_height
 
         # ── Streaming indicator / retry hint ──
@@ -276,7 +277,7 @@ class ChatPanel(BaseScreen):
             surface.blit(queue_surface, (queue_x, msg_area_bottom - 8))
 
         # ── Action menu (3 rows) ──
-        action_top = PHYSICAL_H - action_menu_h - hint_h
+        action_top = PHYSICAL_H - SAFE_INSET - action_menu_h - hint_h
         pygame.draw.line(surface, HAIRLINE, (0, action_top - 1), (PHYSICAL_W, action_top - 1))
 
         if self._showing_actions:
@@ -288,10 +289,10 @@ class ChatPanel(BaseScreen):
                 prefix = "> " if focused else "- "
                 text_color = WHITE if focused else DIM2
                 row_surface = self._font.render(prefix + label, False, text_color)
-                surface.blit(row_surface, (8, y + 1))
+                surface.blit(row_surface, (SAFE_INSET, y + 1))
 
         # ── Hint bar ──
-        hint_y = PHYSICAL_H - hint_h
+        hint_y = PHYSICAL_H - SAFE_INSET - hint_h
         if self._status_detail == "recording...":
             hint_text = "TAP:STOP RECORDING"
         elif self._showing_actions:
@@ -320,7 +321,7 @@ class ChatPanel(BaseScreen):
             prefix = "> " if focused else "- "
             text_color = WHITE if focused else DIM2
             row_surface = self._font.render(prefix + label, False, text_color)
-            surface.blit(row_surface, (8, y + 1))
+            surface.blit(row_surface, (SAFE_INSET, y + 1))
 
     def _capture_voice_input(self):
         if self._is_streaming or not self._audio_pipeline:
