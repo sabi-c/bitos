@@ -1,8 +1,7 @@
-"""
-BITOS Chat Panel — voice-first with action menu (SPEAK/ACTIONS/BACK).
-"""
+"""BITOS Chat Panel — gesture-driven voice-first chat with mode-based input."""
 import json
 from collections import deque
+from enum import Enum, auto
 import threading
 import time
 
@@ -48,11 +47,17 @@ DEFAULT_TEMPLATES = [
 ]
 
 
-class ChatPanel(BaseScreen):
-    """Voice-first chat panel with action menu."""
-    _owns_status_bar = True
+class ChatMode(Enum):
+    IDLE = auto()       # Viewing chat history
+    RECORDING = auto()  # Capturing audio
+    ACTIONS = auto()    # Quick actions template menu
+    STREAMING = auto()  # Response arriving
+    SPEAKING = auto()   # TTS playing response
 
-    ACTION_ITEMS = ["SPEAK", "ACTIONS", "BACK"]
+
+class ChatPanel(BaseScreen):
+    """Gesture-driven voice-first chat panel with mode-based input routing."""
+    _owns_status_bar = True
 
     STATUS_CONNECTED = "connected"
     STATUS_RETRYING = "retrying"
@@ -95,11 +100,13 @@ class ChatPanel(BaseScreen):
         self._session_id = None
         self._templates = list(DEFAULT_TEMPLATES)
         self._resumed_until = 0.0
-        self._voice_stop_requested = False
 
-        # Action menu state
-        self._action_index = 0
-        self._showing_actions = False
+        # Mode state
+        self._mode = ChatMode.IDLE
+        self._voice_stop_event = threading.Event()
+        self._recording_cancelled = False
+        self._recording_start_time: float = 0.0
+        self._hold_timer: float | None = None
         self._action_template_index = 0
 
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
@@ -133,6 +140,11 @@ class ChatPanel(BaseScreen):
 
     def update(self, dt: float):
         self._cursor_anim.update(dt)
+        # Check if hold has crossed the recording threshold (400ms)
+        if self._hold_timer is not None and self._mode == ChatMode.IDLE:
+            if time.time() - self._hold_timer >= 0.4:
+                self._hold_timer = None
+                self._start_recording()
 
     def handle_input(self, event: pygame.event.Event):
         if event.type != pygame.KEYDOWN:
@@ -157,58 +169,72 @@ class ChatPanel(BaseScreen):
             self._input_text += event.unicode
 
     def handle_action(self, action: str):
-        # If speaking, any press stops audio
-        if action == "SHORT_PRESS" and self._audio_pipeline and self._audio_pipeline.is_speaking():
-            self._audio_pipeline.stop_speaking()
-            with self._messages_lock:
-                self._status_detail = "speech stopped"
+        # HOLD_START/HOLD_END for hold-to-record
+        if action == "HOLD_START" and self._mode == ChatMode.IDLE:
+            self._hold_timer = time.time()
+            return
+        if action == "HOLD_END":
+            self._hold_timer = None  # Release doesn't stop recording
             return
 
-        # Stop voice recording on any press while recording
-        if action in ("SHORT_PRESS", "DOUBLE_PRESS") and self._status_detail == "recording...":
-            self._voice_stop_requested = True
-            return
+        # Dispatch to mode-specific handler
+        handler = {
+            ChatMode.IDLE: self._handle_idle,
+            ChatMode.RECORDING: self._handle_recording,
+            ChatMode.ACTIONS: self._handle_actions,
+            ChatMode.STREAMING: self._handle_streaming,
+            ChatMode.SPEAKING: self._handle_speaking,
+        }.get(self._mode)
+        if handler:
+            handler(action)
 
-        # Actions sub-menu mode
-        if self._showing_actions:
-            self._handle_actions_submenu(action)
-            return
-
+    def _handle_idle(self, action: str):
         if action == "SHORT_PRESS":
-            self._action_index = (self._action_index + 1) % len(self.ACTION_ITEMS)
+            self._scroll_offset = max(0, self._scroll_offset - 1)
         elif action == "TRIPLE_PRESS":
-            self._action_index = (self._action_index - 1) % len(self.ACTION_ITEMS)
+            self._scroll_offset += 1
         elif action == "DOUBLE_PRESS":
-            item = self.ACTION_ITEMS[self._action_index]
-            if item == "SPEAK":
-                self._capture_voice_input()
-            elif item == "ACTIONS":
-                self._showing_actions = True
-                self._action_template_index = 0
-            elif item == "BACK":
-                if self._on_back:
-                    self._on_back()
+            self._mode = ChatMode.ACTIONS
+            self._action_template_index = 0
         elif action == "LONG_PRESS":
             if self._on_back:
                 self._on_back()
 
-    def _handle_actions_submenu(self, action: str):
-        """Handle navigation within the ACTIONS template sub-menu."""
-        # Build items: templates + BACK TO MENU
-        items = list(self._templates) + [{"label": "BACK TO MENU", "message": ""}]
+    def _handle_recording(self, action: str):
+        if action in ("SHORT_PRESS", "DOUBLE_PRESS"):
+            # Send recording
+            self._voice_stop_event.set()
+        elif action == "LONG_PRESS":
+            # Cancel recording
+            self._recording_cancelled = True
+            self._voice_stop_event.set()
+
+    def _handle_actions(self, action: str):
+        items = list(self._templates) + [{"label": "BACK", "message": ""}]
         if action == "SHORT_PRESS":
             self._action_template_index = (self._action_template_index + 1) % len(items)
         elif action == "TRIPLE_PRESS":
             self._action_template_index = (self._action_template_index - 1) % len(items)
         elif action == "DOUBLE_PRESS":
             selected = items[self._action_template_index]
-            if selected["label"] == "BACK TO MENU":
-                self._showing_actions = False
+            if selected["label"] == "BACK":
+                self._mode = ChatMode.IDLE
             else:
                 self._send_template_message(selected)
-                self._showing_actions = False
+                self._mode = ChatMode.IDLE
         elif action == "LONG_PRESS":
-            self._showing_actions = False
+            self._mode = ChatMode.IDLE
+
+    def _handle_streaming(self, action: str):
+        pass  # Ignore all input while response is streaming
+
+    def _handle_speaking(self, action: str):
+        if action in ("SHORT_PRESS", "DOUBLE_PRESS", "LONG_PRESS"):
+            if self._audio_pipeline:
+                self._audio_pipeline.stop_speaking()
+            self._mode = ChatMode.IDLE
+            with self._messages_lock:
+                self._status_detail = ""
 
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
@@ -219,7 +245,7 @@ class ChatPanel(BaseScreen):
         surface.blit(header_text, (SAFE_INSET, SAFE_INSET + (STATUS_BAR_H - header_text.get_height()) // 2))
 
         # Recording indicator or connection status
-        if self._status_detail == "recording...":
+        if self._mode == ChatMode.RECORDING:
             # Pulsing red dot
             pulse = (pygame.time.get_ticks() // 500) % 2 == 0
             rec_color = (255, 60, 60) if pulse else DIM1
@@ -276,35 +302,37 @@ class ChatPanel(BaseScreen):
             queue_x = max(96, PHYSICAL_W - queue_surface.get_width() - 4)
             surface.blit(queue_surface, (queue_x, msg_area_bottom - 8))
 
-        # ── Action menu (3 rows) ──
+        # ── Action area ──
         action_top = PHYSICAL_H - SAFE_INSET - action_menu_h - hint_h
         pygame.draw.line(surface, HAIRLINE, (0, action_top - 1), (PHYSICAL_W, action_top - 1))
 
-        if self._showing_actions:
+        if self._mode == ChatMode.ACTIONS:
             self._render_actions_submenu(surface, action_top)
-        else:
-            for i, label in enumerate(self.ACTION_ITEMS):
-                y = action_top + i * self._ACTION_ROW_H
-                focused = i == self._action_index
-                prefix = "> " if focused else "- "
-                text_color = WHITE if focused else DIM2
-                row_surface = self._font.render(prefix + label, False, text_color)
-                surface.blit(row_surface, (SAFE_INSET, y + 1))
+        elif self._mode == ChatMode.RECORDING:
+            # Show recording elapsed time
+            elapsed = int(time.time() - self._recording_start_time)
+            rec_text = f"RECORDING  {elapsed}s"
+            rec_surf = self._font.render(rec_text, False, WHITE)
+            surface.blit(rec_surf, (SAFE_INSET, action_top + self._ACTION_ROW_H))
 
         # ── Hint bar ──
         hint_y = PHYSICAL_H - SAFE_INSET - hint_h
-        if self._status_detail == "recording...":
-            hint_text = "TAP:STOP RECORDING"
-        elif self._showing_actions:
+        if self._mode == ChatMode.RECORDING:
+            hint_text = "TAP:SEND \u00b7 LONG:CANCEL"
+        elif self._mode == ChatMode.ACTIONS:
             hint_text = "SHORT:NEXT \u00b7 DBL:SEL \u00b7 LONG:BACK"
+        elif self._mode == ChatMode.SPEAKING:
+            hint_text = "TAP:STOP"
+        elif self._mode == ChatMode.STREAMING:
+            hint_text = "listening..."
         else:
-            hint_text = "SHORT:NEXT \u00b7 DBL:SEL \u00b7 LONG:BACK"
+            hint_text = "HOLD:RECORD \u00b7 DBL:ACTIONS \u00b7 LONG:BACK"
         hint = self._font_hint.render(hint_text, False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, hint_y))
 
     def _render_actions_submenu(self, surface: pygame.Surface, top_y: int):
         """Render the templates sub-menu in the action area."""
-        items = list(self._templates) + [{"label": "BACK TO MENU", "message": ""}]
+        items = list(self._templates) + [{"label": "BACK", "message": ""}]
         # Show 3 rows centered around selected index
         visible_count = 3
         start_idx = max(0, self._action_template_index - 1)
@@ -323,10 +351,13 @@ class ChatPanel(BaseScreen):
             row_surface = self._font.render(prefix + label, False, text_color)
             surface.blit(row_surface, (SAFE_INSET, y + 1))
 
-    def _capture_voice_input(self):
-        if self._is_streaming or not self._audio_pipeline:
+    def _start_recording(self):
+        if self._mode == ChatMode.RECORDING or not self._audio_pipeline:
             return
-        self._is_streaming = True
+        self._mode = ChatMode.RECORDING
+        self._recording_cancelled = False
+        self._voice_stop_event.clear()
+        self._recording_start_time = time.time()
         if self._led:
             self._led.listening()
         with self._messages_lock:
@@ -335,39 +366,44 @@ class ChatPanel(BaseScreen):
         threading.Thread(target=self._do_voice_capture, daemon=True).start()
 
     def _do_voice_capture(self):
-        timeout_seconds = 30
         try:
-            audio_path = self._audio_pipeline.record(max_seconds=timeout_seconds)
+            audio_path = self._audio_pipeline.record(max_seconds=30)
             if not audio_path:
-                self._is_streaming = False
+                self._mode = ChatMode.IDLE
                 if self._led:
                     self._led.off()
                 return
-            # Wait for button release to stop recording (polled via _voice_stop_requested flag),
-            # or fall back to max timeout. The flag is set by handle_action on SHORT_PRESS/LONG_PRESS.
-            import time as _time
-            start = _time.time()
-            while not self._voice_stop_requested and (_time.time() - start) < timeout_seconds:
-                _time.sleep(0.1)
-            self._voice_stop_requested = False
+
+            # Wait for stop event (set by button press) or timeout
+            self._voice_stop_event.wait(timeout=30)
             self._audio_pipeline.stop_recording()
+
+            if self._recording_cancelled:
+                self._mode = ChatMode.IDLE
+                with self._messages_lock:
+                    self._status_detail = "cancelled"
+                if self._led:
+                    self._led.off()
+                return
+
+            self._mode = ChatMode.STREAMING
             with self._messages_lock:
                 self._status_detail = "transcribing..."
             text = self._audio_pipeline.transcribe(audio_path).strip()
         except Exception as exc:
-            self._is_streaming = False
+            self._mode = ChatMode.IDLE
             if self._led:
                 self._led.error()
             self._mark_failed("", "unknown", False)
             self._status_detail = f"voice err: {str(exc)[:20]}"
             return
 
-        self._is_streaming = False
         if self._led:
             self._led.off()
         if not text:
             with self._messages_lock:
-                self._status_detail = "Didn't catch that \u2014 try again"
+                self._status_detail = "Didn't catch that"
+            self._mode = ChatMode.IDLE
             return
         self._input_text = text
         self._send_message()
@@ -376,6 +412,8 @@ class ChatPanel(BaseScreen):
         text = self._input_text.strip()
         if not text:
             return
+
+        self._mode = ChatMode.STREAMING
 
         with self._messages_lock:
             self._messages.append({"role": "user", "text": text})
@@ -439,8 +477,9 @@ class ChatPanel(BaseScreen):
 
             if self._audio_pipeline and response_text:
                 try:
+                    self._mode = ChatMode.SPEAKING
                     with self._messages_lock:
-                        self._status_detail = "\u25ce SPEAKING..."
+                        self._status_detail = "SPEAKING..."
                     if self._led:
                         self._led.speaking()
                     self._audio_pipeline.speak(response_text)
@@ -458,6 +497,8 @@ class ChatPanel(BaseScreen):
             self._mark_failed(message, "unknown", True)
         finally:
             self._is_streaming = False
+            if self._mode in (ChatMode.STREAMING, ChatMode.SPEAKING):
+                self._mode = ChatMode.IDLE
             if self._led and self._status == self.STATUS_CONNECTED:
                 self._led.off()
 
