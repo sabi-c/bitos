@@ -376,6 +376,7 @@ def main():
         panel_openers = {
             "HOME": lambda: None,  # already showing home
             "CHAT": open_chat,
+            "CHAT_SETTINGS": open_chat_settings,
             "TASKS": open_tasks,
             "SETTINGS": open_settings,
             "FOCUS": open_focus,
@@ -455,6 +456,16 @@ def main():
                 audio_pipeline=audio_pipeline,
                 led=led,
                 on_back=lambda: screen_mgr.pop(),
+            )
+        )
+
+    def open_chat_settings():
+        from screens.panels.chat_settings import ChatSettingsPanel
+        screen_mgr.push(
+            ChatSettingsPanel(
+                repository=repository,
+                on_back=lambda: screen_mgr.pop(),
+                ui_settings=ui_settings,
             )
         )
 
