@@ -42,6 +42,10 @@ class LockScreen(BaseScreen):
         self._flash_until: float = 0.0      # time.time() when flash ends
         self._flash_color = _RED
 
+        # Dev bypass: 5 rapid short presses within 2s skips PIN
+        self._bypass_presses: int = 0
+        self._bypass_window: float = 0.0
+
         logging.getLogger(__name__).info(
             "lock_screen pin_len=%d", len(self._pin),
         )
@@ -70,6 +74,15 @@ class LockScreen(BaseScreen):
             return
 
         if action == "SHORT_PRESS":
+            # Dev bypass: 5 rapid presses within 2s skips PIN
+            now = time.time()
+            if now - self._bypass_window > 2.0:
+                self._bypass_presses = 0
+                self._bypass_window = now
+            self._bypass_presses += 1
+            if self._bypass_presses >= 5:
+                self._unlock()
+                return
             self._cycling = True
             self._current_digit = (self._current_digit + 1) % 10
         elif action == "DOUBLE_PRESS":

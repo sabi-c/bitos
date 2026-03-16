@@ -116,7 +116,6 @@ class ChatPanel(BaseScreen):
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
         self._font = load_ui_font("body", self._ui_settings)
         self._font_small = load_ui_font("small", self._ui_settings)
-        self._font_hint = load_ui_font("hint", self._ui_settings)
         self._line_height = ui_line_height(self._font, self._ui_settings)
 
         if self._repository:

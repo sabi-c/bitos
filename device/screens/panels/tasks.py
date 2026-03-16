@@ -81,14 +81,8 @@ class TasksPanel(BaseScreen):
                 self._confirm_complete = False
 
     def _render_skeleton(self, surface, y, count=4):
-        """Render skeleton loading rows with step blink."""
-        blink = (pygame.time.get_ticks() // 800) % 2 == 0
-        color = DIM3 if blink else DIM4
-        for _ in range(count):
-            pygame.draw.rect(surface, color, (8, y + 4, PHYSICAL_W - 48, 8))
-            pygame.draw.rect(surface, HAIRLINE, (PHYSICAL_W - 36, y + 4, 28, 8))
-            pygame.draw.line(surface, HAIRLINE, (0, y + ROW_H_MIN - 1), (PHYSICAL_W, y + ROW_H_MIN - 1))
-            y += ROW_H_MIN
+        from display.skeleton import render_skeleton
+        render_skeleton(surface, y, count)
 
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
