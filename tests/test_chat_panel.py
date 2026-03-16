@@ -82,19 +82,46 @@ class ChatModeTests(unittest.TestCase):
         self.assertTrue(panel._recording_cancelled)
         self.assertTrue(panel._voice_stop_event.is_set())
 
-    def test_short_press_in_recording_sends(self):
+    def test_short_press_in_field_recording_sends(self):
         panel = self._make_panel()
         panel._mode = ChatMode.RECORDING
+        panel._quick_talk = False
         panel._voice_stop_event.clear()
         panel.handle_action("SHORT_PRESS")
         self.assertTrue(panel._voice_stop_event.is_set())
         self.assertFalse(panel._recording_cancelled)
 
-    def test_short_press_in_idle_scrolls(self):
+    def test_short_press_in_quick_talk_ignored(self):
         panel = self._make_panel()
-        panel._scroll_offset = 5
+        panel._mode = ChatMode.RECORDING
+        panel._quick_talk = True
+        panel._voice_stop_event.clear()
         panel.handle_action("SHORT_PRESS")
-        self.assertEqual(panel._scroll_offset, 4)
+        # SHORT_PRESS should not stop quick-talk — only HOLD_END does
+        self.assertFalse(panel._voice_stop_event.is_set())
+
+    def test_hold_end_stops_quick_talk(self):
+        panel = self._make_panel()
+        panel._mode = ChatMode.RECORDING
+        panel._quick_talk = True
+        panel._voice_stop_event.clear()
+        panel.handle_action("HOLD_END")
+        self.assertTrue(panel._voice_stop_event.is_set())
+
+    def test_hold_end_does_not_stop_field_recording(self):
+        panel = self._make_panel()
+        panel._mode = ChatMode.RECORDING
+        panel._quick_talk = False
+        panel._voice_stop_event.clear()
+        panel.handle_action("HOLD_END")
+        # HOLD_END should not stop field recording — only SHORT_PRESS does
+        self.assertFalse(panel._voice_stop_event.is_set())
+
+    def test_short_press_in_idle_starts_field_recording(self):
+        panel = self._make_panel()
+        panel.handle_action("SHORT_PRESS")
+        self.assertEqual(panel._mode, ChatMode.RECORDING)
+        self.assertFalse(panel._quick_talk)
 
     def test_speaking_mode_any_press_stops(self):
         audio = MagicMock()
@@ -126,23 +153,32 @@ class ChatModeTests(unittest.TestCase):
         panel.handle_action("HOLD_END")
         self.assertIsNone(panel._hold_timer)
 
-    def test_idle_action_bar_has_record(self):
+    def test_idle_action_bar_has_record_and_talk(self):
         panel = self._make_panel()
         content = panel._get_action_bar_content()
         self.assertEqual(len(content), 3)
-        icons = [c[0] for c in content]
-        self.assertIn("hold", icons)
         labels = [c[1] for c in content]
         self.assertIn("RECORD", labels)
+        self.assertIn("TALK", labels)
+        self.assertIn("ACTIONS", labels)
 
-    def test_recording_action_bar_has_release_send(self):
+    def test_field_recording_action_bar(self):
         panel = self._make_panel()
         panel._mode = ChatMode.RECORDING
+        panel._quick_talk = False
         content = panel._get_action_bar_content()
         self.assertEqual(len(content), 2)
         labels = [c[1] for c in content]
-        self.assertIn("RELEASE", labels)
-        self.assertIn("SEND", labels)
+        self.assertIn("STOP & SEND", labels)
+        self.assertIn("CANCEL", labels)
+
+    def test_quick_talk_action_bar(self):
+        panel = self._make_panel()
+        panel._mode = ChatMode.RECORDING
+        panel._quick_talk = True
+        content = panel._get_action_bar_content()
+        self.assertEqual(len(content), 1)
+        self.assertEqual(content[0][1], "RELEASE TO SEND")
 
     def test_streaming_action_bar_empty(self):
         panel = self._make_panel()

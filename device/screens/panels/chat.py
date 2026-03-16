@@ -117,6 +117,7 @@ class ChatPanel(BaseScreen):
         self._recording_cancelled = False
         self._recording_start_time: float = 0.0
         self._hold_timer: float | None = None
+        self._quick_talk = False    # True if recording started via hold gesture
         self._action_template_index = 0
         self._voice_step = ""       # on-screen pipeline step callout
         self._voice_error = ""      # error detail shown on screen
@@ -153,10 +154,11 @@ class ChatPanel(BaseScreen):
 
     def update(self, dt: float):
         self._cursor_anim.update(dt)
-        # Check if hold has crossed the recording threshold (400ms)
+        # Check if hold has crossed the quick-talk threshold (600ms)
         if self._hold_timer is not None and self._mode == ChatMode.IDLE:
-            if time.time() - self._hold_timer >= 0.4:
+            if time.time() - self._hold_timer >= 0.6:
                 self._hold_timer = None
+                self._quick_talk = True
                 self._start_recording()
 
         # Tick typewriter
@@ -194,15 +196,16 @@ class ChatPanel(BaseScreen):
             self._input_text += event.unicode
 
     def handle_action(self, action: str):
-        # HOLD_START/HOLD_END for hold-to-record
+        # ── Hold gesture lifecycle (quick-talk) ──
         if action == "HOLD_START" and self._mode == ChatMode.IDLE:
             self._hold_timer = time.time()
             return
         if action == "HOLD_END":
-            if self._mode == ChatMode.RECORDING:
-                # Release button → stop recording and send
+            if self._mode == ChatMode.RECORDING and self._quick_talk:
+                # Quick-talk: release → stop recording and send
                 self._voice_stop_event.set()
             elif self._hold_timer is not None:
+                # Hold released before threshold — ignored, SHORT_PRESS will fire
                 self._hold_timer = None
             return
 
@@ -219,26 +222,30 @@ class ChatPanel(BaseScreen):
 
     def _handle_idle(self, action: str):
         if action == "SHORT_PRESS":
-            self._scroll_offset = max(0, self._scroll_offset - 1)
-        elif action == "TRIPLE_PRESS":
-            self._scroll_offset += 1
+            # Tap → field recording (toggle on)
+            if self._hold_timer is not None:
+                # Hold timer active — this tap came from a short hold, ignore
+                self._hold_timer = None
+                return
+            self._quick_talk = False
+            self._start_recording()
         elif action == "DOUBLE_PRESS":
             self._mode = ChatMode.ACTIONS
             self._action_template_index = 0
         elif action == "LONG_PRESS":
-            # If hold timer is active, this LONG_PRESS is from the same hold
-            # that will trigger recording — don't go back
+            # If hold timer is active, this is the same hold that will
+            # trigger quick-talk recording — don't go back
             if self._hold_timer is not None:
                 return
             if self._on_back:
                 self._on_back()
 
     def _handle_recording(self, action: str):
-        if action in ("SHORT_PRESS", "DOUBLE_PRESS"):
-            # Send recording
+        if action == "SHORT_PRESS" and not self._quick_talk:
+            # Field recording: tap again → stop and send
             self._voice_stop_event.set()
         elif action == "LONG_PRESS":
-            # Cancel recording
+            # Cancel recording (either mode)
             self._recording_cancelled = True
             self._voice_stop_event.set()
 
@@ -272,9 +279,11 @@ class ChatPanel(BaseScreen):
     def _get_action_bar_content(self) -> list[tuple[str, str]]:
         """Return action bar items for the current mode."""
         if self._mode == ChatMode.IDLE:
-            return [("hold", "RECORD"), ("double", "ACTIONS"), ("tap", "SCROLL")]
+            return [("tap", "RECORD"), ("hold", "TALK"), ("double", "ACTIONS")]
         elif self._mode == ChatMode.RECORDING:
-            return [("hold", "RELEASE"), ("tap", "SEND")]
+            if self._quick_talk:
+                return [("hold", "RELEASE TO SEND")]
+            return [("tap", "STOP & SEND"), ("hold", "CANCEL")]
         elif self._mode == ChatMode.ACTIONS:
             return [("tap", "NEXT"), ("double", "SELECT"), ("hold", "BACK")]
         elif self._mode == ChatMode.SPEAKING:
