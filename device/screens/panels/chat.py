@@ -151,6 +151,10 @@ class ChatPanel(BaseScreen):
         self._page_typewriter: TypewriterRenderer | None = None
         self._context_header: str = ""
 
+        # Speech queue: (text, user_message) tuples waiting for TTS
+        self._speech_queue: deque[tuple[str, str]] = deque(maxlen=5)
+        self._speech_lock = threading.Lock()
+
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
         self._font = load_ui_font("body", self._ui_settings)
         self._font_small = load_ui_font("small", self._ui_settings)
@@ -397,14 +401,38 @@ class ChatPanel(BaseScreen):
 
     def _handle_speaking(self, action: str):
         result = self._speaking_overlay.handle_action(action)
-        if result == "dismiss":
+        if result == "skip":
+            # Stop current TTS immediately and clear the queue
+            with self._speech_lock:
+                self._speech_queue.clear()
             if self._audio_pipeline:
                 self._audio_pipeline.stop_speaking()
             self._speaking_overlay.dismiss()
             self._mode = ChatMode.IDLE
             with self._messages_lock:
                 self._status_detail = ""
+        elif result == "next":
+            # Advance to next page visually; stop TTS
+            if self._audio_pipeline:
+                self._audio_pipeline.stop_speaking()
+            if len(self._pages) > 1:
+                if self._current_page < len(self._page_revealed):
+                    self._page_revealed[self._current_page] = True
+                self._page_typewriter = None
+                self._current_page = (self._current_page + 1) % len(self._pages)
+                self._start_page_typewriter()
+            # Stay in SPEAKING mode if there are queued utterances,
+            # otherwise go to IDLE
+            with self._speech_lock:
+                if not self._speech_queue:
+                    self._speaking_overlay.dismiss()
+                    self._mode = ChatMode.IDLE
+                    with self._messages_lock:
+                        self._status_detail = ""
         elif result == "reply":
+            # Stop TTS, clear queue, start recording
+            with self._speech_lock:
+                self._speech_queue.clear()
             if self._audio_pipeline:
                 self._audio_pipeline.stop_speaking()
             self._speaking_overlay.dismiss()
@@ -472,7 +500,10 @@ class ChatPanel(BaseScreen):
         elif self._mode == ChatMode.ACTIONS:
             return [("tap", "next"), ("double", "select"), ("hold", "back")]
         elif self._mode == ChatMode.SPEAKING:
-            return [("tap", "stop"), ("hold", "reply")]
+            items = [("double", "skip"), ("hold", "reply")]
+            if len(self._pages) > 1:
+                items.insert(1, ("triple", "next"))
+            return items
         return []  # STREAMING — render plain text instead
 
     @staticmethod
@@ -696,14 +727,24 @@ class ChatPanel(BaseScreen):
         step = self._voice_step
         error = self._voice_error
         is_error = step == "ERROR"
+        is_transcribed = step == "TRANSCRIBED"
 
         # Step label (large)
-        step_color = (255, 80, 80) if is_error else WHITE
-        step_surf = self._font.render(step, False, step_color)
+        if is_transcribed:
+            # Show a checkmark header for successful transcription
+            step_color = (100, 255, 100)
+            step_surf = self._font.render("HEARD:", False, step_color)
+        else:
+            step_color = (255, 80, 80) if is_error else WHITE
+            step_surf = self._font.render(step, False, step_color)
         surface.blit(step_surf, (SAFE_INSET, top_y + 2))
 
-        # Error detail (smaller, below step)
-        if error and error != step:
+        # Detail text (smaller, below step) — transcription preview or error
+        if is_transcribed and error:
+            # Show transcribed text as detail (error field carries the text)
+            detail_surf = self._font_small.render(error[:32], False, WHITE)
+            surface.blit(detail_surf, (SAFE_INSET, top_y + self._ACTION_ROW_H + 2))
+        elif error and error != step:
             err_surf = self._font_small.render(error[:28], False, DIM2)
             surface.blit(err_surf, (SAFE_INSET, top_y + self._ACTION_ROW_H + 2))
 
@@ -714,6 +755,7 @@ class ChatPanel(BaseScreen):
             "VALIDATING": 1,
             "PREFLIGHT": 2,
             "TRANSCRIBING": 3,
+            "TRANSCRIBED": 3,
             "SENDING": 4,
             "ERROR": -1, "CANCELLED": -1,
         }
@@ -868,7 +910,11 @@ class ChatPanel(BaseScreen):
             self._mode = ChatMode.IDLE
             return
 
-        # ── Step 5: Send to backend ──
+        # ── Step 5: Show transcription result briefly before sending ──
+        self._set_voice_step("TRANSCRIBED", text[:60])
+        time.sleep(1.0)  # let the user see what was heard
+
+        # ── Step 6: Send to backend ──
         self._set_voice_step("SENDING")
         self._input_text = text
         self._send_message()
@@ -891,6 +937,13 @@ class ChatPanel(BaseScreen):
         text = self._input_text.strip()
         if not text:
             return
+
+        # Stop any ongoing TTS and clear the speech queue
+        if self._audio_pipeline and self._audio_pipeline.is_speaking():
+            self._audio_pipeline.stop_speaking()
+        with self._speech_lock:
+            self._speech_queue.clear()
+        self._speaking_overlay.dismiss()
 
         self._mode = ChatMode.STREAMING
 
@@ -992,26 +1045,16 @@ class ChatPanel(BaseScreen):
             # TTS only fires in active user-initiated chat sessions (not greetings/heartbeat)
             if self._audio_pipeline and response_text and should_speak:
                 logger.info("tts_start: session=%s text_len=%d", self._session_id, len(response_text))
-                try:
-                    self._mode = ChatMode.SPEAKING
-                    self._speaking_overlay.show()
-                    with self._messages_lock:
-                        self._status_detail = "SPEAKING..."
-                    if self._led:
-                        self._led.speaking()
-                    self._audio_pipeline.speak(response_text)
-                except Exception as tts_exc:
-                    logger.error("tts_failed: %s", tts_exc)
-                finally:
-                    self._speaking_overlay.dismiss()
-
-            with self._messages_lock:
-                self._status = self.STATUS_CONNECTED
-                self._status_detail = ""
-                self._voice_step = ""
-                self._voice_error = ""
-                self._last_failed_message = None
-                self._last_error_retryable = False
+                self._speak_text(response_text)
+            else:
+                # No TTS — go straight to idle
+                with self._messages_lock:
+                    self._status = self.STATUS_CONNECTED
+                    self._status_detail = ""
+                    self._voice_step = ""
+                    self._voice_error = ""
+                    self._last_failed_message = None
+                    self._last_error_retryable = False
         except BackendChatError as exc:
             self._mark_failed(message, exc.kind, exc.retryable)
         except Exception as exc:
@@ -1023,6 +1066,54 @@ class ChatPanel(BaseScreen):
                 self._mode = ChatMode.IDLE
             if self._led and self._status == self.STATUS_CONNECTED:
                 self._led.off()
+
+    def _speak_text(self, text: str) -> None:
+        """Play TTS for text. Queues if already speaking; only one utterance at a time."""
+        with self._speech_lock:
+            if self._audio_pipeline and self._audio_pipeline.is_speaking():
+                # Already speaking — queue this utterance
+                self._speech_queue.append((text, ""))
+                logger.info("tts_queued: queue_depth=%d text_len=%d", len(self._speech_queue), len(text))
+                return
+
+        # Play immediately
+        self._do_speak(text)
+
+        # Drain the queue: play queued utterances one by one
+        while True:
+            with self._speech_lock:
+                if not self._speech_queue:
+                    break
+                next_text, _ = self._speech_queue.popleft()
+            # Check if we got cancelled between items
+            if self._mode != ChatMode.SPEAKING:
+                with self._speech_lock:
+                    self._speech_queue.clear()
+                break
+            self._do_speak(next_text)
+
+        # Done speaking — clean up
+        self._speaking_overlay.dismiss()
+        with self._messages_lock:
+            self._status = self.STATUS_CONNECTED
+            self._status_detail = ""
+            self._voice_step = ""
+            self._voice_error = ""
+            self._last_failed_message = None
+            self._last_error_retryable = False
+
+    def _do_speak(self, text: str) -> None:
+        """Execute a single TTS utterance (blocking)."""
+        try:
+            self._mode = ChatMode.SPEAKING
+            self._speaking_overlay.show()
+            with self._messages_lock:
+                self._status_detail = "SPEAKING..."
+            if self._led:
+                self._led.speaking()
+            self._audio_pipeline.speak(text)
+        except Exception as tts_exc:
+            logger.error("tts_failed: %s", tts_exc)
 
     def _mark_failed(self, message: str, kind: str, retryable: bool, custom_copy: str | None = None):
         status = self.STATUS_OFFLINE if kind in ("offline", "network") else self.STATUS_DEGRADED
