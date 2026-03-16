@@ -753,7 +753,8 @@ async def get_brief():
         "mail": {"unread": mail_unread, "recent": mail_threads[:3]},
     }
 
-<<<<<<< HEAD
+
+# ── Agent Subtask Endpoints ──────────────────────────────────────────────
 def _calculate_cost(input_tokens: int, output_tokens: int, model: str = "") -> float:
     """Calculate USD cost based on token usage and model."""
     model_lower = (model or llm_bridge.model).lower()
