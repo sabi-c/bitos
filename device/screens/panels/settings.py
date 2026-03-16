@@ -38,7 +38,7 @@ class SettingsPanel(BaseScreen):
         on_open_change_pin=None,
         on_open_battery=None,
         on_open_dev=None,
-        on_open_font_scale=None,
+        on_open_font_picker=None,
         get_ble_address=None,
         on_set_discoverable=None,
         on_push_overlay=None,
@@ -57,7 +57,7 @@ class SettingsPanel(BaseScreen):
         self._on_open_change_pin = on_open_change_pin
         self._on_open_battery = on_open_battery
         self._on_open_dev = on_open_dev
-        self._on_open_font_scale = on_open_font_scale
+        self._on_open_font_picker = on_open_font_picker
         self._get_ble_address = get_ble_address or (lambda: "mock-BT-addr")
         self._on_set_discoverable = on_set_discoverable or (lambda _enabled, _timeout: None)
         self._on_push_overlay = on_push_overlay
@@ -87,7 +87,7 @@ class SettingsPanel(BaseScreen):
             NavItem(key="ai_model", label="AI MODEL", status="", action=self._open_model_picker),
             NavItem(key="agent_mode", label="AGENT MODE", status="", action=self._open_agent_mode),
             NavItem(key="sleep", label="SLEEP TIMER", status="", action=self._open_sleep_timer),
-            NavItem(key="font_scale", label="FONT SCALE", status="", action=self._open_font_scale),
+            NavItem(key="font", label="FONT", status="", action=self._open_font_picker),
             NavItem(key="about", label="ABOUT", status="", action=self._open_about),
             NavItem(key="battery", label="BATTERY", status="", action=self._open_battery),
             NavItem(key="companion", label="COMPANION APP", status="", action=self._open_companion_app),
@@ -105,7 +105,7 @@ class SettingsPanel(BaseScreen):
         self._ai_model = str(self._repo.get_setting("ai_model", default="claude-sonnet-4-6"))
         self._agent_mode = str(self._repo.get_setting("agent_mode", default="producer"))
         self._sleep_sec = int(self._repo.get_setting("sleep_timeout_seconds", default=60))
-        self._font_scale_val = float(self._repo.get_setting("font_scale", default=1.0) or 1.0)
+        self._font_family = str(self._repo.get_setting("font_family", default="press_start_2p"))
         self._refresh_integration_status()
 
     def handle_action(self, action: str):
@@ -148,7 +148,7 @@ class SettingsPanel(BaseScreen):
             "ai_model": _compact_model_label(self._ai_model) + " \u203a",
             "agent_mode": self._agent_mode[:10].upper() + " \u203a",
             "sleep": f"{self._sleep_sec}s \u203a",
-            "font_scale": f"{self._font_scale_val:.1f}x \u203a",
+            "font": self._font_family_label() + " \u203a",
             "about": "v1.0 \u203a",
             "companion": "PAIR \u203a",
             "battery": "\u203a",
@@ -214,9 +214,14 @@ class SettingsPanel(BaseScreen):
         if self._on_open_sleep_timer:
             self._on_open_sleep_timer()
 
-    def _open_font_scale(self):
-        if self._on_open_font_scale:
-            self._on_open_font_scale()
+    def _open_font_picker(self):
+        if self._on_open_font_picker:
+            self._on_open_font_picker()
+
+    def _font_family_label(self) -> str:
+        if self._font_family == "monocraft":
+            return "MONO"
+        return "PS2P"
 
     def _open_about(self):
         if self._on_open_about:
@@ -862,14 +867,13 @@ class DevPanel(BaseScreen):
             return "unknown"
 
 
-class FontScalePanel(BaseScreen):
-    """Font scale picker — cycle through scale multipliers, save on DOUBLE_PRESS."""
+class FontPickerPanel(BaseScreen):
+    """Font family picker — cycle through available fonts, save on DOUBLE_PRESS."""
     _owns_status_bar = True
 
     OPTIONS = [
-        (1.0, "1.0x DEFAULT"),
-        (1.2, "1.2x MEDIUM"),
-        (1.5, "1.5x LARGE"),
+        ("press_start_2p", "PRESS START 2P"),
+        ("monocraft", "MONOCRAFT"),
     ]
 
     def __init__(self, repository: DeviceRepository, on_back=None, ui_settings: dict | None = None):
@@ -881,18 +885,18 @@ class FontScalePanel(BaseScreen):
         self._font_small = load_ui_font("small", self._ui_settings)
         self._font_hint = load_ui_font("hint", self._ui_settings)
 
-        self._scale = float(self._repo.get_setting("font_scale", default=1.0) or 1.0)
-        self._index = self._find_index(self._scale)
+        self._current_family = str(self._repo.get_setting("font_family", default="press_start_2p"))
+        self._index = self._find_index(self._current_family)
 
-    def _find_index(self, scale: float) -> int:
+    def _find_index(self, family: str) -> int:
         for i, (val, _) in enumerate(self.OPTIONS):
-            if abs(val - scale) < 0.01:
+            if val == family:
                 return i
         return 0
 
     def on_enter(self):
-        self._scale = float(self._repo.get_setting("font_scale", default=1.0) or 1.0)
-        self._index = self._find_index(self._scale)
+        self._current_family = str(self._repo.get_setting("font_family", default="press_start_2p"))
+        self._index = self._find_index(self._current_family)
 
     def handle_action(self, action: str):
         if action == "SHORT_PRESS":
@@ -900,7 +904,10 @@ class FontScalePanel(BaseScreen):
         elif action == "TRIPLE_PRESS":
             self._index = (self._index - 1) % len(self.OPTIONS)
         elif action == "DOUBLE_PRESS":
-            self._repo.set_setting("font_scale", self.OPTIONS[self._index][0])
+            selected_family = self.OPTIONS[self._index][0]
+            self._repo.set_setting("font_family", selected_family)
+            from display.theme import flush_font_cache
+            flush_font_cache()
             if self._on_back:
                 self._on_back()
         elif action == "LONG_PRESS":
@@ -918,16 +925,14 @@ class FontScalePanel(BaseScreen):
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
 
-        # ── Status bar: inverted ──
         pygame.draw.rect(surface, WHITE, pygame.Rect(0, 0, PHYSICAL_W, STATUS_BAR_H))
-        title = self._font_small.render("FONT SCALE", False, BLACK)
+        title = self._font_small.render("FONT", False, BLACK)
         surface.blit(title, (6, (STATUS_BAR_H - title.get_height()) // 2))
 
-        # ── Options list ──
         y = STATUS_BAR_H + 2
-        for i, (val, label) in enumerate(self.OPTIONS):
+        for i, (family, label) in enumerate(self.OPTIONS):
             focused = i == self._index
-            is_active = abs(val - self._scale) < 0.01
+            is_active = family == self._current_family
             if focused:
                 pygame.draw.rect(surface, WHITE, pygame.Rect(0, y, PHYSICAL_W, ROW_H_MIN))
             row_color = BLACK if focused else (WHITE if is_active else DIM2)
@@ -942,18 +947,18 @@ class FontScalePanel(BaseScreen):
                 pygame.draw.line(surface, HAIRLINE, (0, y + ROW_H_MIN - 1), (PHYSICAL_W, y + ROW_H_MIN - 1))
             y += ROW_H_MIN
 
-        # ── Preview line ──
+        # Preview using selected font
         y += 8
-        preview_size = max(5, int(round(8 * self.OPTIONS[self._index][0])))
+        selected_family = self.OPTIONS[self._index][0]
+        from display.tokens import FONT_REGISTRY
+        preview_path = FONT_REGISTRY.get(selected_family)
         try:
-            from display.tokens import FONT_PATH
-            preview_font = pygame.font.Font(FONT_PATH, preview_size)
+            preview_font = pygame.font.Font(preview_path, 12)
         except Exception:
-            preview_font = pygame.font.SysFont("monospace", preview_size)
-        preview = preview_font.render("HELLO WORLD", False, DIM2)
+            preview_font = self._font_body
+        preview = preview_font.render("HELLO WORLD 123", False, DIM2)
         surface.blit(preview, (8, y))
 
-        # ── Key hint bar ──
         hint = self._font_hint.render("SHORT:NEXT \u00b7 DBL:SELECT \u00b7 LONG:BACK", False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
 

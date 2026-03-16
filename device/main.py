@@ -49,7 +49,7 @@ from screens.panels.captures import CapturesPanel
 from screens.panels.messages import MessagesPanel
 from screens.panels.mail import MailPanel
 from screens.panels.notifications import NotificationsPanel
-from screens.panels.settings import SettingsPanel, ModelPickerPanel, AgentModePanel, SleepTimerPanel, AboutPanel, BatteryPanel, DevPanel, FontScalePanel
+from screens.panels.settings import SettingsPanel, ModelPickerPanel, AgentModePanel, SleepTimerPanel, AboutPanel, BatteryPanel, DevPanel, FontPickerPanel
 from screens.panels.change_pin import ChangePinPanel
 from screens.subscreens.integration_detail import IntegrationDetailPanel
 from overlays.power import PowerOverlay
@@ -379,6 +379,13 @@ def main():
             ui_settings = {}
         ui_settings["font_scale"] = float(local_font_scale)
 
+    # Apply on-device font family override from local repository
+    local_font_family = repository.get_setting("font_family", default=None)
+    if local_font_family is not None:
+        if ui_settings is None:
+            ui_settings = {}
+        ui_settings["font_family"] = str(local_font_family)
+
     restored_state = _restore_state()
 
     right_panels = create_right_panels()
@@ -464,7 +471,7 @@ def main():
                 on_open_change_pin=open_change_pin,
                 on_open_battery=open_battery,
                 on_open_dev=open_dev,
-                on_open_font_scale=open_font_scale,
+                on_open_font_picker=open_font_picker,
                 on_push_overlay=screen_mgr.push_overlay,
                 on_dismiss_overlay=screen_mgr.dismiss_overlay,
                 get_ble_address=gatt_server.get_device_address,
@@ -493,8 +500,8 @@ def main():
     def open_battery():
         screen_mgr.push(BatteryPanel(battery_monitor=battery_monitor, repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
 
-    def open_font_scale():
-        screen_mgr.push(FontScalePanel(repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
+    def open_font_picker():
+        screen_mgr.push(FontPickerPanel(repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
 
     def open_dev():
         screen_mgr.push(DevPanel(system_monitor=monitor, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))

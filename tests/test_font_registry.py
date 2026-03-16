@@ -94,5 +94,62 @@ class FontHotSwapTests(unittest.TestCase):
         self.assertIsNotNone(font)
 
 
+import tempfile
+from storage.repository import DeviceRepository
+
+
+class FontPickerPanelTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        pygame.init()
+        pygame.font.init()
+
+    @classmethod
+    def tearDownClass(cls):
+        pygame.quit()
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.repo = DeviceRepository(db_path=str(Path(self.tmp.name) / "bitos.db"))
+        self.repo.initialize()
+        self.went_back = False
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_default_font_is_press_start(self):
+        from screens.panels.settings import FontPickerPanel
+        panel = FontPickerPanel(repository=self.repo, on_back=lambda: None)
+        self.assertEqual(panel._current_family, "press_start_2p")
+
+    def test_short_press_cycles_font(self):
+        from screens.panels.settings import FontPickerPanel
+        panel = FontPickerPanel(repository=self.repo, on_back=lambda: None)
+        panel.handle_action("SHORT_PRESS")
+        self.assertEqual(panel._index, 1)
+
+    def test_double_press_saves_and_goes_back(self):
+        from screens.panels.settings import FontPickerPanel
+        panel = FontPickerPanel(
+            repository=self.repo,
+            on_back=lambda: setattr(self, 'went_back', True),
+        )
+        panel.handle_action("SHORT_PRESS")  # monocraft
+        panel.handle_action("DOUBLE_PRESS")  # select
+        self.assertEqual(self.repo.get_setting("font_family", default="press_start_2p"), "monocraft")
+        self.assertTrue(self.went_back)
+
+    def test_long_press_goes_back_without_saving(self):
+        from screens.panels.settings import FontPickerPanel
+        panel = FontPickerPanel(
+            repository=self.repo,
+            on_back=lambda: setattr(self, 'went_back', True),
+        )
+        panel.handle_action("SHORT_PRESS")  # monocraft
+        panel.handle_action("LONG_PRESS")  # back without saving
+        self.assertEqual(self.repo.get_setting("font_family", default="press_start_2p"), "press_start_2p")
+        self.assertTrue(self.went_back)
+
+
 if __name__ == "__main__":
     unittest.main()
