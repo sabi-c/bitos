@@ -18,6 +18,7 @@ class TasksPanel(BaseScreen):
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
         self._font_body = load_ui_font("body", self._ui_settings)
         self._font_small = load_ui_font("small", self._ui_settings)
+        self._lock = threading.Lock()
         self._cursor = 0
         self._confirm_complete = False
         self._state = "loading"
@@ -35,15 +36,20 @@ class TasksPanel(BaseScreen):
             try:
                 tasks = self._client.get_tasks()
                 if tasks:
-                    self._tasks = tasks
-                    self._state = "ready"
+                    with self._lock:
+                        self._tasks = tasks
+                        self._state = "ready"
                     self._repository.cache_today_tasks(tasks)
                 else:
-                    self._tasks = self._repository.get_cached_today_tasks()
-                    self._state = "empty" if not self._tasks else "offline"
+                    cached = self._repository.get_cached_today_tasks()
+                    with self._lock:
+                        self._tasks = cached
+                        self._state = "empty" if not self._tasks else "offline"
             except Exception:
-                self._tasks = self._repository.get_cached_today_tasks()
-                self._state = "offline"
+                cached = self._repository.get_cached_today_tasks()
+                with self._lock:
+                    self._tasks = cached
+                    self._state = "offline"
 
         self._state = "loading"
         self._load_thread = threading.Thread(target=_run, daemon=True)
@@ -57,21 +63,22 @@ class TasksPanel(BaseScreen):
             if self._on_back:
                 self._on_back()
             return
-        if not self._tasks:
-            return
-        if action == "SHORT_PRESS":
-            self._confirm_complete = False
-            self._cursor = (self._cursor + 1) % len(self._tasks)
-        elif action == "TRIPLE_PRESS":
-            self._confirm_complete = False
-            self._cursor = (self._cursor - 1) % len(self._tasks)
-        elif action == "DOUBLE_PRESS":
-            # VERIFIED: DOUBLE_PRESS first shows confirm hint, second DBL marks task complete in-place.
-            if not self._confirm_complete:
-                self._confirm_complete = True
+        with self._lock:
+            if not self._tasks:
                 return
-            self._tasks[self._cursor]["done"] = True
-            self._confirm_complete = False
+            if action == "SHORT_PRESS":
+                self._confirm_complete = False
+                self._cursor = (self._cursor + 1) % len(self._tasks)
+            elif action == "TRIPLE_PRESS":
+                self._confirm_complete = False
+                self._cursor = (self._cursor - 1) % len(self._tasks)
+            elif action == "DOUBLE_PRESS":
+                # VERIFIED: DOUBLE_PRESS first shows confirm hint, second DBL marks task complete in-place.
+                if not self._confirm_complete:
+                    self._confirm_complete = True
+                    return
+                self._tasks[self._cursor]["done"] = True
+                self._confirm_complete = False
 
     def _render_skeleton(self, surface, y, count=4):
         """Render skeleton loading rows with step blink."""
@@ -88,23 +95,29 @@ class TasksPanel(BaseScreen):
         title = self._font_small.render("TASKS", False, WHITE)
         surface.blit(title, (6, (STATUS_BAR_H - title.get_height()) // 2))
 
-        if self._state == "loading":
+        with self._lock:
+            state = self._state
+            tasks = list(self._tasks)
+            cursor = self._cursor
+            confirm_complete = self._confirm_complete
+
+        if state == "loading":
             self._render_skeleton(surface, STATUS_BAR_H + 12)
             return
-        if self._state == "empty":
-            s = self._font_body.render("NO TASKS TODAY ✓", False, DIM2)
+        if state == "empty":
+            s = self._font_body.render("NO TASKS TODAY \u2713", False, DIM2)
             surface.blit(s, ((PHYSICAL_W - s.get_width()) // 2, PHYSICAL_H // 2))
             return
-        if self._state == "offline":
-            s = self._font_small.render("OFFLINE — CACHED DATA", False, DIM3)
+        if state == "offline":
+            s = self._font_small.render("OFFLINE \u2014 CACHED DATA", False, DIM3)
             surface.blit(s, ((PHYSICAL_W - s.get_width()) // 2, STATUS_BAR_H + 2))
 
         max_rows = max(1, (PHYSICAL_H - STATUS_BAR_H - 6) // ROW_H_MIN)
-        start = min(self._cursor, max(0, len(self._tasks) - max_rows))
+        start = min(cursor, max(0, len(tasks) - max_rows))
         y = STATUS_BAR_H + 12
-        for idx, task in enumerate(self._tasks[start : start + max_rows]):
+        for idx, task in enumerate(tasks[start : start + max_rows]):
             actual = start + idx
-            focused = actual == self._cursor
+            focused = actual == cursor
             if focused:
                 pygame.draw.rect(surface, WHITE, pygame.Rect(0, y, PHYSICAL_W, ROW_H_MIN))
             color = BLACK if focused else WHITE
@@ -115,6 +128,6 @@ class TasksPanel(BaseScreen):
             surface.blit(self._font_body.render(title_text, False, color), (4, y + self._font_small.get_height() + 4))
             y += ROW_H_MIN
 
-        if self._confirm_complete:
+        if confirm_complete:
             hint = self._font_small.render("DBL AGAIN TO COMPLETE", False, DIM2)
             surface.blit(hint, (6, PHYSICAL_H - 16))

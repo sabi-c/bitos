@@ -50,6 +50,7 @@ class MessagesPanel(BaseScreen):
         self._font_small = load_ui_font("small", self._ui_settings)
         self._font_hint = load_ui_font("hint", self._ui_settings)
 
+        self._lock = threading.Lock()
         self._state = self.STATE_LIST
         self._loading = True
         self._focused_idx = 0
@@ -65,12 +66,16 @@ class MessagesPanel(BaseScreen):
         threading.Thread(target=self._load_conversations, daemon=True).start()
 
     def _load_conversations(self):
-        self._conversations = self._client.get_conversations()
-        self._loading = False
+        convos = self._client.get_conversations()
+        with self._lock:
+            self._conversations = convos
+            self._loading = False
 
     def _load_thread(self, chat_id: str):
-        self._messages = self._client.get_messages(chat_id)
-        self._thread_offset = 0
+        msgs = self._client.get_messages(chat_id)
+        with self._lock:
+            self._messages = msgs
+            self._thread_offset = 0
 
     def handle_input(self, event: pygame.event.Event):
         _ = event
@@ -93,29 +98,35 @@ class MessagesPanel(BaseScreen):
             if self._on_back:
                 self._on_back()
             return
-        if not self._conversations:
-            return
-        if action == "SHORT_PRESS":
-            self._focused_idx = (self._focused_idx + 1) % len(self._conversations)
-        elif action == "TRIPLE_PRESS":
-            self._focused_idx = (self._focused_idx - 1) % len(self._conversations)
-        elif action == "DOUBLE_PRESS":
-            selected = self._conversations[self._focused_idx]
-            self._selected_chat_id = str(selected.get("chat_id", ""))
-            self._selected_title = str(selected.get("title", "CONTACT"))
+        with self._lock:
+            if not self._conversations:
+                return
+            if action == "SHORT_PRESS":
+                self._focused_idx = (self._focused_idx + 1) % len(self._conversations)
+                return
+            elif action == "TRIPLE_PRESS":
+                self._focused_idx = (self._focused_idx - 1) % len(self._conversations)
+                return
+            elif action == "DOUBLE_PRESS":
+                selected = self._conversations[self._focused_idx]
+                self._selected_chat_id = str(selected.get("chat_id", ""))
+                self._selected_title = str(selected.get("title", "CONTACT"))
+        if action == "DOUBLE_PRESS":
             self._load_thread(self._selected_chat_id)
-            self._state = self.STATE_THREAD
+            with self._lock:
+                self._state = self.STATE_THREAD
 
     def _handle_thread(self, action: str):
         if action == "LONG_PRESS":
             self._state = self.STATE_LIST
             return
-        if action == "SHORT_PRESS":
-            self._thread_offset = min(self._thread_offset + 1, max(0, len(self._messages) - 1))
-        elif action == "TRIPLE_PRESS":
-            self._thread_offset = max(self._thread_offset - 1, 0)
-        elif action == "DOUBLE_PRESS":
-            self._state = self.STATE_DRAFT_VOICE
+        with self._lock:
+            if action == "SHORT_PRESS":
+                self._thread_offset = min(self._thread_offset + 1, max(0, len(self._messages) - 1))
+            elif action == "TRIPLE_PRESS":
+                self._thread_offset = max(self._thread_offset - 1, 0)
+            elif action == "DOUBLE_PRESS":
+                self._state = self.STATE_DRAFT_VOICE
 
     def _handle_draft_voice(self, action: str):
         if action == "LONG_PRESS":
@@ -139,7 +150,7 @@ class MessagesPanel(BaseScreen):
             if self._led:
                 self._led.thinking()
             ok = self._client.send_message(self._selected_chat_id, self._draft_text, confirmed=True)
-            self._status_toast = "Sent ✓" if ok else "Failed"
+            self._status_toast = "Sent \u2713" if ok else "Failed"
             if self._led:
                 self._led.off() if ok else self._led.error()
             self._status_toast_until = time.time() + 1.5
@@ -174,8 +185,9 @@ class MessagesPanel(BaseScreen):
         draft = self._client.draft_reply(self._selected_chat_id, transcript)
         if self._led:
             self._led.off()
-        self._draft_text = draft or transcript
-        self._state = self.STATE_CONFIRM_SEND
+        with self._lock:
+            self._draft_text = draft or transcript
+            self._state = self.STATE_CONFIRM_SEND
 
     def _render_skeleton(self, surface, y, count=4):
         """Render skeleton loading rows with step blink."""
@@ -200,25 +212,29 @@ class MessagesPanel(BaseScreen):
 
     def _render_status_bar(self, surface: pygame.Surface, title: str):
         pygame.draw.rect(surface, WHITE, pygame.Rect(0, 0, PHYSICAL_W, STATUS_BAR_H))
-        label = self._font_small.render(f"● {title}  {self._battery_pct}%", False, BLACK)
+        label = self._font_small.render(f"\u25cf {title}  {self._battery_pct}%", False, BLACK)
         surface.blit(label, (PAD_WIDGET, (STATUS_BAR_H - label.get_height()) // 2))
 
     def _render_list(self, surface: pygame.Surface):
         self._render_status_bar(surface, "MESSAGES")
         content_y = STATUS_BAR_H + CONTENT_TOP_PAD
-        if self._loading:
+        with self._lock:
+            loading = self._loading
+            conversations = list(self._conversations)
+            focused_idx = self._focused_idx
+        if loading:
             self._render_skeleton(surface, content_y)
-        elif not self._conversations:
+        elif not conversations:
             txt = self._font_body.render("NO MESSAGES", False, DIM2)
             surface.blit(txt, ((PHYSICAL_W - txt.get_width()) // 2, PHYSICAL_H // 2))
         else:
             row_h = LIST_ROW_H
             visible = (PHYSICAL_H - STATUS_BAR_H - STATUS_BAR_H) // row_h
-            start = min(self._focused_idx, max(0, len(self._conversations) - visible))
+            start = min(focused_idx, max(0, len(conversations) - visible))
             y = content_y
-            for idx, convo in enumerate(self._conversations[start : start + visible]):
+            for idx, convo in enumerate(conversations[start : start + visible]):
                 actual = start + idx
-                focused = actual == self._focused_idx
+                focused = actual == focused_idx
                 if focused:
                     pygame.draw.rect(surface, WHITE, pygame.Rect(0, y, PHYSICAL_W, row_h))
                 title = str(convo.get("title", "CONTACT"))[:16]
@@ -236,13 +252,16 @@ class MessagesPanel(BaseScreen):
                 surface.blit(sub, (PAD_WIDGET, y + LIST_SNIPPET_TOP_PAD))
                 y += row_h
 
-        hint = self._font_hint.render("SHORT:↕  DBL:OPEN  LONG:BACK", False, DIM3)
+        hint = self._font_hint.render("SHORT:\u2195  DBL:OPEN  LONG:BACK", False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - HINT_MARGIN_BOTTOM))
 
     def _render_thread(self, surface: pygame.Surface):
         self._render_status_bar(surface, (self._selected_title or "CONTACT").upper()[:12])
         y = STATUS_BAR_H + CONTENT_TOP_PAD
-        shown = self._messages[max(0, len(self._messages) - THREAD_VISIBLE_ROWS - self._thread_offset) : len(self._messages) - self._thread_offset]
+        with self._lock:
+            messages = list(self._messages)
+            thread_offset = self._thread_offset
+        shown = messages[max(0, len(messages) - THREAD_VISIBLE_ROWS - thread_offset) : len(messages) - thread_offset]
         for message in shown:
             text = str(message.get("text", ""))[:THREAD_TEXT_MAX_CHARS]
             if bool(message.get("from_me", False)):
@@ -257,7 +276,7 @@ class MessagesPanel(BaseScreen):
             toast = self._font_small.render(self._status_toast, False, DIM2)
             surface.blit(toast, (PAD_WIDGET, PHYSICAL_H - ROW_H_MIN))
 
-        hint = self._font_hint.render("SHORT:↕  DBL:REPLY  LONG:BACK", False, DIM3)
+        hint = self._font_hint.render("SHORT:\u2195  DBL:REPLY  LONG:BACK", False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - HINT_MARGIN_BOTTOM))
 
     def _render_draft_voice(self, surface: pygame.Surface):
@@ -276,13 +295,13 @@ class MessagesPanel(BaseScreen):
                 surface.blit(line, ((PHYSICAL_W - line.get_width()) // 2, y))
             y += TEXT_LINE_STEP
 
-        hint = self._font_hint.render("DBL:▶ SPEAK  LONG:CANCEL", False, DIM3)
+        hint = self._font_hint.render("DBL:\u25b6 SPEAK  LONG:CANCEL", False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - HINT_MARGIN_BOTTOM))
 
     def _render_confirm(self, surface: pygame.Surface):
         self._render_status_bar(surface, "DRAFT")
         self.render_confirm(surface)
-        hint_rows = ["[SHORT]  REFINE", "[DBL  ]  SEND ✓", "[LONG ]  DISCARD"]
+        hint_rows = ["[SHORT]  REFINE", "[DBL  ]  SEND \u2713", "[LONG ]  DISCARD"]
         y = STATUS_BAR_H + CONFIRM_HINT_START_Y
         for row in hint_rows:
             line = self._font_small.render(row, False, WHITE)
@@ -304,3 +323,19 @@ class MessagesPanel(BaseScreen):
             s = self._font_small.render(line, False, WHITE)
             surface.blit(s, (x + PAD_WIDGET, yy))
             yy += TEXT_LINE_STEP
+
+    def _wrap_text(self, text: str, max_width: int) -> list[str]:
+        if not text:
+            return [""]
+        out: list[str] = []
+        cur = ""
+        for char in text:
+            test = cur + char
+            if self._font_small.size(test)[0] <= max_width:
+                cur = test
+            else:
+                out.append(cur)
+                cur = char
+        if cur:
+            out.append(cur)
+        return out
