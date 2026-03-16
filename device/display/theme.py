@@ -5,10 +5,10 @@ import pygame
 
 _FONT_CACHE: dict[tuple[str, int], pygame.font.Font] = {}
 
-from display.tokens import FONT_PATH, FONT_SIZES, PAD_ROW
+from display.tokens import FONT_PATH, FONT_REGISTRY, DEFAULT_FONT_FAMILY, FONT_SIZES, PAD_ROW
 
 DEFAULT_RUNTIME_UI_SETTINGS = {
-    "font_family": "press_start_2p",
+    "font_family": DEFAULT_FONT_FAMILY,
     "font_scale": 1.0,
     "font_size_overrides": {
         "title": FONT_SIZES["title"],
@@ -49,21 +49,27 @@ def ui_font_size(role: str, ui_settings: dict) -> int:
     return max(5, int(round(base * float(scale))))
 
 
+def flush_font_cache() -> None:
+    """Clear all cached fonts. Call after font_family or font_scale changes."""
+    _FONT_CACHE.clear()
+
+
 def load_ui_font(role: str, ui_settings: dict) -> pygame.font.Font:
     size = ui_font_size(role, ui_settings)
-    family = ui_settings.get("font_family", "press_start_2p")
+    family = ui_settings.get("font_family", DEFAULT_FONT_FAMILY)
     cache_key = (family, size)
 
     if cache_key in _FONT_CACHE:
         return _FONT_CACHE[cache_key]
 
-    if family == "monospace":
-        font = pygame.font.SysFont("monospace", size)
-    else:
+    font_path = FONT_REGISTRY.get(family)
+    if font_path:
         try:
-            font = pygame.font.Font(FONT_PATH, size)
-        except FileNotFoundError:
+            font = pygame.font.Font(font_path, size)
+        except (FileNotFoundError, OSError):
             font = pygame.font.SysFont("monospace", size)
+    else:
+        font = pygame.font.SysFont("monospace", size)
 
     _FONT_CACHE[cache_key] = font
     return font
