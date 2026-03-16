@@ -180,7 +180,7 @@ class LockScreen(BaseScreen):
 
     def _draw_pin_dots(self, surface: pygame.Surface, y: int, color, is_flashing: bool):
         """Draw confirmed dots + current cycling digit with inverted highlight."""
-        spacing = 4  # pixels between parts
+        spacing = 10  # pixels between digit slots
 
         # Build list of (text, is_active) tuples
         parts: list[tuple[str, bool]] = []
@@ -203,8 +203,8 @@ class LockScreen(BaseScreen):
         total_w = 0
         for text, active in parts:
             if active:
-                # Render with title font (larger) for emphasis
-                surf = self._font_title.render(text, False, BLACK if not is_flashing else WHITE)
+                # Same font size, inverted colors for emphasis
+                surf = self._font_body.render(text, False, BLACK if not is_flashing else WHITE)
             else:
                 surf = self._font_body.render(text, False, color)
             rendered.append((surf, active, surf.get_width(), surf.get_height()))

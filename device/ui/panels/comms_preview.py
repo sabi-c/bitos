@@ -15,7 +15,7 @@ from device.ui.panels.base import PreviewPanel
 
 HEADER_H = 48
 HEADER_FONT = 10
-PREVIEW_FONT = 8
+PREVIEW_FONT = 9
 PAD_X = 6
 PAD_Y = 4
 LINE_H = 14

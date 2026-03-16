@@ -141,6 +141,7 @@ class ChatPanel(BaseScreen):
         self._voice_step = ""       # on-screen pipeline step callout
         self._voice_error = ""      # error detail shown on screen
         self._confirm_tap_until: float = 0.0  # tap-to-record confirmation window
+        self._post_speaking_until: float = 0.0  # cooldown after TTS skip
         self._health = ServiceHealth()
         self._health_checked = False
         self._speaking_overlay = SpeakingOverlay()
@@ -332,6 +333,8 @@ class ChatPanel(BaseScreen):
 
     # Duration of the "tap again to record" confirmation window
     _CONFIRM_TAP_S = 1.5
+    # Cooldown after TTS skip to absorb stray taps
+    _POST_SPEAKING_COOLDOWN_S = 0.8
 
     def _handle_idle(self, action: str):
         if action == "SHORT_PRESS":
@@ -340,6 +343,9 @@ class ChatPanel(BaseScreen):
                 self._hold_timer = None
                 return
             now = time.time()
+            # Absorb stray taps right after skipping TTS
+            if now < self._post_speaking_until:
+                return
             if now < self._confirm_tap_until:
                 # Second tap within confirmation window → start recording
                 self._confirm_tap_until = 0.0
@@ -429,6 +435,7 @@ class ChatPanel(BaseScreen):
                 self._audio_pipeline.stop_speaking()
             self._speaking_overlay.dismiss()
             self._mode = ChatMode.IDLE
+            self._post_speaking_until = time.time() + self._POST_SPEAKING_COOLDOWN_S
             with self._messages_lock:
                 self._status_detail = ""
         elif result == "next":
@@ -447,6 +454,7 @@ class ChatPanel(BaseScreen):
                 if not self._speech_queue:
                     self._speaking_overlay.dismiss()
                     self._mode = ChatMode.IDLE
+                    self._post_speaking_until = time.time() + self._POST_SPEAKING_COOLDOWN_S
                     with self._messages_lock:
                         self._status_detail = ""
         elif result == "reply":
