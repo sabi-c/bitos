@@ -21,6 +21,7 @@ from display.tokens import (
     SAFE_INSET,
 )
 from display.animator import blink_cursor
+from display.typewriter import TypewriterRenderer
 from display.theme import merge_runtime_ui_settings, load_ui_font, ui_line_height
 from client.api import BackendClient, BackendChatError
 from audio import AudioPipeline
@@ -101,6 +102,9 @@ class ChatPanel(BaseScreen):
         self._templates = list(DEFAULT_TEMPLATES)
         self._resumed_until = 0.0
 
+        # Typewriter
+        self._typewriter: TypewriterRenderer | None = None
+
         # Mode state
         self._mode = ChatMode.IDLE
         self._voice_stop_event = threading.Event()
@@ -145,6 +149,18 @@ class ChatPanel(BaseScreen):
             if time.time() - self._hold_timer >= 0.4:
                 self._hold_timer = None
                 self._start_recording()
+
+        # Tick typewriter
+        if self._typewriter and not self._typewriter.finished:
+            self._typewriter.update(dt)
+        elif self._typewriter and self._typewriter.finished and self._mode == ChatMode.STREAMING:
+            # Typewriter done revealing — transition to SPEAKING or IDLE
+            self._typewriter = None
+            if self._audio_pipeline and self._messages:
+                # TTS will be handled by _stream_response
+                pass
+            else:
+                self._mode = ChatMode.IDLE
 
     def handle_input(self, event: pygame.event.Event):
         if event.type != pygame.KEYDOWN:
@@ -280,6 +296,11 @@ class ChatPanel(BaseScreen):
         # ── Messages area ──
         with self._messages_lock:
             snapshot = list(self._messages)
+
+        # If typewriter is active, override last assistant message with revealed text
+        if self._typewriter and snapshot and snapshot[-1]["role"] == "assistant":
+            snapshot = list(snapshot)  # make mutable copy
+            snapshot[-1] = {"role": "assistant", "text": self._typewriter.get_visible_text()}
 
         visible_lines = []
         for msg in snapshot:
@@ -500,6 +521,14 @@ class ChatPanel(BaseScreen):
                 response_text += chunk
                 with self._messages_lock:
                     self._messages[-1]["text"] = response_text
+
+            # Feed completed response to typewriter for progressive reveal
+            speed = "normal"
+            if self._repository:
+                saved_speed = self._repository.get_setting("text_speed", None)
+                if saved_speed:
+                    speed = str(saved_speed)
+            self._typewriter = TypewriterRenderer(response_text, speed=speed)
 
             if self._repository and self._session_id is not None:
                 self._repository.add_message(self._session_id, "assistant", response_text)
