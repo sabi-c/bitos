@@ -54,6 +54,7 @@ from screens.panels.notifications import NotificationsPanel
 from screens.panels.agent_tasks import AgentTasksPanel
 from screens.panels.files_browser import FilesBrowserPanel
 from screens.panels.markdown_viewer import MarkdownViewerPanel
+from screens.panels.chat_history import ChatHistoryPanel
 from screens.panels.settings import SettingsPanel, ModelPickerPanel, AgentModePanel, SleepTimerPanel, AboutPanel, BatteryPanel, DevPanel, FontPickerPanel, TextSpeedPanel
 from screens.panels.change_pin import ChangePinPanel
 from screens.subscreens.integration_detail import IntegrationDetailPanel
@@ -178,6 +179,15 @@ def main():
     corner_mask = CornerMask()
 
     audio_pipeline = get_audio_pipeline()
+
+    # Soft-start ALSA speaker to prevent WM8960 pop/click on boot
+    from audio.player import init_alsa_soft_start
+    try:
+        vol = DeviceRepository().get_setting("volume", 100)
+        init_alsa_soft_start(target_pct=max(0, min(100, int(vol))))
+    except Exception:
+        init_alsa_soft_start()
+
     led = LEDController(board=board)
     monitor = SystemMonitor(interval=30)
     battery_monitor = BatteryMonitor()
@@ -421,6 +431,10 @@ def main():
         panel_openers = {
             "HOME": lambda: None,  # already showing home
             "CHAT": open_chat,
+            "CHAT_NEW": open_chat_new,
+            "CHAT_RESUME": open_chat_resume,
+            "CHAT_GREETING": open_chat_greeting,
+            "CHAT_HISTORY": open_chat_history,
             "CHAT_SETTINGS": open_chat_settings,
             "TASKS": open_tasks,
             "SETTINGS": open_settings,
@@ -503,6 +517,74 @@ def main():
                 audio_pipeline=audio_pipeline,
                 led=led,
                 on_back=lambda: screen_mgr.pop(),
+                on_settings=open_chat_settings,
+            )
+        )
+
+    def open_chat_new():
+        screen_mgr.push(
+            ChatPanel(
+                client=client,
+                ui_settings=ui_settings,
+                repository=repository,
+                audio_pipeline=audio_pipeline,
+                led=led,
+                on_back=lambda: screen_mgr.pop(),
+                on_settings=open_chat_settings,
+                mode="blank",
+            )
+        )
+
+    def open_chat_resume():
+        screen_mgr.push(
+            ChatPanel(
+                client=client,
+                ui_settings=ui_settings,
+                repository=repository,
+                audio_pipeline=audio_pipeline,
+                led=led,
+                on_back=lambda: screen_mgr.pop(),
+                on_settings=open_chat_settings,
+                mode="resume",
+            )
+        )
+
+    def open_chat_greeting():
+        screen_mgr.push(
+            ChatPanel(
+                client=client,
+                ui_settings=ui_settings,
+                repository=repository,
+                audio_pipeline=audio_pipeline,
+                led=led,
+                on_back=lambda: screen_mgr.pop(),
+                on_settings=open_chat_settings,
+                mode="greeting",
+            )
+        )
+
+    def open_chat_history():
+        def _open_session(session_id: int):
+            screen_mgr.push(
+                ChatPanel(
+                    client=client,
+                    ui_settings=ui_settings,
+                    repository=repository,
+                    audio_pipeline=audio_pipeline,
+                    led=led,
+                    on_back=lambda: screen_mgr.pop(),
+                    on_settings=open_chat_settings,
+                    mode="session",
+                    session_id=session_id,
+                )
+            )
+
+        screen_mgr.push(
+            ChatHistoryPanel(
+                repository=repository,
+                on_open_session=_open_session,
+                on_back=lambda: screen_mgr.pop(),
+                ui_settings=ui_settings,
             )
         )
 

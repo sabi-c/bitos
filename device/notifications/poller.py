@@ -21,6 +21,7 @@ class NotificationPoller:
         # Optional callback for interactive banners (set by main.py)
         self.on_banner: callable | None = None
         self._notified_subtask_ids: set[str] = set()
+        self._update_notified = False
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -38,6 +39,7 @@ class NotificationPoller:
         next_health_poll = 0.0
         next_task_poll = 0.0
         next_subtask_poll = 0.0
+        next_update_poll = 15.0  # Check for updates 15s after boot
         while not self._stop.wait(1.0):
             now = time.time()
             if now >= next_health_poll:
@@ -49,6 +51,9 @@ class NotificationPoller:
             if now >= next_subtask_poll:
                 self._poll_completed_subtasks()
                 next_subtask_poll = now + 10.0
+            if now >= next_update_poll:
+                self._poll_update_available()
+                next_update_poll = now + 3600.0  # Re-check hourly
 
     def _poll_health_state(self) -> None:
         state = bool(self._api_client.health())
@@ -90,6 +95,32 @@ class NotificationPoller:
                 source_id=task_id,
             )
             self._queue.push_record(record)
+
+    def _poll_update_available(self) -> None:
+        """Check server for available OTA updates."""
+        if self._update_notified:
+            return
+        try:
+            info = self._api_client.get_device_version()
+        except Exception:
+            return
+        if not info.get("update_available"):
+            return
+
+        behind = info.get("behind", 0)
+        self._update_notified = True
+        message = f"Update ready ({behind} commit{'s' if behind != 1 else ''} behind)"
+        record = NotificationRecord(
+            id=f"update:{uuid.uuid4().hex}",
+            type="CLAUDE",
+            app_name="SYSTEM",
+            message=message,
+            time_str=time.strftime("%H:%M"),
+            source_id="update",
+        )
+        self._queue.push_record(record)
+        if self.on_banner:
+            self.on_banner("SYSTEM", "S", message)
 
     def _poll_completed_subtasks(self) -> None:
         if not hasattr(self._api_client, "get_agent_subtasks"):

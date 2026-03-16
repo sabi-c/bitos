@@ -98,6 +98,10 @@ class BackendClient:
         web_search = True
         memory = True
         ai_model = ""
+        volume = 100
+        voice_enabled = False
+        voice_mode = "auto"
+        extended_thinking = False
 
         try:
             repository = DeviceRepository()
@@ -105,6 +109,10 @@ class BackendClient:
             web_search = bool(repository.get_setting("web_search", True))
             memory = bool(repository.get_setting("memory", True))
             ai_model = str(repository.get_setting("ai_model", "") or "")
+            volume = repository.get_setting("volume", 100)
+            voice_enabled = repository.get_setting("voice_enabled", False)
+            voice_mode = str(repository.get_setting("voice_mode", "auto"))
+            extended_thinking = bool(repository.get_setting("extended_thinking", False))
             tasks_today = [str(t.get("title", "")).strip() for t in repository.list_incomplete_tasks(limit=3)]
             tasks_today = [t for t in tasks_today if t]
             # Load cached geolocation if available
@@ -122,7 +130,7 @@ class BackendClient:
             logging.debug("battery_read_failed error=%s", exc)
 
         try:
-            return self._stream_chat_sse(message, mode, tasks_today, battery_pct, web_search, memory, ai_model, location)
+            return self._stream_chat_sse(message, mode, tasks_today, battery_pct, web_search, memory, ai_model, location, volume, voice_enabled, voice_mode, extended_thinking)
         except Exception as exc:
             kind, message_copy = self._http_error_message(exc)
             retryable = kind in {"offline", "timeout", "network", "server"}
@@ -138,6 +146,10 @@ class BackendClient:
         memory: bool = True,
         model: str = "",
         location: dict | None = None,
+        volume: int = 100,
+        voice_enabled: bool = False,
+        voice_mode: str = "auto",
+        extended_thinking: bool = False,
     ) -> Generator[str, None, None]:
         """Yield text chunks from the /chat SSE stream in real time."""
         payload: dict = {
@@ -146,11 +158,23 @@ class BackendClient:
             "tasks_today": tasks_today,
             "battery_pct": battery_pct,
             "web_search": web_search,
+            "extended_thinking": extended_thinking,
             "memory": memory,
+            "volume": volume,
+            "voice_enabled": voice_enabled,
             "response_format_hint": (
                 "Keep responses concise and structured. Use short paragraphs "
                 "separated by blank lines. Aim for under 800 characters total "
-                "— the device displays text in pages of ~250 characters each."
+                "— the device displays text in pages of ~250 characters each. "
+                "Device commands (parsed out before display): "
+                "{{volume:NUMBER}} (0-100) to set volume, "
+                "{{voice:on}} or {{voice:off}} to toggle voice replies. "
+                "Current volume: " + str(volume) + "%. "
+                "Voice: " + (
+                    "FORCED OFF by user — do not use voice commands" if voice_mode == "off"
+                    else "FORCED ON by user" if voice_mode == "on"
+                    else ("ON" if voice_enabled else "OFF (available — user can ask you to turn it on)")
+                ) + "."
             ),
         }
         if model:
@@ -174,9 +198,35 @@ class BackendClient:
                         chunk = json.loads(data)
                         if "text" in chunk:
                             yield chunk["text"]
+                        elif "setting_change" in chunk:
+                            # Agent requested a setting change — apply it
+                            self._apply_setting_change(chunk["setting_change"])
+                        elif "perception" in chunk:
+                            # Perception metadata — log but don't yield as text
+                            logging.debug("perception: %s", chunk["perception"])
                     except json.JSONDecodeError:
                         yield data
 
+
+    def _apply_setting_change(self, change: dict) -> None:
+        """Apply a setting change requested by the agent."""
+        key = change.get("key", "")
+        value = change.get("value")
+        if not key:
+            return
+        try:
+            from storage.repository import DeviceRepository
+            repo = DeviceRepository()
+            repo.set_setting(key, value)
+            logging.info("agent_setting_applied: %s=%s", key, value)
+
+            # For volume changes, also update ALSA immediately
+            if key == "volume":
+                from audio.player import AudioPlayer
+                player = AudioPlayer()
+                player.set_volume(max(0, min(100, int(value))) / 100.0)
+        except Exception as exc:
+            logging.warning("agent_setting_apply_failed: key=%s error=%s", key, exc)
 
     def get_integration_status(self) -> dict:
         """GET /status/integrations."""
@@ -303,6 +353,31 @@ class BackendClient:
             logging.warning("tasks_fetch_failed error=%s", exc)
             return []
 
+
+    def get_device_version(self) -> dict:
+        """GET /device/version — check for updates."""
+        try:
+            resp = httpx.get(f"{self.base_url}/device/version", timeout=10, headers=self._request_headers())
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as exc:
+            logging.warning("device_version_failed error=%s", exc)
+            return {}
+
+    def trigger_update(self) -> dict:
+        """POST /device/update — trigger OTA update."""
+        try:
+            resp = httpx.post(
+                f"{self.base_url}/device/update",
+                json={"confirmed": True},
+                timeout=30,
+                headers=self._request_headers(),
+            )
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as exc:
+            logging.warning("device_update_failed error=%s", exc)
+            return {"ok": False, "error": str(exc)}
 
     def get_device_stats(self) -> dict:
         """GET /device/stats from server."""

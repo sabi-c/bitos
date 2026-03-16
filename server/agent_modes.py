@@ -51,6 +51,11 @@ You are BITOS — a pocket AI assistant running on a physical device
 display on a small screen and are read aloud via TTS.
 Keep responses under 3 sentences unless detail is specifically requested.
 Today's date: {date}.
+
+DEVICE TOOLS: You have tools to read and change device settings (volume, voice mode,
+TTS engine, AI model, etc.). Use get_device_settings to check current state before
+making changes. Use update_device_setting to change settings when the user asks.
+Only change settings when explicitly requested — don't change them proactively.
 """.strip()
 
 
@@ -60,6 +65,8 @@ def get_system_prompt(
     battery_pct: int | None = None,
     web_search: bool = True,
     memory: bool = True,
+    location: dict | None = None,
+    response_format_hint: str = "",
 ) -> str:
     """Build the full system prompt for a selected agent mode with optional live context."""
     base = BASE_CONTEXT.format(date=date.today().strftime("%A, %B %d %Y"))
@@ -73,6 +80,20 @@ def get_system_prompt(
             pass
 
     context_blocks: list[str] = []
+
+    # Location awareness
+    if location:
+        city = location.get("city", "")
+        region = location.get("region", "")
+        country = location.get("country", "")
+        tz = location.get("timezone", "")
+        parts = [p for p in [city, region, country] if p]
+        loc_str = ", ".join(parts)
+        if tz:
+            loc_str += f" (timezone: {tz})"
+        if loc_str:
+            context_blocks.append(f"LOCATION: {loc_str}")
+
     if tasks_today:
         today_block = "TODAY'S TASKS:\n" + "\n".join(f"- {t}" for t in tasks_today[:3])
         context_blocks.append(today_block)
@@ -89,4 +110,9 @@ def get_system_prompt(
     prompt = base + "\n\n" + mode_prompt
     if context_blocks:
         prompt += "\n\n" + "\n\n".join(context_blocks)
+
+    # Device format hint (volume, voice, screen constraints)
+    if response_format_hint:
+        prompt += "\n\n" + response_format_hint
+
     return prompt

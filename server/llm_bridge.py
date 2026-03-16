@@ -32,7 +32,7 @@ class LLMBridge:
     provider: str
     model: str
 
-    def stream_text(self, message: str, system_prompt: str | None = None, model_override: str | None = None) -> Generator[str, None, None]:
+    def stream_text(self, message: str, system_prompt: str | None = None, model_override: str | None = None, extended_thinking: bool = False) -> Generator[str, None, None]:
         raise NotImplementedError
 
     def complete_text(self, prompt: str, system_prompt: str | None = None, model_override: str | None = None) -> tuple[str, int, int]:
@@ -46,20 +46,99 @@ class AnthropicBridge(LLMBridge):
         super().__init__(provider="anthropic", model=model)
         self._api_key = api_key
 
-    def stream_text(self, message: str, system_prompt: str | None = None, model_override: str | None = None) -> Generator[str, None, None]:
+    def stream_text(self, message: str, system_prompt: str | None = None, model_override: str | None = None, extended_thinking: bool = False) -> Generator[str, None, None]:
         if not self._api_key:
             raise RuntimeError("ANTHROPIC_API_KEY not configured")
 
         active_model = model_override or self.model
         client = anthropic.Anthropic(api_key=self._api_key)
-        with client.messages.stream(
-            model=active_model,
-            max_tokens=1024,
-            messages=[{"role": "user", "content": message}],
-            system=system_prompt or SYSTEM_PROMPT,
-        ) as stream:
+
+        kwargs: dict = {
+            "model": active_model,
+            "max_tokens": 1024,
+            "messages": [{"role": "user", "content": message}],
+            "system": system_prompt or SYSTEM_PROMPT,
+        }
+
+        # Extended thinking requires higher max_tokens and a thinking budget
+        if extended_thinking:
+            kwargs["max_tokens"] = 16000
+            kwargs["thinking"] = {"type": "enabled", "budget_tokens": 10000}
+
+        with client.messages.stream(**kwargs) as stream:
             for text in stream.text_stream:
                 yield text
+
+    def stream_with_tools(
+        self,
+        message: str,
+        tools: list[dict],
+        tool_handler,
+        device_settings: dict,
+        system_prompt: str | None = None,
+        model_override: str | None = None,
+        extended_thinking: bool = False,
+    ) -> Generator[str, None, list[dict]]:
+        """Stream with tool_use support. Yields text chunks, returns setting changes.
+
+        When the model calls a tool, we resolve it and continue the conversation.
+        Max 5 tool rounds to prevent infinite loops.
+        """
+        if not self._api_key:
+            raise RuntimeError("ANTHROPIC_API_KEY not configured")
+
+        from agent_tools import handle_tool_call
+
+        active_model = model_override or self.model
+        client = anthropic.Anthropic(api_key=self._api_key)
+        setting_changes: list[dict] = []
+
+        messages = [{"role": "user", "content": message}]
+        sys = system_prompt or SYSTEM_PROMPT
+
+        for _round in range(5):
+            kwargs: dict = {
+                "model": active_model,
+                "max_tokens": 1024,
+                "messages": messages,
+                "system": sys,
+                "tools": tools,
+            }
+            if extended_thinking:
+                kwargs["max_tokens"] = 16000
+                kwargs["thinking"] = {"type": "enabled", "budget_tokens": 10000}
+
+            response = client.messages.create(**kwargs)
+
+            # Process response blocks
+            has_tool_use = False
+            tool_results = []
+            assistant_content = []
+
+            for block in response.content:
+                assistant_content.append(block)
+                if block.type == "text":
+                    yield block.text
+                elif block.type == "tool_use":
+                    has_tool_use = True
+                    result = handle_tool_call(
+                        block.name, block.input, device_settings, setting_changes,
+                    )
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": result,
+                    })
+
+            if not has_tool_use:
+                # Done — return setting changes via the generator return value
+                return setting_changes
+
+            # Continue conversation with tool results
+            messages.append({"role": "assistant", "content": assistant_content})
+            messages.append({"role": "user", "content": tool_results})
+
+        return setting_changes
 
     def complete_text(self, prompt: str, system_prompt: str | None = None, model_override: str | None = None) -> tuple[str, int, int]:
         """Non-streaming completion. Returns (response_text, input_tokens, output_tokens)."""

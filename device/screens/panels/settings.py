@@ -82,6 +82,8 @@ class SettingsPanel(BaseScreen):
         self._ai_model = "claude-sonnet-4-6"
         self._agent_mode = "producer"
         self._sleep_sec = 60
+        self._firmware_status = "v1.0"  # Updated on enter
+        self._update_available = False
 
         self._nav = VerticalNavController([
             NavItem(key="web_search", label="WEB SEARCH", status="", action=self._toggle_web_search),
@@ -91,6 +93,7 @@ class SettingsPanel(BaseScreen):
             NavItem(key="sleep", label="SLEEP TIMER", status="", action=self._open_sleep_timer),
             NavItem(key="font", label="FONT", status="", action=self._open_font_picker),
             NavItem(key="text_speed", label="TEXT SPEED", status="", action=self._open_text_speed),
+            NavItem(key="firmware", label="FIRMWARE", status="", action=self._check_firmware),
             NavItem(key="about", label="ABOUT", status="", action=self._open_about),
             NavItem(key="battery", label="BATTERY", status="", action=self._open_battery),
             NavItem(key="companion", label="COMPANION APP", status="", action=self._open_companion_app),
@@ -110,6 +113,7 @@ class SettingsPanel(BaseScreen):
         self._sleep_sec = int(self._repo.get_setting("sleep_timeout_seconds", default=60))
         self._font_family = str(self._repo.get_setting("font_family", default="press_start_2p"))
         self._refresh_integration_status()
+        self._refresh_firmware_status()
 
     def handle_action(self, action: str):
         if action == "DOUBLE_PRESS":
@@ -152,6 +156,7 @@ class SettingsPanel(BaseScreen):
             "agent_mode": self._agent_mode[:10].upper() + " \u203a",
             "sleep": f"{self._sleep_sec}s \u203a",
             "font": self._font_family_label() + " \u203a",
+            "firmware": self._firmware_status,
             "about": "v1.0 \u203a",
             "companion": "PAIR \u203a",
             "battery": "\u203a",
@@ -263,6 +268,37 @@ class SettingsPanel(BaseScreen):
         self._on_push_overlay(qr)
         self._on_set_discoverable(True, 120)
 
+
+    def _refresh_firmware_status(self):
+        """Check server for firmware version info."""
+        if not self._client:
+            return
+        try:
+            info = self._client.get_device_version()
+            commit = info.get("commit", "?")[:7]
+            self._update_available = bool(info.get("update_available"))
+            if self._update_available:
+                behind = info.get("behind", 0)
+                self._firmware_status = f"{commit} UPDATE \u203a"
+            else:
+                self._firmware_status = f"{commit} \u2713"
+        except Exception:
+            self._firmware_status = "v1.0 \u203a"
+
+    def _check_firmware(self):
+        """Check for updates and trigger if available."""
+        if not self._client:
+            return
+        if self._update_available:
+            # Trigger the update
+            self._firmware_status = "UPDATING..."
+            try:
+                self._client.trigger_update()
+            except Exception:
+                self._firmware_status = "UPDATE FAILED"
+        else:
+            # Just refresh the status
+            self._refresh_firmware_status()
 
     def _refresh_integration_status(self):
         if not self._client:

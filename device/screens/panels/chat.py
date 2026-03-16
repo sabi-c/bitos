@@ -2,6 +2,7 @@
 import json
 import logging
 import os
+import re
 from collections import deque
 from enum import Enum, auto
 import threading
@@ -31,9 +32,12 @@ from display.pagination import split_into_pages as _shared_split_into_pages
 from display.pagination import wrap_text as _shared_wrap_text
 from display.typewriter import TypewriterRenderer
 from display.theme import merge_runtime_ui_settings, load_ui_font, ui_line_height
+from display.markdown import parse_line, STYLE_BOLD, STYLE_ITALIC, STYLE_CODE, STYLE_HEADER, STYLE_BULLET
 from client.api import BackendClient, BackendChatError
 from audio import AudioPipeline
 from storage.repository import DeviceRepository
+from overlays.speaking_overlay import SpeakingOverlay
+import display.tokens as tokens_module
 
 
 DEFAULT_TEMPLATES = [
@@ -64,6 +68,18 @@ class ChatMode(Enum):
     SPEAKING = auto()   # TTS playing response
 
 
+def _should_speak(voice_mode: str, agent_voice_enabled: bool, has_api_key: bool) -> bool:
+    """Determine if TTS should fire based on user setting, agent preference, and API key."""
+    if not has_api_key:
+        return False
+    if voice_mode == "off":
+        return False
+    if voice_mode == "on":
+        return True
+    # auto — agent decides
+    return agent_voice_enabled
+
+
 class ChatPanel(BaseScreen):
     """Gesture-driven voice-first chat panel with mode-based input routing."""
     _owns_status_bar = True
@@ -88,11 +104,12 @@ class ChatPanel(BaseScreen):
     _ACTION_ROW_H = 18
     _HINT_H = 20
 
-    def __init__(self, client: BackendClient, ui_settings: dict | None = None, repository: DeviceRepository | None = None, audio_pipeline: AudioPipeline | None = None, led=None, on_back=None):
+    def __init__(self, client: BackendClient, ui_settings: dict | None = None, repository: DeviceRepository | None = None, audio_pipeline: AudioPipeline | None = None, led=None, on_back=None, on_settings=None, mode: str = "auto", session_id: int | None = None):
         self._client = client
         self._cursor_anim = blink_cursor()
         self._repository = repository
         self._on_back = on_back
+        self._on_settings = on_settings
         self._messages_lock = threading.Lock()
         self._audio_pipeline = audio_pipeline
         self._led = led
@@ -125,6 +142,7 @@ class ChatPanel(BaseScreen):
         self._voice_error = ""      # error detail shown on screen
         self._health = ServiceHealth()
         self._health_checked = False
+        self._speaking_overlay = SpeakingOverlay()
 
         # Pagination state
         self._pages: list[list[str]] = []
@@ -148,21 +166,85 @@ class ChatPanel(BaseScreen):
                 except Exception:
                     pass
             self._resumed_until = 0.0
-            latest = self._repository.get_latest_chat_session()
-            if latest:
-                age_seconds = time.time() - float(latest.get("updated_at", latest.get("created_at", 0.0)))
-                if age_seconds <= 24 * 3600:
-                    self._session_id = int(latest["id"])
-                    restored = self._repository.get_session_messages(str(self._session_id), limit=10)
-                    if restored:
-                        with self._messages_lock:
-                            self._messages = deque(({"role": m["role"], "text": m["text"]} for m in restored), maxlen=50)
-                            self._status_detail = "SESSION RESTORED"
-                            self._resumed_until = time.time() + 2.0
-                            self._scroll_offset = 0
+            self._load_session(mode, session_id)
+
+    def _load_session(self, mode: str, session_id: int | None) -> None:
+        """Load session based on mode.
+
+        Modes:
+          - "auto": restore latest chat session if < 24h old (default, backward compat)
+          - "blank": start a completely new chat, no session loaded
+          - "resume": explicitly load the latest non-greeting session
+          - "greeting": load the greeting session (reply context)
+          - "session": load a specific session by ID (for history)
+        """
+        if mode == "blank":
+            return  # fresh chat, no session loaded
+
+        if mode == "session" and session_id is not None:
+            self._session_id = session_id
+            restored = self._repository.get_session_messages(str(session_id), limit=10)
+            if restored:
+                with self._messages_lock:
+                    self._messages = deque(({"role": m["role"], "text": m["text"]} for m in restored), maxlen=50)
+                    self._status_detail = "SESSION LOADED"
+                    self._resumed_until = time.time() + 2.0
+                    self._set_resume_context(restored)
+            return
+
+        if mode == "greeting":
+            greeting = self._repository.get_greeting_session()
+            if greeting:
+                self._session_id = int(greeting["id"])
+                restored = self._repository.get_session_messages(str(self._session_id), limit=10)
+                if restored:
+                    with self._messages_lock:
+                        self._messages = deque(({"role": m["role"], "text": m["text"]} for m in restored), maxlen=50)
+                        self._status_detail = "GREETING"
+                        self._resumed_until = time.time() + 2.0
+                        # Build pages from greeting text for nice display
+                        last_msg = restored[-1]
+                        if last_msg["role"] == "assistant":
+                            self._build_pages(last_msg["text"])
+            return
+
+        # "auto" or "resume" — load latest chat session
+        latest = self._repository.get_latest_chat_session()
+        if latest:
+            age_seconds = time.time() - float(latest.get("updated_at", latest.get("created_at", 0.0)))
+            max_age = 24 * 3600 if mode == "auto" else float("inf")
+            if age_seconds <= max_age:
+                self._session_id = int(latest["id"])
+                restored = self._repository.get_session_messages(str(self._session_id), limit=10)
+                if restored:
+                    with self._messages_lock:
+                        self._messages = deque(({"role": m["role"], "text": m["text"]} for m in restored), maxlen=50)
+                        self._status_detail = "SESSION RESTORED"
+                        self._resumed_until = time.time() + 2.0
+                        self._scroll_offset = 0
+                    if mode == "resume":
+                        self._set_resume_context(restored)
+
+    def _set_resume_context(self, messages: list[dict]) -> None:
+        """Set a context header from the last assistant message when resuming."""
+        # Find last assistant message for context banner
+        for msg in reversed(messages):
+            if msg["role"] == "assistant":
+                text = msg["text"].strip()
+                # Take first sentence or first 60 chars
+                first_sentence = text.split(".")[0] if "." in text[:60] else text[:60]
+                if len(first_sentence) > 55:
+                    first_sentence = first_sentence[:52] + "..."
+                self._context_header = f"last: {first_sentence}"
+                # Build pages from the full conversation for browsing
+                last_msg = messages[-1]
+                if last_msg["role"] == "assistant":
+                    self._build_pages(last_msg["text"])
+                break
 
     def update(self, dt: float):
         self._cursor_anim.update(dt)
+        self._speaking_overlay.tick(int(dt * 1000))
         # Check if hold has crossed the quick-talk threshold (600ms)
         if self._hold_timer is not None and self._mode == ChatMode.IDLE:
             if time.time() - self._hold_timer >= 0.6:
@@ -259,10 +341,20 @@ class ChatPanel(BaseScreen):
                 self._current_page = (self._current_page + 1) % len(self._pages)
                 self._start_page_typewriter()
 
+    # Grace period: tap within this many seconds to cancel instead of send
+    _RECORDING_GRACE_S = 1.5
+
     def _handle_recording(self, action: str):
         if action == "SHORT_PRESS" and not self._quick_talk:
-            # Field recording: tap again → stop and send
-            self._voice_stop_event.set()
+            elapsed = time.time() - self._recording_start_time
+            if elapsed < self._RECORDING_GRACE_S:
+                # Too soon — cancel recording instead of sending
+                logger.info("recording_quick_cancel: elapsed=%.1fs < grace=%.1fs", elapsed, self._RECORDING_GRACE_S)
+                self._recording_cancelled = True
+                self._voice_stop_event.set()
+            else:
+                # Field recording: tap again → stop and send
+                self._voice_stop_event.set()
         elif action == "LONG_PRESS":
             # Cancel recording (either mode)
             self._recording_cancelled = True
@@ -271,6 +363,7 @@ class ChatPanel(BaseScreen):
     def _action_items(self) -> list[dict]:
         """Action menu: templates + navigation items."""
         return list(self._templates) + [
+            {"label": "SETTINGS", "message": ""},
             {"label": "BACK", "message": ""},
             {"label": "BACK TO MAIN MENU", "message": ""},
         ]
@@ -283,7 +376,11 @@ class ChatPanel(BaseScreen):
             self._action_template_index = (self._action_template_index - 1) % len(items)
         elif action == "DOUBLE_PRESS":
             selected = items[self._action_template_index]
-            if selected["label"] == "BACK":
+            if selected["label"] == "SETTINGS":
+                self._mode = ChatMode.IDLE
+                if self._on_settings:
+                    self._on_settings()
+            elif selected["label"] == "BACK":
                 self._mode = ChatMode.IDLE
             elif selected["label"] == "BACK TO MAIN MENU":
                 self._mode = ChatMode.IDLE
@@ -299,12 +396,21 @@ class ChatPanel(BaseScreen):
         pass  # Ignore all input while response is streaming
 
     def _handle_speaking(self, action: str):
-        if action in ("SHORT_PRESS", "DOUBLE_PRESS", "LONG_PRESS"):
+        result = self._speaking_overlay.handle_action(action)
+        if result == "dismiss":
             if self._audio_pipeline:
                 self._audio_pipeline.stop_speaking()
+            self._speaking_overlay.dismiss()
             self._mode = ChatMode.IDLE
             with self._messages_lock:
                 self._status_detail = ""
+        elif result == "reply":
+            if self._audio_pipeline:
+                self._audio_pipeline.stop_speaking()
+            self._speaking_overlay.dismiss()
+            self._mode = ChatMode.IDLE
+            self._quick_talk = True
+            self._start_recording()
 
     def _start_page_typewriter(self) -> None:
         """Start typewriter for current page if not yet revealed."""
@@ -359,11 +465,14 @@ class ChatPanel(BaseScreen):
         elif self._mode == ChatMode.RECORDING:
             if self._quick_talk:
                 return [("hold", "release")]
+            elapsed = time.time() - self._recording_start_time
+            if elapsed < self._RECORDING_GRACE_S:
+                return [("tap", "cancel"), ("hold", "cancel")]
             return [("tap", "send"), ("hold", "cancel")]
         elif self._mode == ChatMode.ACTIONS:
             return [("tap", "next"), ("double", "select"), ("hold", "back")]
         elif self._mode == ChatMode.SPEAKING:
-            return [("tap", "stop")]
+            return [("tap", "stop"), ("hold", "reply")]
         return []  # STREAMING — render plain text instead
 
     @staticmethod
@@ -440,6 +549,31 @@ class ChatPanel(BaseScreen):
             stream_text = self._font_small.render(f"{step_label}...", False, DIM3)
             surface.blit(stream_text, ((PHYSICAL_W - stream_text.get_width()) // 2, bar_center_y - stream_text.get_height() // 2))
 
+        # Speaking overlay (rendered on top of everything)
+        if self._speaking_overlay.active:
+            self._speaking_overlay.render(surface, tokens_module)
+
+    # Markdown style → color mapping
+    _MD_COLORS = {
+        STYLE_BOLD: WHITE,
+        STYLE_ITALIC: DIM3,
+        STYLE_CODE: DIM2,
+        STYLE_HEADER: WHITE,
+        STYLE_BULLET: DIM1,
+        "normal": WHITE,
+    }
+
+    def _render_styled_line(self, surface: pygame.Surface, line_text: str, x: int, y: int) -> None:
+        """Render a line with markdown styling (bold=bright, italic=dim, code=dimmer)."""
+        segments = parse_line(line_text)
+        cx = x
+        for seg in segments:
+            color = self._MD_COLORS.get(seg.style, WHITE)
+            font = self._font
+            seg_surf = font.render(seg.text, False, color)
+            surface.blit(seg_surf, (cx, y))
+            cx += seg_surf.get_width()
+
     def _render_paginated(self, surface: pygame.Surface, top: int, bottom: int) -> None:
         """Render current page with context header and page indicator."""
         y = top
@@ -462,8 +596,7 @@ class ChatPanel(BaseScreen):
         for line_text in display_lines:
             if y + self._line_height > bottom - self._line_height:
                 break
-            text_surface = self._font.render(line_text, False, WHITE)
-            surface.blit(text_surface, (SAFE_INSET, y))
+            self._render_styled_line(surface, line_text, SAFE_INSET, y)
             y += self._line_height
 
         # Page indicator (centered, small font, DIM1) — only if 2+ pages
@@ -818,28 +951,49 @@ class ChatPanel(BaseScreen):
                 self._mark_failed(message, kind, retryable, custom_copy=str(result.get("error")))
                 return
 
+            _page_started = False
             for chunk in result:
                 response_text += chunk
                 with self._messages_lock:
                     self._messages[-1]["text"] = response_text
 
-            # Feed completed response to typewriter for progressive reveal
-            speed = "normal"
-            if self._repository:
-                saved_speed = self._repository.get_setting("text_speed", None)
-                if saved_speed:
-                    speed = str(saved_speed)
-            self._typewriter = TypewriterRenderer(response_text, speed=speed)
+                # Progressive pagination: build page 1 early so typewriter starts sooner
+                if not _page_started and len(response_text) >= 80:
+                    self._build_pages(response_text, user_message=message)
+                    _page_started = True
 
-            # Build paginated view
+            # Parse and apply inline commands (e.g. {{volume:80}})
+            response_text = self._parse_commands(response_text)
+
+            # Final page rebuild with complete text
             self._build_pages(response_text, user_message=message)
 
             if self._repository and self._session_id is not None:
                 self._repository.add_message(self._session_id, "assistant", response_text)
 
-            if self._audio_pipeline and response_text:
+            # TTS: determine voice mode (off/on/auto)
+            voice_mode = "auto"
+            if self._repository:
+                voice_mode = str(self._repository.get_setting("voice_mode", "auto")).lower()
+
+            # Agent-level voice toggle (from inline commands or default)
+            agent_voice_enabled = bool(os.environ.get("SPEECHIFY_API_KEY"))
+            if self._repository:
+                stored = self._repository.get_setting("voice_enabled", None)
+                if stored is not None:
+                    agent_voice_enabled = str(stored).lower() in ("true", "1", "yes", "on")
+
+            has_api_key = bool(os.environ.get("SPEECHIFY_API_KEY"))
+            should_speak = _should_speak(voice_mode, agent_voice_enabled, has_api_key)
+            logger.info("tts_check: voice_mode=%s agent_voice=%s has_key=%s -> speak=%s text_len=%d",
+                        voice_mode, agent_voice_enabled, has_api_key, should_speak, len(response_text))
+
+            # TTS only fires in active user-initiated chat sessions (not greetings/heartbeat)
+            if self._audio_pipeline and response_text and should_speak:
+                logger.info("tts_start: session=%s text_len=%d", self._session_id, len(response_text))
                 try:
                     self._mode = ChatMode.SPEAKING
+                    self._speaking_overlay.show()
                     with self._messages_lock:
                         self._status_detail = "SPEAKING..."
                     if self._led:
@@ -847,6 +1001,8 @@ class ChatPanel(BaseScreen):
                     self._audio_pipeline.speak(response_text)
                 except Exception as tts_exc:
                     logger.error("tts_failed: %s", tts_exc)
+                finally:
+                    self._speaking_overlay.dismiss()
 
             with self._messages_lock:
                 self._status = self.STATUS_CONNECTED
@@ -883,6 +1039,44 @@ class ChatPanel(BaseScreen):
 
         if self._repository and self._session_id is not None:
             self._repository.add_message(self._session_id, "assistant", f"[{error_copy}]")
+
+    # Regex for inline commands: {{command:value}}
+    _CMD_RE = re.compile(r'\{\{(\w+):(\w+)\}\}')
+
+    def _parse_commands(self, text: str) -> str:
+        """Extract and execute inline commands from response text.
+
+        Supported commands:
+          {{volume:NUMBER}} — set device volume (0-100)
+          {{voice:on}}      — enable TTS voice replies
+          {{voice:off}}     — disable TTS voice replies
+
+        Returns text with commands stripped out.
+        """
+        def _handle(match):
+            cmd, val = match.group(1).lower(), match.group(2).lower()
+            if cmd == "volume":
+                try:
+                    level = max(0, min(100, int(val)))
+                    if self._repository:
+                        self._repository.set_setting("volume", level)
+                    logger.info("volume_set=%d via agent command", level)
+                except (ValueError, TypeError):
+                    pass
+            elif cmd == "voice":
+                voice_mode = "auto"
+                if self._repository:
+                    voice_mode = str(self._repository.get_setting("voice_mode", "auto")).lower()
+                if voice_mode == "off":
+                    logger.info("voice_command_ignored: voice_mode=off overrides agent")
+                else:
+                    enabled = val in ("on", "true", "1", "yes")
+                    if self._repository:
+                        self._repository.set_setting("voice_enabled", enabled)
+                    logger.info("voice_enabled=%s via agent command", enabled)
+            return ""  # strip command from display text
+
+        return self._CMD_RE.sub(_handle, text).strip()
 
     def _can_retry(self) -> bool:
         return bool(self._last_failed_message and self._last_error_retryable and not self._is_streaming)

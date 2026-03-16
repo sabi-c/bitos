@@ -1,5 +1,6 @@
 """BITOS Server backend: health, chat, and UI settings catalog endpoints."""
 import asyncio
+import json
 import logging
 import os
 import sqlite3
@@ -55,6 +56,7 @@ from gmail_adapter import GmailAdapter
 from agent_modes import get_system_prompt
 from config import UI_SETTINGS_FILE
 from llm_bridge import create_llm_bridge, to_sse_data
+from perception import classify as classify_perception
 from ui_settings import UISettingsStore, UISettingsValidationError
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -73,6 +75,12 @@ class ChatRequest(BaseModel):
     web_search: bool = True
     memory: bool = True
     model: str = ""
+    location: dict | None = None
+    volume: int = 100
+    voice_enabled: bool = False
+    voice_mode: str = "auto"
+    extended_thinking: bool = False
+    response_format_hint: str = ""
 
 
 class MessageSendRequest(BaseModel):
@@ -1018,14 +1026,88 @@ async def chat(payload: ChatRequest):
         battery_pct=payload.battery_pct,
         web_search=payload.web_search,
         memory=payload.memory,
+        location=payload.location,
+        response_format_hint=payload.response_format_hint,
     )
 
-    model_override = payload.model if payload.model else None
+    # Map short model names to full Anthropic model IDs
+    _MODEL_MAP = {
+        "haiku": "claude-haiku-4-5-20251001",
+        "sonnet": "claude-sonnet-4-6",
+        "opus": "claude-opus-4-6",
+    }
+    raw_model = (payload.model or "").strip().lower()
+    model_override = _MODEL_MAP.get(raw_model, payload.model) if raw_model and raw_model != "default" else None
+
+    # Build device settings snapshot for agent tools
+    device_settings = {
+        "volume": payload.volume,
+        "voice_enabled": payload.voice_enabled,
+        "voice_mode": payload.voice_mode,
+        "web_search": payload.web_search,
+        "memory": payload.memory,
+        "extended_thinking": payload.extended_thinking,
+        "agent_mode": agent_mode,
+        "ai_model": payload.model or "default",
+    }
+
+    # ── Perception classifier (Haiku pre-call) ──
+    loop = asyncio.get_event_loop()
+    perception = await loop.run_in_executor(
+        None, lambda: classify_perception(message, agent_mode=agent_mode)
+    )
+
+    # Add response hint from perception to system prompt
+    _hint_map = {"brief": "Keep your response to 1-2 sentences.", "detailed": "Give a thorough response."}
+    if perception.response_hint in _hint_map:
+        system_prompt += f"\n\n{_hint_map[perception.response_hint]}"
+
+    # Only include tools when perception says they're needed
+    use_tools = perception.needs_tools
 
     def stream_response():
-        for text in llm_bridge.stream_text(message, system_prompt=system_prompt, model_override=model_override):
-            yield to_sse_data(text)
+        from agent_tools import DEVICE_TOOLS
 
+        # Use tool-aware streaming for Anthropic provider
+        if hasattr(llm_bridge, "stream_with_tools") and use_tools:
+            setting_changes: list[dict] = []
+
+            gen = llm_bridge.stream_with_tools(
+                message,
+                tools=DEVICE_TOOLS,
+                tool_handler=None,  # handled internally
+                device_settings=device_settings,
+                system_prompt=system_prompt,
+                model_override=model_override,
+                extended_thinking=payload.extended_thinking,
+            )
+
+            # Consume generator — return value contains setting changes
+            try:
+                while True:
+                    text = next(gen)
+                    yield to_sse_data(text)
+            except StopIteration as e:
+                setting_changes = e.value or []
+            except Exception as tool_exc:
+                logger.error("[BITOS] Tool-use chat failed: %s", tool_exc)
+                yield to_sse_data(f"[Error: {str(tool_exc)[:100]}]")
+
+            # Emit setting changes as SSE events for the device to apply
+            for change in setting_changes:
+                yield f"data: {json.dumps({'setting_change': change})}\n\n"
+        else:
+            # No tools needed — use faster streaming path
+            for text in llm_bridge.stream_text(
+                message,
+                system_prompt=system_prompt,
+                model_override=model_override,
+                extended_thinking=payload.extended_thinking,
+            ):
+                yield to_sse_data(text)
+
+        # Emit perception metadata for device-side use
+        yield f"data: {json.dumps({'perception': perception.raw})}\n\n"
         yield "data: [DONE]\n\n"
 
     try:
