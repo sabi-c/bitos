@@ -11,7 +11,8 @@ SCALE = 2  # Desktop simulator scale factor
 WINDOW_W = PHYSICAL_W * SCALE
 WINDOW_H = PHYSICAL_H * SCALE
 
-CORNER_RADIUS = 20  # Rounded corner height in pixels (ST7789 physical)
+SAFE_INSET = 16     # px, content margin from display edges (matches corner radius)
+CORNER_RADIUS = SAFE_INSET  # Rounded corner mask radius
 FPS = 15
 
 # ── Colors (1-bit monochrome palette) ──────────────────────────

@@ -6,8 +6,7 @@ Call mask.apply(surface) as the final render step each frame.
 
 import pygame
 
-# Corner radius matching the ST7789 display bezel
-CORNER_RADIUS = 8
+from display.tokens import CORNER_RADIUS
 
 
 class CornerMask:
