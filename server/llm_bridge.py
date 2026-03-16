@@ -32,7 +32,7 @@ class LLMBridge:
     provider: str
     model: str
 
-    def stream_text(self, message: str, system_prompt: str | None = None) -> Generator[str, None, None]:
+    def stream_text(self, message: str, system_prompt: str | None = None, model_override: str | None = None) -> Generator[str, None, None]:
         raise NotImplementedError
 
 
@@ -41,13 +41,14 @@ class AnthropicBridge(LLMBridge):
         super().__init__(provider="anthropic", model=model)
         self._api_key = api_key
 
-    def stream_text(self, message: str, system_prompt: str | None = None) -> Generator[str, None, None]:
+    def stream_text(self, message: str, system_prompt: str | None = None, model_override: str | None = None) -> Generator[str, None, None]:
         if not self._api_key:
             raise RuntimeError("ANTHROPIC_API_KEY not configured")
 
+        active_model = model_override or self.model
         client = anthropic.Anthropic(api_key=self._api_key)
         with client.messages.stream(
-            model=self.model,
+            model=active_model,
             max_tokens=1024,
             messages=[{"role": "user", "content": message}],
             system=system_prompt or SYSTEM_PROMPT,
@@ -71,14 +72,15 @@ class OpenAICompatibleBridge(LLMBridge):
         self._api_key = api_key
         self._base_url = _normalise_base_url(base_url)
 
-    def stream_text(self, message: str, system_prompt: str | None = None) -> Generator[str, None, None]:
+    def stream_text(self, message: str, system_prompt: str | None = None, model_override: str | None = None) -> Generator[str, None, None]:
         url = f"{self._base_url}/chat/completions"
         headers: dict[str, str] = {"Content-Type": "application/json"}
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
 
+        active_model = model_override or self.model
         body = {
-            "model": self.model,
+            "model": active_model,
             "messages": [
                 {"role": "system", "content": system_prompt or SYSTEM_PROMPT},
                 {"role": "user", "content": message},
@@ -131,8 +133,8 @@ class EchoBridge(LLMBridge):
     def __init__(self):
         super().__init__(provider="echo", model="echo-v1")
 
-    def stream_text(self, message: str, system_prompt: str | None = None) -> Generator[str, None, None]:
-        _ = system_prompt
+    def stream_text(self, message: str, system_prompt: str | None = None, model_override: str | None = None) -> Generator[str, None, None]:
+        _ = system_prompt, model_override
         out = f"[echo] {message.strip()}"
         for token in out.split(" "):
             if token:

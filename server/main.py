@@ -67,6 +67,9 @@ class ChatRequest(BaseModel):
     agent_mode: str = "producer"
     tasks_today: list[str] = Field(default_factory=list)
     battery_pct: int | None = None
+    web_search: bool = True
+    memory: bool = True
+    model: str = ""
 
 
 class MessageSendRequest(BaseModel):
@@ -727,10 +730,14 @@ async def chat(payload: ChatRequest):
         agent_mode,
         tasks_today=payload.tasks_today,
         battery_pct=payload.battery_pct,
+        web_search=payload.web_search,
+        memory=payload.memory,
     )
 
+    model_override = payload.model if payload.model else None
+
     def stream_response():
-        for text in llm_bridge.stream_text(message, system_prompt=system_prompt):
+        for text in llm_bridge.stream_text(message, system_prompt=system_prompt, model_override=model_override):
             yield to_sse_data(text)
 
         yield "data: [DONE]\n\n"

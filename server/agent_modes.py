@@ -58,6 +58,8 @@ def get_system_prompt(
     agent_mode: str,
     tasks_today: list[str] | None = None,
     battery_pct: int | None = None,
+    web_search: bool = True,
+    memory: bool = True,
 ) -> str:
     """Build the full system prompt for a selected agent mode with optional live context."""
     base = BASE_CONTEXT.format(date=date.today().strftime("%A, %B %d %Y"))
@@ -77,6 +79,12 @@ def get_system_prompt(
 
     if battery_pct is not None and battery_pct < 20:
         context_blocks.append(f"[BATTERY LOW: {battery_pct}%]")
+
+    if not web_search:
+        context_blocks.append("WEB SEARCH IS DISABLED. Do not suggest searching the web or reference web lookups.")
+
+    if not memory:
+        context_blocks.append("MEMORY IS DISABLED. Do not reference previous conversations or stored context.")
 
     prompt = base + "\n\n" + mode_prompt
     if context_blocks:

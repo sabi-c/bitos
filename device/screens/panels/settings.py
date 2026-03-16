@@ -36,6 +36,8 @@ class SettingsPanel(BaseScreen):
         on_open_about=None,
         on_open_companion_app=None,
         on_open_change_pin=None,
+        on_open_battery=None,
+        on_open_dev=None,
         get_ble_address=None,
         on_set_discoverable=None,
         on_push_overlay=None,
@@ -52,6 +54,8 @@ class SettingsPanel(BaseScreen):
         self._on_open_about = on_open_about
         self._on_open_companion_app = on_open_companion_app
         self._on_open_change_pin = on_open_change_pin
+        self._on_open_battery = on_open_battery
+        self._on_open_dev = on_open_dev
         self._get_ble_address = get_ble_address or (lambda: "mock-BT-addr")
         self._on_set_discoverable = on_set_discoverable or (lambda _enabled, _timeout: None)
         self._on_push_overlay = on_push_overlay
@@ -82,8 +86,10 @@ class SettingsPanel(BaseScreen):
             NavItem(key="agent_mode", label="AGENT MODE", status="", action=self._open_agent_mode),
             NavItem(key="sleep", label="SLEEP TIMER", status="", action=self._open_sleep_timer),
             NavItem(key="about", label="ABOUT", status="", action=self._open_about),
+            NavItem(key="battery", label="BATTERY", status="", action=self._open_battery),
             NavItem(key="companion", label="COMPANION APP", status="", action=self._open_companion_app),
             NavItem(key="change_pin", label="CHANGE PIN", status="", action=self._open_change_pin),
+            NavItem(key="dev", label="DEV MODE", status="", action=self._open_dev),
             NavItem(key="integrations_header", label="─ INTEGRATIONS ─", status="", enabled=False),
             NavItem(key="imessage", label="iMESSAGE", status="", action=lambda: self._open_integration_detail("imessage")),
             NavItem(key="vikunja", label="VIKUNJA", status="", action=lambda: self._open_integration_detail("vikunja")),
@@ -140,7 +146,9 @@ class SettingsPanel(BaseScreen):
             "sleep": f"{self._sleep_sec}s \u203a",
             "about": "v1.0 \u203a",
             "companion": "PAIR \u203a",
+            "battery": "\u203a",
             "change_pin": "\u203a",
+            "dev": "\u203a",
             "imessage": self._format_integration_status("imessage", arrow=True),
             "vikunja": self._format_integration_status("vikunja", arrow=True),
             "ai": self._format_integration_status("ai", arrow=True),
@@ -208,6 +216,14 @@ class SettingsPanel(BaseScreen):
     def _open_change_pin(self):
         if self._on_open_change_pin:
             self._on_open_change_pin()
+
+    def _open_battery(self):
+        if self._on_open_battery:
+            self._on_open_battery()
+
+    def _open_dev(self):
+        if self._on_open_dev:
+            self._on_open_dev()
 
     def _open_companion_app(self):
         if self._on_open_companion_app:
@@ -450,8 +466,17 @@ class AgentModePanel(BaseScreen):
 
 
 class SleepTimerPanel(BaseScreen):
-    """Stub detail view that shows current timeout and allows returning."""
+    """Sleep timer picker — cycle through timeout values, save on LONG_PRESS."""
     _owns_status_bar = True
+
+    OPTIONS = [
+        (30, "30 SEC"),
+        (60, "1 MIN"),
+        (120, "2 MIN"),
+        (300, "5 MIN"),
+        (600, "10 MIN"),
+        (0, "NEVER"),
+    ]
 
     def __init__(self, repository: DeviceRepository, on_back=None, ui_settings: dict | None = None):
         self._repo = repository
@@ -463,20 +488,38 @@ class SleepTimerPanel(BaseScreen):
         self._font_small = load_ui_font("small", self._ui_settings)
         self._font_hint = load_ui_font("hint", self._ui_settings)
         self._timeout = int(self._repo.get_setting("sleep_timeout_seconds", default=60) or 60)
+        self._index = self._find_index(self._timeout)
+
+    def _find_index(self, timeout: int) -> int:
+        for i, (val, _) in enumerate(self.OPTIONS):
+            if val == timeout:
+                return i
+        return 1  # default to 60s
 
     def on_enter(self):
         self._timeout = int(self._repo.get_setting("sleep_timeout_seconds", default=60) or 60)
+        self._index = self._find_index(self._timeout)
 
     def handle_action(self, action: str):
-        if action == "DOUBLE_PRESS" and self._on_back:
-            self._on_back()
-        elif action in {"SHORT_PRESS", "LONG_PRESS", "TRIPLE_PRESS"}:
-            return
-
-    def handle_input(self, event: pygame.event.Event):
-        if event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_ESCAPE):
+        if action == "SHORT_PRESS":
+            self._index = (self._index + 1) % len(self.OPTIONS)
+        elif action == "TRIPLE_PRESS":
+            self._index = (self._index - 1) % len(self.OPTIONS)
+        elif action == "LONG_PRESS":
+            self._repo.set_setting("sleep_timeout_seconds", self.OPTIONS[self._index][0])
             if self._on_back:
                 self._on_back()
+        elif action == "DOUBLE_PRESS":
+            if self._on_back:
+                self._on_back()
+
+    def handle_input(self, event: pygame.event.Event):
+        if event.type == pygame.KEYDOWN:
+            if event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                self.handle_action("LONG_PRESS")
+            elif event.key == pygame.K_ESCAPE:
+                if self._on_back:
+                    self._on_back()
 
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
@@ -486,11 +529,27 @@ class SleepTimerPanel(BaseScreen):
         title = self._font_small.render("SLEEP TIMER", False, BLACK)
         surface.blit(title, (6, (STATUS_BAR_H - title.get_height()) // 2))
 
-        value = self._font_title.render(f"{self._timeout}s", False, WHITE)
-        surface.blit(value, ((PHYSICAL_W - value.get_width()) // 2, 48))
+        # ── Options list ──
+        y = STATUS_BAR_H + 2
+        for i, (val, label) in enumerate(self.OPTIONS):
+            focused = i == self._index
+            is_active = val == self._timeout
+            if focused:
+                pygame.draw.rect(surface, WHITE, pygame.Rect(0, y, PHYSICAL_W, ROW_H_MIN))
+            row_color = BLACK if focused else (WHITE if is_active else DIM2)
+            row = self._font_body.render(label, False, row_color)
+            text_y = y + (ROW_H_MIN - row.get_height()) // 2
+            surface.blit(row, (8, text_y))
+            if is_active:
+                badge_color = BLACK if focused else DIM2
+                badge = self._font_small.render("ACTIVE", False, badge_color)
+                surface.blit(badge, (PHYSICAL_W - badge.get_width() - 8, text_y + 2))
+            if not focused:
+                pygame.draw.line(surface, HAIRLINE, (0, y + ROW_H_MIN - 1), (PHYSICAL_W, y + ROW_H_MIN - 1))
+            y += ROW_H_MIN
 
         # ── Key hint bar ──
-        hint = self._font_hint.render("DBL:BACK", False, DIM3)
+        hint = self._font_hint.render("SHORT:NEXT \u00b7 LONG:SELECT \u00b7 DBL:BACK", False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
 
 
@@ -540,6 +599,258 @@ class AboutPanel(BaseScreen):
         # ── Key hint bar ──
         hint = self._font_hint.render("DBL:BACK", False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
+
+
+class BatteryPanel(BaseScreen):
+    """Battery status and safe-shutdown configuration."""
+    _owns_status_bar = True
+
+    SHUTDOWN_OPTIONS = [3, 5, 10, 15, 20]
+
+    def __init__(self, battery_monitor, repository: DeviceRepository, on_back=None, ui_settings: dict | None = None):
+        self._battery = battery_monitor
+        self._repo = repository
+        self._on_back = on_back
+
+        self._ui_settings = merge_runtime_ui_settings(ui_settings)
+        self._font_title = load_ui_font("title", self._ui_settings)
+        self._font_body = load_ui_font("body", self._ui_settings)
+        self._font_small = load_ui_font("small", self._ui_settings)
+        self._font_hint = load_ui_font("hint", self._ui_settings)
+
+        self._shutdown_threshold = int(self._repo.get_setting("safe_shutdown_pct", 5) or 5)
+        self._editing_threshold = False
+        self._threshold_index = self._find_threshold_index()
+
+    def _find_threshold_index(self) -> int:
+        for i, val in enumerate(self.SHUTDOWN_OPTIONS):
+            if val == self._shutdown_threshold:
+                return i
+        return 1  # default to 5%
+
+    def on_enter(self):
+        self._shutdown_threshold = int(self._repo.get_setting("safe_shutdown_pct", 5) or 5)
+        self._threshold_index = self._find_threshold_index()
+
+    def handle_action(self, action: str):
+        if self._editing_threshold:
+            if action == "SHORT_PRESS":
+                self._threshold_index = (self._threshold_index + 1) % len(self.SHUTDOWN_OPTIONS)
+            elif action == "TRIPLE_PRESS":
+                self._threshold_index = (self._threshold_index - 1) % len(self.SHUTDOWN_OPTIONS)
+            elif action == "LONG_PRESS":
+                new_val = self.SHUTDOWN_OPTIONS[self._threshold_index]
+                self._repo.set_setting("safe_shutdown_pct", new_val)
+                self._shutdown_threshold = new_val
+                self._battery.configure_safe_shutdown(threshold_pct=new_val, delay_s=30)
+                self._editing_threshold = False
+            elif action == "DOUBLE_PRESS":
+                self._editing_threshold = False
+            return
+
+        if action == "LONG_PRESS":
+            self._editing_threshold = True
+        elif action == "DOUBLE_PRESS":
+            if self._on_back:
+                self._on_back()
+
+    def handle_input(self, event: pygame.event.Event):
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            if self._on_back:
+                self._on_back()
+
+    def render(self, surface: pygame.Surface):
+        surface.fill(BLACK)
+
+        # Status bar
+        pygame.draw.rect(surface, WHITE, pygame.Rect(0, 0, PHYSICAL_W, STATUS_BAR_H))
+        title = self._font_small.render("BATTERY", False, BLACK)
+        surface.blit(title, (6, (STATUS_BAR_H - title.get_height()) // 2))
+
+        status = self._battery.get_status()
+        pct = status.get("pct", 0)
+        charging = status.get("charging", False)
+        plugged = status.get("plugged", False)
+        model = status.get("model", "unknown")
+
+        y = STATUS_BAR_H + 8
+
+        # Big percentage
+        pct_text = f"{pct}%"
+        pct_surf = self._font_title.render(pct_text, False, WHITE)
+        surface.blit(pct_surf, ((PHYSICAL_W - pct_surf.get_width()) // 2, y))
+        y += pct_surf.get_height() + 2
+
+        # Charging status
+        if charging:
+            charge_text = "CHARGING"
+        elif plugged:
+            charge_text = "PLUGGED IN"
+        else:
+            charge_text = "ON BATTERY"
+        charge_surf = self._font_small.render(charge_text, False, DIM2)
+        surface.blit(charge_surf, ((PHYSICAL_W - charge_surf.get_width()) // 2, y))
+        y += charge_surf.get_height() + 12
+
+        # Battery bar
+        bar_x, bar_w, bar_h = 16, PHYSICAL_W - 32, 12
+        pygame.draw.rect(surface, DIM3, (bar_x, y, bar_w, bar_h), 1)
+        fill_w = max(1, int((bar_w - 2) * pct / 100))
+        bar_color = WHITE if pct > 20 else (0xFF, 0x44, 0x44)
+        pygame.draw.rect(surface, bar_color, (bar_x + 1, y + 1, fill_w, bar_h - 2))
+        y += bar_h + 12
+
+        # Info rows
+        rows = [
+            ("MODEL", model.upper()),
+            ("SAFE SHUTDOWN", f"{self._shutdown_threshold}%"),
+        ]
+        for label, value in rows:
+            editing = self._editing_threshold and label == "SAFE SHUTDOWN"
+            if editing:
+                value = f"[{self.SHUTDOWN_OPTIONS[self._threshold_index]}%]"
+                pygame.draw.rect(surface, WHITE, pygame.Rect(0, y, PHYSICAL_W, ROW_H_MIN))
+            label_color = BLACK if editing else DIM2
+            value_color = BLACK if editing else WHITE
+            label_surf = self._font_small.render(label, False, label_color)
+            value_surf = self._font_body.render(value, False, value_color)
+            text_y = y + (ROW_H_MIN - label_surf.get_height()) // 2
+            surface.blit(label_surf, (8, text_y))
+            surface.blit(value_surf, (PHYSICAL_W - value_surf.get_width() - 8, text_y))
+            if not editing:
+                pygame.draw.line(surface, HAIRLINE, (0, y + ROW_H_MIN - 1), (PHYSICAL_W, y + ROW_H_MIN - 1))
+            y += ROW_H_MIN
+
+        # Hint
+        if self._editing_threshold:
+            hint_text = "SHORT:NEXT \u00b7 LONG:SAVE \u00b7 DBL:CANCEL"
+        else:
+            hint_text = "LONG:EDIT SHUTDOWN \u00b7 DBL:BACK"
+        hint = self._font_hint.render(hint_text, False, DIM3)
+        surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
+
+
+class DevPanel(BaseScreen):
+    """Developer diagnostics: CPU, RAM, temp, disk, uptime, IP, commit."""
+    _owns_status_bar = True
+
+    def __init__(self, system_monitor, on_back=None, ui_settings: dict | None = None):
+        self._monitor = system_monitor
+        self._on_back = on_back
+
+        self._ui_settings = merge_runtime_ui_settings(ui_settings)
+        self._font_body = load_ui_font("body", self._ui_settings)
+        self._font_small = load_ui_font("small", self._ui_settings)
+        self._font_hint = load_ui_font("hint", self._ui_settings)
+
+        self._snapshot: dict = {}
+        self._refresh_timer = 0.0
+        self._start_time = 0.0
+
+    def on_enter(self):
+        import time as _time
+        self._start_time = _time.time()
+        self._refresh()
+
+    def update(self, dt: float):
+        self._refresh_timer += dt
+        if self._refresh_timer >= 2.0:
+            self._refresh_timer = 0.0
+            self._refresh()
+
+    def _refresh(self):
+        self._snapshot = self._monitor.get_snapshot()
+
+    def handle_action(self, action: str):
+        if action == "DOUBLE_PRESS":
+            if self._on_back:
+                self._on_back()
+
+    def handle_input(self, event: pygame.event.Event):
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            if self._on_back:
+                self._on_back()
+
+    def render(self, surface: pygame.Surface):
+        surface.fill(BLACK)
+
+        # Status bar
+        pygame.draw.rect(surface, WHITE, pygame.Rect(0, 0, PHYSICAL_W, STATUS_BAR_H))
+        title = self._font_small.render("DEV MODE", False, BLACK)
+        surface.blit(title, (6, (STATUS_BAR_H - title.get_height()) // 2))
+
+        snap = self._snapshot
+        cpu = snap.get("cpu_percent", 0)
+        ram_used = snap.get("ram_used_mb", 0)
+        ram_total = snap.get("ram_total_mb", 0)
+        ram_pct = snap.get("ram_percent", 0)
+        temp = snap.get("temp_c", 0)
+        disk = snap.get("disk_percent", 0)
+
+        # Uptime
+        import time as _time
+        uptime_s = int(_time.time() - self._start_time) if self._start_time else 0
+        uptime_m = uptime_s // 60
+        uptime_h = uptime_m // 60
+        if uptime_h > 0:
+            uptime_str = f"{uptime_h}H {uptime_m % 60}M"
+        else:
+            uptime_str = f"{uptime_m}M {uptime_s % 60}S"
+
+        # IP address
+        ip_str = self._get_ip()
+
+        # Git commit
+        commit = self._get_commit()
+
+        rows = [
+            ("CPU", f"{cpu:.0f}%"),
+            ("RAM", f"{ram_used}/{ram_total}MB ({ram_pct:.0f}%)"),
+            ("TEMP", f"{temp}\u00b0C" if temp else "N/A"),
+            ("DISK", f"{disk:.0f}%"),
+            ("UPTIME", uptime_str),
+            ("IP", ip_str),
+            ("COMMIT", commit),
+        ]
+
+        y = STATUS_BAR_H + 4
+        for label, value in rows:
+            label_surf = self._font_small.render(label, False, DIM2)
+            value_surf = self._font_body.render(value, False, WHITE)
+            text_y = y + (ROW_H_MIN - label_surf.get_height()) // 2
+            surface.blit(label_surf, (8, text_y))
+            surface.blit(value_surf, (PHYSICAL_W - value_surf.get_width() - 8, text_y))
+            pygame.draw.line(surface, HAIRLINE, (0, y + ROW_H_MIN - 1), (PHYSICAL_W, y + ROW_H_MIN - 1))
+            y += ROW_H_MIN
+
+        # Hint
+        hint = self._font_hint.render("DBL:BACK \u00b7 AUTO-REFRESH 2S", False, DIM3)
+        surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
+
+    @staticmethod
+    def _get_ip() -> str:
+        try:
+            import socket
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.settimeout(0.5)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            return "NO NETWORK"
+
+    @staticmethod
+    def _get_commit() -> str:
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],
+                capture_output=True, text=True, timeout=2, check=False,
+            )
+            return result.stdout.strip() or "unknown"
+        except Exception:
+            return "unknown"
 
 
 def _compact_model_label(model: str) -> str:

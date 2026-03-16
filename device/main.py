@@ -34,6 +34,7 @@ from device.ble.pairing_manager import PairingManager
 from audio.pipeline import get_audio_pipeline
 from hardware import StatusPoller, StatusState, SystemMonitor
 from power.battery import BatteryMonitor
+from power.idle import IdleManager
 from power.leds import LEDController
 from screens.manager import ScreenManager
 from screens.boot import BootScreen
@@ -47,7 +48,7 @@ from screens.panels.captures import CapturesPanel
 from screens.panels.messages import MessagesPanel
 from screens.panels.mail import MailPanel
 from screens.panels.notifications import NotificationsPanel
-from screens.panels.settings import SettingsPanel, ModelPickerPanel, AgentModePanel, SleepTimerPanel, AboutPanel
+from screens.panels.settings import SettingsPanel, ModelPickerPanel, AgentModePanel, SleepTimerPanel, AboutPanel, BatteryPanel, DevPanel
 from screens.panels.change_pin import ChangePinPanel
 from screens.subscreens.integration_detail import IntegrationDetailPanel
 from overlays.power import PowerOverlay
@@ -185,6 +186,7 @@ def main():
     notification_queue = NotificationQueue(repository=repository)
     status_state = StatusState()
     screen_mgr = ScreenManager(notification_queue=notification_queue, status_state=status_state)
+    idle_mgr = IdleManager(driver, repository)
 
     openai_key = os.getenv("OPENAI_API_KEY", "")
 
@@ -220,6 +222,7 @@ def main():
 
     def _on_button(btn_event: ButtonEvent):
         logger.info("[Button] %s", btn_event.name)
+        idle_mgr.wake()
         if power_overlay is not None:
             power_overlay.handle_input(btn_event.name)
             return
@@ -450,6 +453,8 @@ def main():
                 on_open_sleep_timer=open_sleep_timer,
                 on_open_about=open_about,
                 on_open_change_pin=open_change_pin,
+                on_open_battery=open_battery,
+                on_open_dev=open_dev,
                 on_push_overlay=screen_mgr.push_overlay,
                 on_dismiss_overlay=screen_mgr.dismiss_overlay,
                 get_ble_address=gatt_server.get_device_address,
@@ -474,6 +479,12 @@ def main():
 
     def open_change_pin():
         screen_mgr.push(ChangePinPanel(repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
+
+    def open_battery():
+        screen_mgr.push(BatteryPanel(battery_monitor=battery_monitor, repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
+
+    def open_dev():
+        screen_mgr.push(DevPanel(system_monitor=monitor, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
 
     def open_integration_detail(integration_name: str, status_data: dict):
         screen_mgr.push(
@@ -604,6 +615,7 @@ def main():
             break
 
         button.update()
+        idle_mgr.tick()
         worker_results = outbound_loop.tick(now=now)
         for result in worker_results:
             if result.status in ("retrying", "dead_letter"):

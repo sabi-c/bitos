@@ -94,10 +94,16 @@ class BackendClient:
         mode = "producer"
         tasks_today: list[str] = []
         battery_pct: int | None = None
+        web_search = True
+        memory = True
+        ai_model = ""
 
         try:
             repository = DeviceRepository()
             mode = str(repository.get_setting("agent_mode", "producer"))
+            web_search = bool(repository.get_setting("web_search", True))
+            memory = bool(repository.get_setting("memory", True))
+            ai_model = str(repository.get_setting("ai_model", "") or "")
             tasks_today = [str(t.get("title", "")).strip() for t in repository.list_incomplete_tasks(limit=3)]
             tasks_today = [t for t in tasks_today if t]
         except Exception as exc:
@@ -109,7 +115,7 @@ class BackendClient:
             logging.debug("battery_read_failed error=%s", exc)
 
         try:
-            return self._stream_chat_sse(message, mode, tasks_today, battery_pct)
+            return self._stream_chat_sse(message, mode, tasks_today, battery_pct, web_search, memory, ai_model)
         except Exception as exc:
             kind, message_copy = self._http_error_message(exc)
             retryable = kind in {"offline", "timeout", "network", "server"}
@@ -121,17 +127,25 @@ class BackendClient:
         mode: str,
         tasks_today: list[str],
         battery_pct: int | None,
+        web_search: bool = True,
+        memory: bool = True,
+        model: str = "",
     ) -> Generator[str, None, None]:
         """Yield text chunks from the /chat SSE stream in real time."""
+        payload: dict = {
+            "message": message,
+            "agent_mode": mode,
+            "tasks_today": tasks_today,
+            "battery_pct": battery_pct,
+            "web_search": web_search,
+            "memory": memory,
+        }
+        if model:
+            payload["model"] = model
         with httpx.stream(
             "POST",
             f"{self.base_url}/chat",
-            json={
-                "message": message,
-                "agent_mode": mode,
-                "tasks_today": tasks_today,
-                "battery_pct": battery_pct,
-            },
+            json=payload,
             timeout=60.0,
             headers=self._request_headers(),
         ) as response:
