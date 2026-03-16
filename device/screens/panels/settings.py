@@ -177,10 +177,11 @@ class SettingsPanel(BaseScreen):
             status_copy = statuses.get(item.key, item.status)
             row_color = BLACK if focused else WHITE
             status_color = BLACK if focused else DIM2
-            row = self._font_body.render(item.label, False, row_color)
+            indicator = "> " if focused else "- "
+            row = self._font_body.render(indicator + item.label, False, row_color)
             status = self._font_small.render(status_copy, False, status_color)
             text_y = y + (ROW_H_MIN - row.get_height()) // 2
-            surface.blit(row, (8, text_y))
+            surface.blit(row, (4, text_y))
             surface.blit(status, (PHYSICAL_W - status.get_width() - 8, text_y + 2))
             if not focused:
                 pygame.draw.line(surface, HAIRLINE, (0, y + ROW_H_MIN - 1), (PHYSICAL_W, y + ROW_H_MIN - 1))
@@ -368,9 +369,10 @@ class ModelPickerPanel(BaseScreen):
             if focused:
                 pygame.draw.rect(surface, WHITE, pygame.Rect(0, y, PHYSICAL_W, ROW_H_MIN))
             row_color = BLACK if focused else (WHITE if is_active else DIM2)
-            row = self._font_body.render(label, False, row_color)
+            indicator = "> " if focused else "- "
+            row = self._font_body.render(indicator + label, False, row_color)
             text_y = y + 4
-            surface.blit(row, (8, text_y))
+            surface.blit(row, (4, text_y))
             badge = "ACTIVE" if is_active else ""
             if badge:
                 badge_color = BLACK if focused else DIM2
@@ -380,7 +382,7 @@ class ModelPickerPanel(BaseScreen):
             if subtitle:
                 sub_color = BLACK if focused else DIM3
                 sub_surface = self._font_small.render(subtitle, False, sub_color)
-                surface.blit(sub_surface, (8, text_y + row.get_height() + 2))
+                surface.blit(sub_surface, (4, text_y + row.get_height() + 2))
             if not focused:
                 pygame.draw.line(surface, HAIRLINE, (0, y + ROW_H_MIN - 1), (PHYSICAL_W, y + ROW_H_MIN - 1))
             y += ROW_H_MIN
@@ -457,9 +459,10 @@ class AgentModePanel(BaseScreen):
             if focused:
                 pygame.draw.rect(surface, WHITE, pygame.Rect(0, y, PHYSICAL_W, ROW_H_MIN))
             row_color = BLACK if focused else (WHITE if is_active else DIM2)
-            row = self._font_body.render(value[:10].upper(), False, row_color)
+            indicator = "> " if focused else "- "
+            row = self._font_body.render(indicator + value[:10].upper(), False, row_color)
             text_y = y + 4
-            surface.blit(row, (8, text_y))
+            surface.blit(row, (4, text_y))
             badge = "ACTIVE" if is_active else ""
             if badge:
                 badge_color = BLACK if focused else DIM2
@@ -469,7 +472,7 @@ class AgentModePanel(BaseScreen):
             if subtitle:
                 sub_color = BLACK if focused else DIM3
                 sub_surface = self._font_small.render(subtitle, False, sub_color)
-                surface.blit(sub_surface, (8, text_y + row.get_height() + 2))
+                surface.blit(sub_surface, (4, text_y + row.get_height() + 2))
             if not focused:
                 pygame.draw.line(surface, HAIRLINE, (0, y + ROW_H_MIN - 1), (PHYSICAL_W, y + ROW_H_MIN - 1))
             y += ROW_H_MIN
@@ -551,9 +554,10 @@ class SleepTimerPanel(BaseScreen):
             if focused:
                 pygame.draw.rect(surface, WHITE, pygame.Rect(0, y, PHYSICAL_W, ROW_H_MIN))
             row_color = BLACK if focused else (WHITE if is_active else DIM2)
-            row = self._font_body.render(label, False, row_color)
+            indicator = "> " if focused else "- "
+            row = self._font_body.render(indicator + label, False, row_color)
             text_y = y + (ROW_H_MIN - row.get_height()) // 2
-            surface.blit(row, (8, text_y))
+            surface.blit(row, (4, text_y))
             if is_active:
                 badge_color = BLACK if focused else DIM2
                 badge = self._font_small.render("ACTIVE", False, badge_color)
@@ -936,9 +940,10 @@ class FontPickerPanel(BaseScreen):
             if focused:
                 pygame.draw.rect(surface, WHITE, pygame.Rect(0, y, PHYSICAL_W, ROW_H_MIN))
             row_color = BLACK if focused else (WHITE if is_active else DIM2)
-            row = self._font_body.render(label, False, row_color)
+            indicator = "> " if focused else "- "
+            row = self._font_body.render(indicator + label, False, row_color)
             text_y = y + (ROW_H_MIN - row.get_height()) // 2
-            surface.blit(row, (8, text_y))
+            surface.blit(row, (4, text_y))
             if is_active:
                 badge_color = BLACK if focused else DIM2
                 badge = self._font_small.render("ACTIVE", False, badge_color)

@@ -72,7 +72,8 @@ class CapturesPanel(BaseScreen):
             if focused:
                 pygame.draw.rect(surface, WHITE, pygame.Rect(0, y, PHYSICAL_W, ROW_H_MIN))
             color = BLACK if focused else WHITE
+            indicator = "> " if focused else "- "
             meta = f"{item['created_at'][11:16]} {item['text'][:40]}"
-            surface.blit(self._font_small.render(meta, False, color if focused else DIM2), (6, y + 2))
-            surface.blit(self._font_body.render(item['text'][:40], False, color), (6, y + self._font_small.get_height() + 4))
+            surface.blit(self._font_small.render(indicator + meta, False, color if focused else DIM2), (4, y + 2))
+            surface.blit(self._font_body.render(item['text'][:40], False, color), (4, y + self._font_small.get_height() + 4))
             y += ROW_H_MIN

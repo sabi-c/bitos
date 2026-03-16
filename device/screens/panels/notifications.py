@@ -93,10 +93,11 @@ class NotificationsPanel(BaseScreen):
                 pygame.draw.rect(surface, WHITE, pygame.Rect(0, y, PHYSICAL_W, ROW_H_MIN))
             row_color = BLACK if focused else WHITE
             status_color = BLACK if focused else DIM2
-            row = self._font_body.render(item.label, False, row_color)
+            indicator = "> " if focused else "- "
+            row = self._font_body.render(indicator + item.label, False, row_color)
             status = self._font_small.render(item.status, False, status_color)
             text_y = y + (ROW_H_MIN - row.get_height()) // 2
-            surface.blit(row, (8, text_y))
+            surface.blit(row, (4, text_y))
             surface.blit(status, (PHYSICAL_W - status.get_width() - 8, text_y + 2))
             if not focused:
                 pygame.draw.line(surface, HAIRLINE, (0, y + ROW_H_MIN - 1), (PHYSICAL_W, y + ROW_H_MIN - 1))

@@ -99,10 +99,11 @@ class TasksPanel(BaseScreen):
             if focused:
                 pygame.draw.rect(surface, WHITE, pygame.Rect(0, y, PHYSICAL_W, ROW_H_MIN))
             color = BLACK if focused else WHITE
+            indicator = "> " if focused else "- "
             project = str(task.get("project", "INBOX"))[:10]
             title_text = str(task.get("title", ""))[:24]
-            surface.blit(self._font_small.render(project, False, color if focused else DIM2), (6, y + 2))
-            surface.blit(self._font_body.render(title_text, False, color), (6, y + self._font_small.get_height() + 4))
+            surface.blit(self._font_small.render(indicator + project, False, color if focused else DIM2), (4, y + 2))
+            surface.blit(self._font_body.render(title_text, False, color), (4, y + self._font_small.get_height() + 4))
             y += ROW_H_MIN
 
         if self._confirm_complete:

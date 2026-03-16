@@ -126,10 +126,11 @@ class HomePanel(BaseScreen):
             elif item.key == "mail":
                 unread = int(getattr(self._status_state, "gmail_unread", 0)) if self._status_state else 0
                 label = f"MAIL ({unread})" if unread > 0 else "MAIL"
-            row = self._font_body.render(label, False, row_color)
+            indicator = "> " if focused else "- "
+            row = self._font_body.render(indicator + label, False, row_color)
             st = self._font_small.render(item.status, False, status_color)
             text_y = y + (ROW_H_MIN - row.get_height()) // 2
-            surface.blit(row, (8, text_y))
+            surface.blit(row, (4, text_y))
             surface.blit(st, (PHYSICAL_W - st.get_width() - 8, text_y + 2))
             if not focused:
                 pygame.draw.line(surface, HAIRLINE, (0, y + ROW_H_MIN - 1), (PHYSICAL_W, y + ROW_H_MIN - 1))
