@@ -40,6 +40,10 @@ _GENERIC_CONFIGS = {
         {"label": "VIEW HISTORY", "description": "Browse captures", "action": "open"},
         {"label": "BACK", "description": "Return to sidebar", "action": "back"},
     ],
+    "AGENT": [
+        {"label": "TASKS", "description": "Agent subtasks", "action": "open"},
+        {"label": "BACK TO MAIN MENU", "description": "Return to sidebar", "action": "back"},
+    ],
 }
 
 
