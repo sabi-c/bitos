@@ -120,10 +120,11 @@ def check_mic() -> dict:
     if not mode or mode == "mock":
         return {"ok": True, "detail": "mock mode", "latency_ms": 0}
 
-    device = mode if mode.startswith("hw:") else "hw:0"
+    # Use the configured device; 'default' goes through asound.conf plug chain
+    device = mode
 
     def _do():
-        # Quick test: record 0.1s stereo (WM8960 requires stereo)
+        # Quick test: record 1s stereo via configured ALSA device
         r = subprocess.run(
             ["arecord", "-D", device, "-f", "S16_LE", "-r", "16000",
              "-c", "2", "-d", "1", "/dev/null"],

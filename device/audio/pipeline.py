@@ -82,12 +82,15 @@ class MockAudioPipeline(AudioPipeline):
 class WM8960Pipeline(AudioPipeline):
     """
     Real audio for Whisplay HAT WM8960 on Pi Zero 2W.
-    Uses sox for recording — handles stereo→mono downmix automatically.
-    WM8960 only supports stereo capture; sox -c 1 mixes down to mono.
+    Uses ALSA 'default' device which routes through asound.conf's plug+dsnoop
+    chain for automatic S32_LE→S16_LE conversion. Falls back to plughw or hw.
+    WM8960 only supports stereo capture; we convert to mono after recording.
     Reference: github.com/PiSugar/whisplay-ai-chatbot
     """
 
-    ALSA_DEVICE = os.environ.get("BITOS_AUDIO", "hw:0")
+    # 'default' uses asound.conf plug chain (handles format conversion).
+    # Override with BITOS_AUDIO=plughw:wm8960soundcard etc. if needed.
+    ALSA_DEVICE = os.environ.get("BITOS_AUDIO", "default")
     RECORD_SAMPLE_RATE = 16000
     # Playback stays at 48kHz stereo for WM8960 speaker output
     PLAYBACK_SAMPLE_RATE = 48000
