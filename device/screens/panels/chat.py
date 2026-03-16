@@ -115,6 +115,8 @@ class ChatPanel(BaseScreen):
         self._recording_start_time: float = 0.0
         self._hold_timer: float | None = None
         self._action_template_index = 0
+        self._voice_step = ""       # on-screen pipeline step callout
+        self._voice_error = ""      # error detail shown on screen
 
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
         self._font = load_ui_font("body", self._ui_settings)
@@ -352,11 +354,14 @@ class ChatPanel(BaseScreen):
         if self._mode == ChatMode.ACTIONS:
             self._render_actions_submenu(surface, action_top)
         elif self._mode == ChatMode.RECORDING:
-            # Show recording elapsed time
+            # Show recording elapsed + pipeline step
             elapsed = int(time.time() - self._recording_start_time)
             rec_text = f"RECORDING  {elapsed}s"
             rec_surf = self._font.render(rec_text, False, WHITE)
-            surface.blit(rec_surf, (SAFE_INSET, action_top + self._ACTION_ROW_H))
+            surface.blit(rec_surf, (SAFE_INSET, action_top + 2))
+        elif self._voice_step and self._voice_step not in ("", "SENDING"):
+            # Show pipeline step callout (VALIDATING, TRANSCRIBING, ERROR)
+            self._render_voice_callout(surface, action_top)
 
         # ── Action bar (gesture icons + labels) ──
         hint_y = PHYSICAL_H - SAFE_INSET - hint_h
@@ -386,8 +391,9 @@ class ChatPanel(BaseScreen):
                 surface.blit(label_surf, (bx + 12, bar_center_y - label_surf.get_height() // 2))
                 bx += 12 + label_surf.get_width() + spacing
         else:
-            # Plain text mode (STREAMING)
-            stream_text = self._font_small.render("listening...", False, DIM3)
+            # Plain text mode (STREAMING) — show voice step if active
+            step_label = self._voice_step.lower() if self._voice_step else "listening"
+            stream_text = self._font_small.render(f"{step_label}...", False, DIM3)
             surface.blit(stream_text, ((PHYSICAL_W - stream_text.get_width()) // 2, bar_center_y - stream_text.get_height() // 2))
 
     def _render_actions_submenu(self, surface: pygame.Surface, top_y: int):
@@ -411,6 +417,47 @@ class ChatPanel(BaseScreen):
             row_surface = self._font.render(prefix + label, False, text_color)
             surface.blit(row_surface, (SAFE_INSET, y + 1))
 
+    def _render_voice_callout(self, surface: pygame.Surface, top_y: int):
+        """Show voice pipeline step + error detail in the action area."""
+        step = self._voice_step
+        error = self._voice_error
+        is_error = step == "ERROR"
+
+        # Step label (large)
+        step_color = (255, 80, 80) if is_error else WHITE
+        step_surf = self._font.render(step, False, step_color)
+        surface.blit(step_surf, (SAFE_INSET, top_y + 2))
+
+        # Error detail (smaller, below step)
+        if error and error != step:
+            err_surf = self._font_small.render(error[:28], False, DIM2)
+            surface.blit(err_surf, (SAFE_INSET, top_y + self._ACTION_ROW_H + 2))
+
+        # Pipeline progress dots: REC → VAL → STT → SEND
+        stages = ["REC", "VAL", "STT", "SEND"]
+        stage_map = {
+            "RECORDING": 0, "STOPPING": 0,
+            "VALIDATING": 1,
+            "TRANSCRIBING": 2,
+            "SENDING": 3,
+            "ERROR": -1, "CANCELLED": -1,
+        }
+        current = stage_map.get(step, -1)
+        dot_y = top_y + self._ACTION_ROW_H * 2 + 2
+        dx = SAFE_INSET
+        for i, label in enumerate(stages):
+            if is_error:
+                color = (255, 80, 80) if i <= max(current, 0) else DIM1
+            elif i < current:
+                color = DIM3  # completed
+            elif i == current:
+                color = WHITE  # active
+            else:
+                color = DIM1  # pending
+            dot_surf = self._font_small.render(label, False, color)
+            surface.blit(dot_surf, (dx, dot_y))
+            dx += dot_surf.get_width() + 6
+
     def _start_recording(self):
         if self._mode == ChatMode.RECORDING or not self._audio_pipeline:
             return
@@ -425,78 +472,103 @@ class ChatPanel(BaseScreen):
             self._status_detail = "recording..."
         threading.Thread(target=self._do_voice_capture, daemon=True).start()
 
+    def _set_voice_step(self, step: str, error: str = "") -> None:
+        """Update on-screen voice pipeline callout. Shown in action area."""
+        with self._messages_lock:
+            self._voice_step = step
+            self._voice_error = error
+            self._status_detail = error if error else step
+
     def _do_voice_capture(self):
+        import os
+
+        self._set_voice_step("RECORDING")
+
         try:
+            # ── Step 1: Start mic capture ──
             audio_path = self._audio_pipeline.record(max_seconds=30)
             if not audio_path:
+                logger.error("mic_init_failed: record() returned None")
+                self._set_voice_step("ERROR", "mic init failed")
                 self._mode = ChatMode.IDLE
                 if self._led:
-                    self._led.off()
+                    self._led.error()
                 return
 
-            # Wait for stop event (set by button press) or timeout
+            logger.info("voice_step=RECORDING path=%s", audio_path)
+
+            # ── Step 2: Wait for button release or timeout ──
             self._voice_stop_event.wait(timeout=30)
+            self._set_voice_step("STOPPING")
             self._audio_pipeline.stop_recording()
 
             if self._recording_cancelled:
+                self._set_voice_step("CANCELLED")
                 self._mode = ChatMode.IDLE
-                with self._messages_lock:
-                    self._status_detail = "cancelled"
                 if self._led:
                     self._led.off()
                 return
 
-            # Wait for WAV file to flush after arecord exits
-            import os
-            time.sleep(0.3)
+            # ── Step 3: Validate WAV file ──
+            self._set_voice_step("VALIDATING")
+            time.sleep(0.3)  # flush wait
 
-            # Validate the recording file exists and has audio data
-            # WAV header is 44 bytes; anything <= 44 means no audio captured
             if not os.path.exists(audio_path):
                 logger.error("recording_file_missing path=%s", audio_path)
+                self._set_voice_step("ERROR", "file missing")
                 self._mode = ChatMode.IDLE
-                with self._messages_lock:
-                    self._status_detail = "mic error"
                 if self._led:
                     self._led.error()
                 return
 
             file_size = os.path.getsize(audio_path)
+            logger.info("voice_step=VALIDATING size=%d path=%s", file_size, audio_path)
+
             if file_size <= 44:
-                logger.error("recording_empty path=%s size=%d", audio_path, file_size)
+                logger.error("recording_empty size=%d", file_size)
+                self._set_voice_step("ERROR", f"empty ({file_size}B)")
                 self._mode = ChatMode.IDLE
-                with self._messages_lock:
-                    self._status_detail = "no audio"
                 if self._led:
                     self._led.error()
                 return
 
-            logger.info("recording_captured path=%s size=%d", audio_path, file_size)
+            logger.info("voice_step=VALIDATED size=%d (%.1fs est)",
+                        file_size, file_size / (16000 * 2))
 
-            # Save a copy for re-transcription / history
+            # Save for history
             self._save_recording(audio_path)
 
+            # ── Step 4: Transcribe ──
             self._mode = ChatMode.STREAMING
-            with self._messages_lock:
-                self._status_detail = "transcribing..."
-            logger.info("stt_starting path=%s", audio_path)
+            self._set_voice_step("TRANSCRIBING")
+            logger.info("voice_step=TRANSCRIBING engine=%s",
+                        getattr(self._audio_pipeline, '_stt_engine', '?'))
+
             text = self._audio_pipeline.transcribe(audio_path).strip()
-            logger.info("stt_result len=%d text=%s", len(text), text[:80] if text else "(empty)")
+            logger.info("voice_step=TRANSCRIBED len=%d text=%s",
+                        len(text), text[:80] if text else "(empty)")
+
         except Exception as exc:
+            err_short = str(exc)[:30]
             logger.error("voice_capture_failed: %s", exc, exc_info=True)
+            self._set_voice_step("ERROR", err_short)
             self._mode = ChatMode.IDLE
             if self._led:
                 self._led.error()
-            self._mark_failed("", "unknown", False, custom_copy=f"voice: {str(exc)[:25]}")
+            self._mark_failed("", "unknown", False,
+                              custom_copy=f"voice: {err_short}")
             return
 
         if self._led:
             self._led.off()
+
         if not text:
-            with self._messages_lock:
-                self._status_detail = "Didn't catch that"
+            self._set_voice_step("ERROR", "no speech detected")
             self._mode = ChatMode.IDLE
             return
+
+        # ── Step 5: Send to backend ──
+        self._set_voice_step("SENDING")
         self._input_text = text
         self._send_message()
 
@@ -603,6 +675,8 @@ class ChatPanel(BaseScreen):
             with self._messages_lock:
                 self._status = self.STATUS_CONNECTED
                 self._status_detail = ""
+                self._voice_step = ""
+                self._voice_error = ""
                 self._last_failed_message = None
                 self._last_error_retryable = False
         except BackendChatError as exc:
