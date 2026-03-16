@@ -19,21 +19,57 @@ logger = logging.getLogger(__name__)
 
 SAMPLE_RATE = int(os.getenv("AUDIO_SAMPLE_RATE", os.getenv("ALSA_SAMPLE_RATE", "48000")))
 CHANNELS = int(os.getenv("AUDIO_CHANNELS", "2"))
-PLAYBACK_DEVICE = os.getenv("ALSA_PLAYBACK_DEVICE", "hw:0,0")
+PLAYBACK_DEVICE = os.getenv("ALSA_PLAYBACK_DEVICE", "default")
 
 
 class TextToSpeech:
     def __init__(self, player: AudioPlayer | None = None):
         self.player = player or AudioPlayer()
+        # Apply persisted volume setting
+        try:
+            from storage.repository import DeviceRepository
+            repo = DeviceRepository()
+            vol = repo.get_setting("volume", 100)
+            self.player.set_volume(max(0, min(100, int(vol))) / 100.0)
+        except Exception:
+            pass
         self.engine = self._detect_engine()
         logger.info("tts_engine=%s", self.engine)
 
     def _detect_engine(self) -> str:
+        # Check if user has forced a specific engine in settings
+        preferred = None
+        try:
+            from storage.repository import DeviceRepository
+            repo = DeviceRepository()
+            preferred = str(repo.get_setting("tts_engine", "auto") or "auto").lower()
+        except Exception:
+            pass
+
+        has_speechify = bool(os.environ.get("SPEECHIFY_API_KEY"))
         has_openai_key = bool(os.environ.get("OPENAI_API_KEY"))
         has_piper = shutil.which("piper") and os.path.exists(
             os.getenv("PIPER_MODEL", "/home/pi/bitos/models/tts/en_US-lessac-medium.onnx")
         )
         has_espeak = shutil.which("espeak") or shutil.which("espeak-ng")
+        logger.info("tts_detect: preferred=%s speechify=%s piper=%s openai=%s espeak=%s",
+                     preferred, has_speechify, bool(has_piper), has_openai_key, bool(has_espeak))
+
+        # If user picked a specific engine and it's available, use it
+        if preferred and preferred != "auto":
+            if preferred == "speechify" and has_speechify:
+                return "speechify"
+            if preferred == "piper" and has_piper:
+                return "piper"
+            if preferred == "openai" and has_openai_key:
+                return "openai"
+            if preferred == "espeak" and has_espeak:
+                return "espeak"
+            logger.warning("tts_preferred=%s not available, falling back to auto", preferred)
+
+        # Auto: best available
+        if has_speechify:
+            return "speechify"
         if has_piper:
             return "piper"
         if has_openai_key:
@@ -49,21 +85,49 @@ class TextToSpeech:
             logger.warning("tts_engine=silent; skipping synthesis")
             return False
 
+        logger.info("tts_speak: engine=%s text_len=%d text_preview='%s'",
+                     self.engine, len(text), text[:60].replace('\n', ' '))
         out = Path(tempfile.mkstemp(prefix="bitos_tts_", suffix=".wav")[1])
         try:
-            if self.engine == "piper":
+            if self.engine == "speechify":
+                self._run_speechify(text, out)
+            elif self.engine == "piper":
                 self._run_piper(text, out)
             elif self.engine == "openai":
                 self._run_openai_tts(text, out)
             elif self.engine == "espeak":
                 self._run_espeak(text, out)
             if not out.exists() or out.stat().st_size == 0:
+                logger.warning("tts_speak: output file empty or missing after synthesis")
                 return False
-            self._ensure_48k_stereo_wav(out)
+            size = out.stat().st_size
+            logger.info("tts_speak: synthesized %d bytes", size)
+            # Only resample if using pygame (desktop); aplay reads WAV headers natively
+            from .player import _USE_APLAY
+            if not _USE_APLAY:
+                self._ensure_48k_stereo_wav(out)
+                logger.info("tts_speak: resampled to 48k stereo, %d bytes", out.stat().st_size)
+            logger.info("tts_speak: playing audio")
             return self.player.play_file(str(out))
         finally:
             if out.exists():
                 out.unlink(missing_ok=True)
+
+    def _run_speechify(self, text: str, output_file: Path) -> None:
+        from .speechify import synthesize
+        if not synthesize(text, output_file):
+            # Fallback to next available engine
+            logger.warning("speechify_fallback: trying next engine")
+            for fallback in ("piper", "openai", "espeak"):
+                if fallback == "piper" and shutil.which("piper"):
+                    self._run_piper(text, output_file)
+                    return
+                if fallback == "openai" and os.environ.get("OPENAI_API_KEY"):
+                    self._run_openai_tts(text, output_file)
+                    return
+                if fallback == "espeak" and (shutil.which("espeak") or shutil.which("espeak-ng")):
+                    self._run_espeak(text, output_file)
+                    return
 
     def _run_piper(self, text: str, output_file: Path) -> None:
         model = os.getenv("PIPER_MODEL", "/home/pi/bitos/models/tts/en_US-lessac-medium.onnx")

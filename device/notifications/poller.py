@@ -40,6 +40,7 @@ class NotificationPoller:
         next_task_poll = 0.0
         next_subtask_poll = 0.0
         next_update_poll = 15.0  # Check for updates 15s after boot
+        next_settings_poll = 5.0  # Check for companion app setting changes
         while not self._stop.wait(1.0):
             now = time.time()
             if now >= next_health_poll:
@@ -54,6 +55,9 @@ class NotificationPoller:
             if now >= next_update_poll:
                 self._poll_update_available()
                 next_update_poll = now + 3600.0  # Re-check hourly
+            if now >= next_settings_poll:
+                self._poll_pending_settings()
+                next_settings_poll = now + 5.0  # Check every 5s
 
     def _poll_health_state(self) -> None:
         state = bool(self._api_client.health())
@@ -121,6 +125,23 @@ class NotificationPoller:
         self._queue.push_record(record)
         if self.on_banner:
             self.on_banner("SYSTEM", "S", message)
+
+    def _poll_pending_settings(self) -> None:
+        """Check server for pending setting changes from companion app."""
+        try:
+            resp = self._api_client._request_headers  # verify client has the method
+            import httpx
+            resp = httpx.get(
+                f"{self._api_client.base_url}/settings/device/pending",
+                timeout=5,
+                headers=self._api_client._request_headers(),
+            )
+            resp.raise_for_status()
+            changes = resp.json().get("changes", [])
+            for change in changes:
+                self._api_client._apply_setting_change(change)
+        except Exception:
+            pass  # Non-critical — will retry next cycle
 
     def _poll_completed_subtasks(self) -> None:
         if not hasattr(self._api_client, "get_agent_subtasks"):

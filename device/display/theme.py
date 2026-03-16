@@ -1,6 +1,7 @@
 """Runtime UI theme helpers (fed by backend settings)."""
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 
 import pygame
@@ -9,9 +10,12 @@ _FONT_CACHE: dict[tuple[str, int], pygame.font.Font] = {}
 
 from display.tokens import FONT_PATH, FONT_REGISTRY, DEFAULT_FONT_FAMILY, FONT_SIZES, PAD_ROW
 
+# Global font scale: set BITOS_FONT_SCALE=1.3 to make everything 30% bigger
+_ENV_FONT_SCALE = float(os.environ.get("BITOS_FONT_SCALE", "1.0"))
+
 DEFAULT_RUNTIME_UI_SETTINGS = {
     "font_family": DEFAULT_FONT_FAMILY,
-    "font_scale": 1.0,
+    "font_scale": _ENV_FONT_SCALE,
     "font_size_overrides": {
         "title": FONT_SIZES["title"],
         "body": FONT_SIZES["body"],
@@ -86,11 +90,12 @@ def load_ui_font_bold(role: str, ui_settings: dict) -> pygame.font.Font:
 
 @lru_cache(maxsize=16)
 def get_font(size: int) -> pygame.font.Font:
-    """Load a font at the given pixel size, with fallback to system monospace."""
+    """Load a font at the given pixel size (scaled by BITOS_FONT_SCALE), with fallback."""
+    scaled = max(5, int(round(size * _ENV_FONT_SCALE)))
     try:
-        return pygame.font.Font(FONT_PATH, size)
+        return pygame.font.Font(FONT_PATH, scaled)
     except Exception:
-        return pygame.font.SysFont("monospace", size)
+        return pygame.font.SysFont("monospace", scaled)
 
 
 def ui_line_height(font: pygame.font.Font, ui_settings: dict) -> int:

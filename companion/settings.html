@@ -10,76 +10,306 @@
       background: #000; color: #fff;
       font-family: monospace; font-size: 14px;
       display: flex; flex-direction: column;
-      align-items: center; padding: 32px 16px;
+      align-items: center; padding: 24px 16px 80px;
       min-height: 100vh;
+      -webkit-tap-highlight-color: transparent;
     }
     h1 { font-size: 20px; letter-spacing: .1em; margin-bottom: 8px; }
-    .sub { color: #555; font-size: 11px; margin-bottom: 32px; }
-    .card { border: 2px solid #fff; padding: 20px; width: 100%; max-width: 360px; margin-bottom: 16px; }
-    .card h2 { font-size: 12px; letter-spacing: .08em; margin-bottom: 16px; color: #aaa; }
-    input { width: 100%; background: #111; border: 2px solid #444; color: #fff; font-family: monospace; font-size: 14px; padding: 10px; margin-bottom: 10px; outline: none; }
-    button { width: 100%; background: #fff; color: #000; border: none; font-family: monospace; font-size: 14px; font-weight: bold; padding: 12px; cursor: pointer; letter-spacing: .06em; }
-    .status { font-size: 11px; letter-spacing: .06em; color: #888; padding: 8px 0; min-height: 20px; white-space: pre-wrap; }
+    .sub { color: #555; font-size: 11px; margin-bottom: 24px; }
+
+    /* Connection badge */
+    .conn-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 10px; letter-spacing: .08em; color: #888;
+      margin-bottom: 20px; padding: 6px 12px;
+      border: 1px solid #333;
+    }
+    .conn-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #f44;
+    }
+    .conn-dot.http { background: #fa0; }
+    .conn-dot.ble { background: #4f4; }
+
+    /* Tab bar */
+    .tabs {
+      display: flex; width: 100%; max-width: 400px;
+      border-bottom: 2px solid #333; margin-bottom: 20px;
+      overflow-x: auto; -webkit-overflow-scrolling: touch;
+    }
+    .tab {
+      flex: 1; min-width: 0;
+      background: none; color: #666; border: none;
+      font-family: monospace; font-size: 11px; font-weight: bold;
+      letter-spacing: .06em; padding: 10px 6px;
+      cursor: pointer; text-align: center;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px; white-space: nowrap;
+    }
+    .tab.active { color: #fff; border-bottom-color: #fff; }
+
+    /* Tab panes */
+    .pane { display: none; width: 100%; max-width: 400px; }
+    .pane.active { display: block; }
+
+    /* Cards */
+    .card {
+      border: 2px solid #fff; padding: 16px;
+      width: 100%; margin-bottom: 16px;
+    }
+    .card h2 {
+      font-size: 11px; letter-spacing: .08em;
+      margin-bottom: 14px; color: #aaa;
+    }
+
+    /* Setting rows */
+    .setting-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 0; border-bottom: 1px solid #1a1a1a;
+      min-height: 44px; /* touch target */
+    }
+    .setting-row:last-child { border-bottom: none; }
+    .setting-label {
+      font-size: 13px; color: #ccc;
+      flex-shrink: 0; margin-right: 12px;
+    }
+    .setting-control { flex-shrink: 0; }
+
+    /* Toggle switch */
+    .toggle {
+      position: relative; width: 44px; height: 24px;
+      background: #333; border: none; border-radius: 12px;
+      cursor: pointer; transition: background .2s;
+      -webkit-appearance: none; appearance: none;
+    }
+    .toggle::after {
+      content: ''; position: absolute;
+      top: 3px; left: 3px; width: 18px; height: 18px;
+      background: #888; border-radius: 50%;
+      transition: transform .2s, background .2s;
+    }
+    .toggle.on { background: #fff; }
+    .toggle.on::after { transform: translateX(20px); background: #000; }
+
+    /* Picker (segmented) */
+    .picker {
+      display: flex; gap: 0;
+      border: 1px solid #444; overflow: hidden;
+    }
+    .picker-opt {
+      background: #111; color: #666; border: none;
+      font-family: monospace; font-size: 10px; font-weight: bold;
+      letter-spacing: .04em; padding: 6px 8px;
+      cursor: pointer; text-transform: uppercase;
+      border-right: 1px solid #333;
+      transition: background .15s, color .15s;
+      white-space: nowrap;
+    }
+    .picker-opt:last-child { border-right: none; }
+    .picker-opt.active { background: #fff; color: #000; }
+
+    /* Slider */
+    .slider-wrap {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .slider-val {
+      font-size: 12px; color: #888; min-width: 28px;
+      text-align: right;
+    }
+    input[type="range"] {
+      -webkit-appearance: none; appearance: none;
+      width: 100px; height: 4px;
+      background: #333; outline: none;
+      border-radius: 2px;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 18px; height: 18px;
+      background: #fff; border-radius: 50%;
+      cursor: pointer;
+    }
+
+    /* Info rows (read-only) */
+    .info-row {
+      display: flex; justify-content: space-between;
+      padding: 8px 0; border-bottom: 1px solid #1a1a1a;
+      font-size: 12px;
+    }
+    .info-row:last-child { border-bottom: none; }
+    .info-key { color: #666; }
+    .info-val { color: #ccc; text-align: right; }
+
+    /* Buttons */
+    button.primary {
+      width: 100%; background: #fff; color: #000;
+      border: none; font-family: monospace; font-size: 14px;
+      font-weight: bold; padding: 12px; cursor: pointer;
+      letter-spacing: .06em;
+    }
+    button.primary:disabled { background: #333; color: #666; }
+    button.secondary {
+      width: 100%; background: #000; color: #fff;
+      border: 2px solid #444; font-family: monospace;
+      font-size: 14px; font-weight: bold; padding: 10px;
+      cursor: pointer; letter-spacing: .06em; margin-top: 8px;
+    }
+
+    /* Integration inputs */
+    input[type="text"], input[type="password"] {
+      width: 100%; background: #111; border: 2px solid #444;
+      color: #fff; font-family: monospace; font-size: 14px;
+      padding: 10px; margin-bottom: 10px; outline: none;
+    }
+    input:focus { border-color: #fff; }
+
+    .status {
+      font-size: 11px; letter-spacing: .06em; color: #888;
+      padding: 8px 0; min-height: 20px; white-space: pre-wrap;
+    }
+    .status.ok { color: #4f4; }
+    .status.error { color: #f44; }
+
+    /* Save toast */
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #fff; color: #000; font-family: monospace;
+      font-size: 12px; font-weight: bold; letter-spacing: .06em;
+      padding: 10px 20px; opacity: 0;
+      transition: opacity .3s;
+      pointer-events: none; z-index: 100;
+    }
+    .toast.show { opacity: 1; }
+
+    /* Responsive picker wrap for many options */
+    .picker-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   </style>
 </head>
 <body>
-  <h1>◎ BITOS</h1>
-  <div class="sub">DEVICE SETTINGS</div>
+  <h1>&#9678; BITOS</h1>
+  <div class="sub">SETTINGS</div>
 
-  <div class="card">
-    <h2>INTEGRATION STATUS</h2>
-    <div id="integrations-loading" class="status">Loading...</div>
-    <div id="integrations-list" style="display:none"></div>
-    <button onclick="refreshStatus()">REFRESH</button>
+  <div class="conn-badge">
+    <div class="conn-dot" id="conn-dot"></div>
+    <span id="conn-label">OFFLINE</span>
   </div>
 
-  <div class="card">
-    <h2>iMESSAGE — BLUEBUBBLES</h2>
-    <div class="status" id="bb-status">—</div>
-    <input type="text" id="bb-url" placeholder="BlueBubbles URL (e.g. http://mac.local:1234)">
-    <input type="password" id="bb-password" placeholder="BlueBubbles password">
-    <button onclick="saveBlueBubbles()">SAVE & TEST</button>
-    <div class="status" id="bb-save-status"></div>
+  <div class="tabs">
+    <button class="tab active" data-pane="device" onclick="switchTab('device')">DEVICE</button>
+    <button class="tab" data-pane="voice" onclick="switchTab('voice')">VOICE</button>
+    <button class="tab" data-pane="ai" onclick="switchTab('ai')">AI</button>
+    <button class="tab" data-pane="display" onclick="switchTab('display')">DISPLAY</button>
+    <button class="tab" data-pane="integrations" onclick="switchTab('integrations')">CONNECT</button>
   </div>
 
-  <div class="card">
-    <h2>TASKS — VIKUNJA</h2>
-    <div class="status" id="vk-status">—</div>
-    <input type="text" id="vk-url" placeholder="Vikunja URL (e.g. http://mac.local:3456/api/v1)">
-    <input type="password" id="vk-token" placeholder="Vikunja API token">
-    <button onclick="saveVikunja()">SAVE & TEST</button>
-    <div class="status" id="vk-save-status"></div>
-  </div>
-
-  <div class="card">
-    <h2>DEVICE UPDATE</h2>
-    <div id="version-info" class="status">Checking...</div>
-    <div id="update-available" style="display:none">
-      <div class="status" id="update-msg" style="color:#4f4"></div>
-      <button id="update-button" onclick="startUpdate('both')">
-        UPDATE DEVICE + SERVER
-      </button>
-      <div class="status" id="update-status"></div>
+  <!-- ── Device pane ── -->
+  <div class="pane active" id="pane-device">
+    <div class="card">
+      <h2>DEVICE STATUS</h2>
+      <div class="info-row">
+        <span class="info-key">Firmware</span>
+        <span class="info-val" id="info-firmware">--</span>
+      </div>
+      <div class="info-row">
+        <span class="info-key">Battery</span>
+        <span class="info-val" id="info-battery">--</span>
+      </div>
+      <div class="info-row">
+        <span class="info-key">Wi-Fi</span>
+        <span class="info-val" id="info-wifi">--</span>
+      </div>
+      <div class="info-row">
+        <span class="info-key">Server</span>
+        <span class="info-val" id="info-server">--</span>
+      </div>
     </div>
-    <div id="up-to-date" style="display:none">
-      <div class="status" style="color:#4f4">✓ UP TO DATE</div>
-      <button class="secondary" onclick="checkVersion()">
-        CHECK AGAIN
-      </button>
+
+    <div class="card">
+      <h2>FIRMWARE UPDATE</h2>
+      <div id="version-info" class="status">Checking...</div>
+      <div id="update-available" style="display:none">
+        <div class="status ok" id="update-msg"></div>
+        <button class="primary" id="update-button" onclick="startUpdate('both')">
+          UPDATE DEVICE + SERVER
+        </button>
+        <div class="status" id="update-status"></div>
+      </div>
+      <div id="up-to-date" style="display:none">
+        <div class="status ok">UP TO DATE</div>
+      </div>
+      <button class="secondary" onclick="checkVersion()">CHECK FOR UPDATES</button>
+    </div>
+
+    <div class="card">
+      <h2>BLE CONNECTION</h2>
+      <div class="status" id="ble-conn-status">Not connected</div>
+      <button class="secondary" id="btn-ble-connect" onclick="connectBLE()">CONNECT VIA BLE</button>
     </div>
   </div>
 
-  <div class="card">
-    <h2>DEVICE INFO</h2>
-    <div id="device-info" class="status">Loading...</div>
+  <!-- ── Voice pane ── -->
+  <div class="pane" id="pane-voice">
+    <div class="card">
+      <h2>VOICE</h2>
+      <div id="settings-voice"></div>
+    </div>
   </div>
+
+  <!-- ── AI pane ── -->
+  <div class="pane" id="pane-ai">
+    <div class="card">
+      <h2>AI</h2>
+      <div id="settings-ai"></div>
+    </div>
+  </div>
+
+  <!-- ── Display pane ── -->
+  <div class="pane" id="pane-display">
+    <div class="card">
+      <h2>DISPLAY</h2>
+      <div id="settings-display"></div>
+    </div>
+  </div>
+
+  <!-- ── Integrations pane ── -->
+  <div class="pane" id="pane-integrations">
+    <div class="card">
+      <h2>INTEGRATION STATUS</h2>
+      <div id="integrations-loading" class="status">Loading...</div>
+      <div id="integrations-list" style="display:none"></div>
+      <button class="secondary" onclick="refreshIntegrations()">REFRESH</button>
+    </div>
+
+    <div class="card">
+      <h2>iMESSAGE &mdash; BLUEBUBBLES</h2>
+      <div class="status" id="bb-status">&mdash;</div>
+      <input type="text" id="bb-url" placeholder="BlueBubbles URL (e.g. http://mac.local:1234)">
+      <input type="password" id="bb-password" placeholder="BlueBubbles password">
+      <button class="primary" onclick="saveBlueBubbles()">SAVE &amp; TEST</button>
+      <div class="status" id="bb-save-status"></div>
+    </div>
+
+    <div class="card">
+      <h2>TASKS &mdash; VIKUNJA</h2>
+      <div class="status" id="vk-status">&mdash;</div>
+      <input type="text" id="vk-url" placeholder="Vikunja URL (e.g. http://mac.local:3456/api/v1)">
+      <input type="password" id="vk-token" placeholder="Vikunja API token">
+      <button class="primary" onclick="saveVikunja()">SAVE &amp; TEST</button>
+      <div class="status" id="vk-save-status"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
 
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(() => {});
     }
   </script>
+  <script src="js/ble.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/settings.js"></script>
   <script>
+    // ── Server URL ─────────────────────────────────────────
     const params = new URLSearchParams(location.search);
     const SERVER = params.get('server')
       || sessionStorage.getItem('bitos_server')
@@ -88,13 +318,270 @@
       sessionStorage.setItem('bitos_server', params.get('server'));
     }
 
-    async function refreshStatus() {
+    // ── Settings manager ───────────────────────────────────
+    const mgr = new BitosSettings(SERVER);
+    let companion = null;
+
+    // ── Tab switching ──────────────────────────────────────
+    function switchTab(name) {
+      document.querySelectorAll('.tab').forEach(t =>
+        t.classList.toggle('active', t.dataset.pane === name));
+      document.querySelectorAll('.pane').forEach(p =>
+        p.classList.toggle('active', p.id === 'pane-' + name));
+    }
+
+    // ── Toast notification ─────────────────────────────────
+    let _toastTimer = null;
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      clearTimeout(_toastTimer);
+      _toastTimer = setTimeout(() => t.classList.remove('show'), 1800);
+    }
+
+    // ── Render setting controls ────────────────────────────
+    function renderSettingGroups() {
+      for (const group of SETTING_GROUPS) {
+        const container = document.getElementById('settings-' + group.id);
+        if (!container) continue;
+        container.innerHTML = '';
+
+        for (const s of group.settings) {
+          const row = document.createElement('div');
+          row.className = 'setting-row';
+          row.dataset.key = s.key;
+
+          const label = document.createElement('span');
+          label.className = 'setting-label';
+          label.textContent = s.label;
+          row.appendChild(label);
+
+          const ctrl = document.createElement('div');
+          ctrl.className = 'setting-control';
+
+          if (s.type === 'toggle') {
+            const btn = document.createElement('button');
+            btn.className = 'toggle';
+            btn.dataset.key = s.key;
+            btn.addEventListener('click', () => {
+              const cur = mgr.settings[s.key];
+              const next = (cur === true || cur === 'on') ? false : true;
+              btn.classList.toggle('on', next);
+              mgr.setSetting(s.key, next);
+              showToast('SAVED');
+            });
+            ctrl.appendChild(btn);
+
+          } else if (s.type === 'picker') {
+            const wrap = document.createElement('div');
+            wrap.className = 'picker-wrap';
+            const picker = document.createElement('div');
+            picker.className = 'picker';
+            picker.dataset.key = s.key;
+            for (const opt of s.options) {
+              const btn = document.createElement('button');
+              btn.className = 'picker-opt';
+              btn.textContent = opt.replace(/_/g, ' ');
+              btn.dataset.value = opt;
+              btn.addEventListener('click', () => {
+                picker.querySelectorAll('.picker-opt').forEach(b =>
+                  b.classList.toggle('active', b.dataset.value === opt));
+                mgr.setSetting(s.key, opt);
+                showToast('SAVED');
+              });
+              picker.appendChild(btn);
+            }
+            wrap.appendChild(picker);
+            ctrl.appendChild(wrap);
+
+          } else if (s.type === 'slider') {
+            const wrap = document.createElement('div');
+            wrap.className = 'slider-wrap';
+            const range = document.createElement('input');
+            range.type = 'range';
+            range.min = s.min;
+            range.max = s.max;
+            range.step = s.step || 1;
+            range.value = s.default;
+            range.dataset.key = s.key;
+            const valSpan = document.createElement('span');
+            valSpan.className = 'slider-val';
+            valSpan.textContent = range.value;
+            valSpan.id = 'slider-val-' + s.key;
+            range.addEventListener('input', () => {
+              valSpan.textContent = range.value;
+            });
+            range.addEventListener('change', () => {
+              mgr.setSetting(s.key, parseInt(range.value));
+              showToast('SAVED');
+            });
+            wrap.appendChild(range);
+            wrap.appendChild(valSpan);
+            ctrl.appendChild(wrap);
+          }
+
+          row.appendChild(ctrl);
+          container.appendChild(row);
+        }
+      }
+    }
+
+    // ── Update controls from current settings ──────────────
+    function syncControls(settings, status) {
+      // Connection badge
+      const dot = document.getElementById('conn-dot');
+      const label = document.getElementById('conn-label');
+      dot.className = 'conn-dot';
+      if (mgr.connectionMode === 'ble') {
+        dot.classList.add('ble');
+        label.textContent = 'BLE + HTTP';
+      } else if (mgr.connectionMode === 'http') {
+        dot.classList.add('http');
+        label.textContent = 'HTTP';
+      } else {
+        label.textContent = 'OFFLINE';
+      }
+
+      // Device info
+      document.getElementById('info-firmware').textContent =
+        status.firmware_version || status.version || '--';
+      document.getElementById('info-battery').textContent =
+        status.battery != null ? status.battery + '%' : '--';
+      document.getElementById('info-wifi').textContent =
+        status.wifi_connected ? (status.wifi_ssid || 'Connected') : '--';
+      document.getElementById('info-server').textContent =
+        status.server_online ? SERVER.replace(/^https?:\/\//, '') : 'Offline';
+
+      // Sync toggles
+      document.querySelectorAll('.toggle').forEach(btn => {
+        const val = settings[btn.dataset.key];
+        btn.classList.toggle('on', val === true || val === 'on');
+      });
+
+      // Sync pickers
+      document.querySelectorAll('.picker').forEach(picker => {
+        const val = settings[picker.dataset.key];
+        picker.querySelectorAll('.picker-opt').forEach(btn =>
+          btn.classList.toggle('active', btn.dataset.value === val));
+      });
+
+      // Sync sliders
+      document.querySelectorAll('input[type="range"]').forEach(range => {
+        const val = settings[range.dataset.key];
+        if (val != null) {
+          range.value = val;
+          const valSpan = document.getElementById('slider-val-' + range.dataset.key);
+          if (valSpan) valSpan.textContent = val;
+        }
+      });
+    }
+
+    // Apply defaults for settings not yet loaded from server
+    function applyDefaults() {
+      for (const group of SETTING_GROUPS) {
+        for (const s of group.settings) {
+          if (mgr.settings[s.key] === undefined) {
+            mgr.settings[s.key] = s.default;
+          }
+        }
+      }
+    }
+
+    // ── BLE connection ─────────────────────────────────────
+    async function connectBLE() {
+      const btn = document.getElementById('btn-ble-connect');
+      const status = document.getElementById('ble-conn-status');
+      btn.disabled = true;
+      status.textContent = 'Scanning...';
+
+      try {
+        if (!navigator.bluetooth) {
+          throw new Error('Web Bluetooth not available');
+        }
+        companion = new BitosCompanion();
+        await companion.connect();
+        mgr.ble = companion;
+        status.textContent = 'Connected — authenticating...';
+
+        // Try default PIN
+        try {
+          await companion.authenticate('0000');
+          status.textContent = 'Connected + authenticated';
+          status.style.color = '#4f4';
+        } catch (_) {
+          status.textContent = 'Connected (auth required)';
+          status.style.color = '#fa0';
+        }
+
+        mgr.refresh();
+      } catch (e) {
+        status.textContent = e.message;
+        status.style.color = '#f44';
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    // ── Firmware update (preserved from original) ──────────
+    async function checkVersion() {
+      document.getElementById('version-info').textContent = 'Checking...';
+      try {
+        const r = await fetch(`${SERVER}/device/version`);
+        const d = await r.json();
+        document.getElementById('version-info').textContent =
+          `Version: ${d.version} (${d.commit})`;
+        if (d.update_available) {
+          document.getElementById('update-available').style.display = 'block';
+          document.getElementById('up-to-date').style.display = 'none';
+          document.getElementById('update-msg').textContent =
+            `${d.behind} update(s) available`;
+        } else {
+          document.getElementById('update-available').style.display = 'none';
+          document.getElementById('up-to-date').style.display = 'block';
+        }
+      } catch (e) {
+        document.getElementById('version-info').textContent = 'Cannot reach device';
+      }
+    }
+
+    async function startUpdate(target) {
+      document.getElementById('update-status').textContent = 'Updating... (30-60 seconds)';
+      const btn = document.getElementById('update-button');
+      btn.disabled = true;
+      try {
+        const r = await fetch(`${SERVER}/device/update`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target, confirmed: true }),
+        });
+        const d = await r.json();
+        if (d.ok) {
+          document.getElementById('update-status').textContent =
+            'Updated to ' + d.new_commit;
+          setTimeout(checkVersion, 5000);
+        } else {
+          document.getElementById('update-status').textContent =
+            'Update failed — check logs';
+        }
+      } catch (e) {
+        document.getElementById('update-status').textContent =
+          'Connection lost during update (normal — wait 30s)';
+        setTimeout(checkVersion, 30000);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    // ── Integrations (preserved from original) ─────────────
+    async function refreshIntegrations() {
       try {
         const r = await fetch(`${SERVER}/status/integrations`);
         const data = await r.json();
         renderIntegrations(data);
       } catch (e) {
-        document.getElementById('integrations-loading').textContent = '✗ Cannot reach device server';
+        document.getElementById('integrations-loading').textContent =
+          'Cannot reach device server';
       }
     }
 
@@ -103,14 +590,20 @@
       list.innerHTML = '';
       document.getElementById('integrations-loading').style.display = 'none';
       list.style.display = 'block';
-
       for (const [name, info] of Object.entries(data)) {
-        const badge = info.status === 'online' ? '✓' : info.status === 'mock' ? '◌' : info.status === 'config' ? '⚙' : '✗';
-        const color = info.status === 'online' ? '#4f4' : info.status === 'mock' ? '#aaa' : '#f44';
-        list.innerHTML += `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #222"><span style="font-size:12px">${name.toUpperCase()}</span><span style="color:${color};font-size:12px">${badge} ${info.status.toUpperCase()}</span></div>`;
+        const badge = info.status === 'online' ? '+'
+          : info.status === 'mock' ? 'o'
+          : info.status === 'config' ? '*' : 'x';
+        const color = info.status === 'online' ? '#4f4'
+          : info.status === 'mock' ? '#aaa' : '#f44';
+        list.innerHTML += `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #222">` +
+          `<span style="font-size:12px">${name.toUpperCase()}</span>` +
+          `<span style="color:${color};font-size:12px">${badge} ${info.status.toUpperCase()}</span></div>`;
       }
-      document.getElementById('bb-status').textContent = (data.imessage?.status || 'unknown').toUpperCase();
-      document.getElementById('vk-status').textContent = (data.vikunja?.status || 'unknown').toUpperCase();
+      document.getElementById('bb-status').textContent =
+        (data.imessage?.status || 'unknown').toUpperCase();
+      document.getElementById('vk-status').textContent =
+        (data.vikunja?.status || 'unknown').toUpperCase();
     }
 
     async function saveBlueBubbles() {
@@ -119,15 +612,19 @@
       document.getElementById('bb-save-status').textContent = 'Testing connection...';
       try {
         const r = await fetch(`${SERVER}/settings/integrations`, {
-          method: 'POST', headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({integration: 'imessage', config: {url, password: pw}})
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ integration: 'imessage', config: { url, password: pw } }),
         });
         const d = await r.json();
-        document.getElementById('bb-save-status').textContent = d.ok ? '✓ Connected!' : '✗ ' + (d.error || 'Failed');
-        document.getElementById('bb-save-status').style.color = d.ok ? '#4f4' : '#f44';
-        if (d.ok) refreshStatus();
+        const el = document.getElementById('bb-save-status');
+        el.textContent = d.ok ? 'Connected!' : (d.error || 'Failed');
+        el.className = 'status ' + (d.ok ? 'ok' : 'error');
+        if (d.ok) refreshIntegrations();
       } catch (e) {
-        document.getElementById('bb-save-status').textContent = '✗ Server unreachable';
+        const el = document.getElementById('bb-save-status');
+        el.textContent = 'Server unreachable';
+        el.className = 'status error';
       }
     }
 
@@ -137,76 +634,34 @@
       document.getElementById('vk-save-status').textContent = 'Testing connection...';
       try {
         const r = await fetch(`${SERVER}/settings/integrations`, {
-          method: 'POST', headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({integration: 'vikunja', config: {url, token}})
-        });
-        const d = await r.json();
-        document.getElementById('vk-save-status').textContent = d.ok ? '✓ Connected!' : '✗ ' + (d.error || 'Failed');
-        document.getElementById('vk-save-status').style.color = d.ok ? '#4f4' : '#f44';
-        if (d.ok) refreshStatus();
-      } catch (e) {
-        document.getElementById('vk-save-status').textContent = '✗ Server unreachable';
-      }
-    }
-
-    async function checkVersion() {
-      document.getElementById('version-info').textContent = 'Checking...';
-      try {
-        const r = await fetch(`${SERVER}/device/version`);
-        const d = await r.json();
-        document.getElementById('version-info').textContent = `Version: ${d.version} (${d.commit})`;
-
-        if (d.update_available) {
-          document.getElementById('update-available').style.display = 'block';
-          document.getElementById('up-to-date').style.display = 'none';
-          document.getElementById('update-msg').textContent = `${d.behind} update(s) available`;
-        } else {
-          document.getElementById('update-available').style.display = 'none';
-          document.getElementById('up-to-date').style.display = 'block';
-        }
-      } catch (e) {
-        document.getElementById('version-info').textContent = '✗ Cannot reach device';
-      }
-    }
-
-    async function startUpdate(target) {
-      document.getElementById('update-status').textContent = 'Updating... (30-60 seconds)';
-      const updateButton = document.getElementById('update-button');
-      updateButton.disabled = true;
-      try {
-        const r = await fetch(`${SERVER}/device/update`, {
           method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({target, confirmed: true})
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ integration: 'vikunja', config: { url, token } }),
         });
         const d = await r.json();
-        if (d.ok) {
-          document.getElementById('update-status').textContent = `✓ Updated to ${d.new_commit}`;
-          setTimeout(checkVersion, 5000);
-        } else {
-          document.getElementById('update-status').textContent = '✗ Update failed — check logs';
-        }
+        const el = document.getElementById('vk-save-status');
+        el.textContent = d.ok ? 'Connected!' : (d.error || 'Failed');
+        el.className = 'status ' + (d.ok ? 'ok' : 'error');
+        if (d.ok) refreshIntegrations();
       } catch (e) {
-        document.getElementById('update-status').textContent = '✗ Connection lost during update (normal — wait 30s)';
-        setTimeout(checkVersion, 30000);
-      } finally {
-        updateButton.disabled = false;
+        const el = document.getElementById('vk-save-status');
+        el.textContent = 'Server unreachable';
+        el.className = 'status error';
       }
     }
 
-    async function loadDeviceInfo() {
-      try {
-        const resp = await fetch(`${SERVER}/health`);
-        const health = await resp.json();
-        document.getElementById('device-info').textContent = `Model: BITOS Pi Zero 2W\nServer: ${SERVER}\nVersion: ${health.version || 'unknown'} (${health.commit || 'unknown'})`;
-      } catch (e) {
-        document.getElementById('device-info').textContent = 'Device offline';
-      }
-    }
+    // ── Initialize ─────────────────────────────────────────
+    renderSettingGroups();
+    applyDefaults();
+    syncControls(mgr.settings, mgr.deviceStatus);
 
-    refreshStatus();
+    mgr.onChange((settings, status) => {
+      syncControls(settings, status);
+    });
+
+    mgr.startAutoRefresh(5000);
     checkVersion();
-    loadDeviceInfo();
+    refreshIntegrations();
   </script>
 </body>
 </html>

@@ -2,11 +2,13 @@
 import asyncio
 import json
 import logging
+import logging.handlers
 import os
 import sqlite3
 import subprocess
 import sys
 import threading
+import traceback
 import uuid
 
 try:
@@ -64,6 +66,44 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from version import __version__, __build__
+
+
+# ── Structured logging setup ─────────────────────────────────────────────
+def _configure_logging():
+    """Set up structured logging with file rotation for remote debugging."""
+    log_dir = os.environ.get("BITOS_LOG_DIR", str(ROOT_DIR / "logs"))
+    os.makedirs(log_dir, exist_ok=True)
+
+    fmt = logging.Formatter(
+        "%(asctime)s %(levelname)s %(name)s %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S",
+    )
+
+    # Console handler (always)
+    console = logging.StreamHandler(sys.stderr)
+    console.setFormatter(fmt)
+
+    # Rotating file handler: 5MB x 3 files — survives reboots, stays small on Pi
+    file_handler = logging.handlers.RotatingFileHandler(
+        os.path.join(log_dir, "server.log"),
+        maxBytes=5 * 1024 * 1024,
+        backupCount=3,
+        encoding="utf-8",
+    )
+    file_handler.setFormatter(fmt)
+
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    root.addHandler(console)
+    root.addHandler(file_handler)
+
+    # Quiet noisy libraries
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+
+
+_configure_logging()
 
 
 class ChatRequest(BaseModel):
@@ -369,6 +409,20 @@ app.add_middleware(
 )
 
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Catch-all: log full traceback, return consistent JSON error to device."""
+    logger.error(
+        "unhandled_exception path=%s method=%s error=%s",
+        request.url.path, request.method, exc,
+        exc_info=True,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"error": "Internal server error", "detail": str(exc)[:200]},
+    )
+
+
 @app.middleware("http")
 async def require_device_token(request: Request, call_next):
     global _token_warning_logged
@@ -464,6 +518,54 @@ async def update_integrations_settings(payload: IntegrationSettingsRequest):
     return {"ok": True}
 
 
+# ── Device settings (synced from device via chat requests) ──────────────
+_device_settings_cache: dict = {}
+_device_settings_lock = threading.Lock()
+
+
+def _update_device_settings_cache(settings: dict) -> None:
+    """Update cached device settings from the latest chat request."""
+    with _device_settings_lock:
+        _device_settings_cache.update(settings)
+
+
+@app.get("/settings/device")
+async def get_device_settings():
+    """Return last-known device settings (synced from device via chat requests)."""
+    with _device_settings_lock:
+        return dict(_device_settings_cache)
+
+
+@app.put("/settings/device")
+async def update_device_settings(request: Request):
+    """Queue a device setting change. Applied when device next connects."""
+    patch = await request.json()
+    if not isinstance(patch, dict) or "key" not in patch or "value" not in patch:
+        raise HTTPException(status_code=400, detail="Requires {key, value}")
+
+    from agent_tools import validate_setting
+    ok, error, coerced = validate_setting(patch["key"], patch["value"])
+    if not ok:
+        raise HTTPException(status_code=422, detail=error)
+
+    # Store in pending queue for device to pick up
+    with _device_settings_lock:
+        if "_pending_changes" not in _device_settings_cache:
+            _device_settings_cache["_pending_changes"] = []
+        _device_settings_cache["_pending_changes"].append({"key": patch["key"], "value": coerced})
+        _device_settings_cache[patch["key"]] = coerced
+
+    return {"ok": True, "key": patch["key"], "value": coerced}
+
+
+@app.get("/settings/device/pending")
+async def get_pending_device_settings():
+    """Return and clear pending setting changes for the device to apply."""
+    with _device_settings_lock:
+        pending = _device_settings_cache.pop("_pending_changes", [])
+    return {"changes": pending}
+
+
 @app.get("/settings/catalog")
 async def settings_catalog():
     """Return catalog metadata for editable UI settings."""
@@ -493,27 +595,48 @@ async def update_ui_settings(request: Request):
 
 @app.get("/tasks/today")
 async def get_today_tasks():
-    adapter = VikunjaAdapter()
-    tasks = adapter.get_today_tasks()
-    return {"tasks": tasks, "count": len(tasks)}
+    try:
+        adapter = VikunjaAdapter()
+        tasks = adapter.get_today_tasks()
+        return {"tasks": tasks, "count": len(tasks)}
+    except Exception as exc:
+        logger.error("tasks_today_failed: %s", exc)
+        return JSONResponse(
+            status_code=502,
+            content={"error": "Tasks unavailable", "detail": str(exc)[:100]},
+        )
 
 
 @app.get("/messages")
 async def get_messages_conversations():
-    adapter = BlueBubblesAdapter()
-    return {
-        "conversations": adapter.get_conversations(),
-        "unread_total": adapter.get_unread_count(),
-    }
+    try:
+        adapter = BlueBubblesAdapter()
+        return {
+            "conversations": adapter.get_conversations(),
+            "unread_total": adapter.get_unread_count(),
+        }
+    except Exception as exc:
+        logger.error("messages_conversations_failed: %s", exc)
+        return JSONResponse(
+            status_code=502,
+            content={"error": "Messages unavailable", "detail": str(exc)[:100]},
+        )
 
 
 @app.get("/mail")
 async def get_mail_threads():
-    adapter = GmailAdapter()
-    return {
-        "threads": adapter.get_inbox(limit=10),
-        "unread_total": adapter.get_unread_count(),
-    }
+    try:
+        adapter = GmailAdapter()
+        return {
+            "threads": adapter.get_inbox(limit=10),
+            "unread_total": adapter.get_unread_count(),
+        }
+    except Exception as exc:
+        logger.error("mail_threads_failed: %s", exc)
+        return JSONResponse(
+            status_code=502,
+            content={"error": "Mail unavailable", "detail": str(exc)[:100]},
+        )
 
 
 @app.get("/mail/{thread_id:path}")
@@ -1032,7 +1155,7 @@ async def chat(payload: ChatRequest):
     """Stream model response from the active LLM bridge as SSE."""
     message = payload.message
     if not message:
-        return {"error": "No message provided"}
+        raise HTTPException(status_code=400, detail="No message provided")
 
     agent_mode = payload.agent_mode or "producer"
     system_prompt = get_system_prompt(
@@ -1065,6 +1188,9 @@ async def chat(payload: ChatRequest):
         "agent_mode": agent_mode,
         "ai_model": payload.model or "default",
     }
+
+    # Sync device settings to server cache (for companion app)
+    _update_device_settings_cache(device_settings)
 
     # ── Perception classifier (Haiku pre-call) ──
     loop = asyncio.get_event_loop()
@@ -1139,8 +1265,11 @@ async def chat(payload: ChatRequest):
             },
         )
     except Exception as exc:
-        logger.error("[BITOS] Chat stream failed: %s", exc)
-        return {"error": str(exc)}
+        logger.error("[BITOS] Chat stream failed: %s", exc, exc_info=True)
+        return JSONResponse(
+            status_code=502,
+            content={"error": "Chat failed", "detail": str(exc)[:200]},
+        )
 
 
 if __name__ == "__main__":

@@ -66,16 +66,44 @@ def create_right_panels(panel_openers: dict | None = None, repository=None) -> d
         if action_key == "back":
             return  # handled by CompositeScreen (returns focus to sidebar)
         if action_key == "respond":
-            opener = openers.get("CHAT")
+            # Reply to greeting — open chat in greeting mode
+            opener = openers.get("CHAT_GREETING")
             if opener is not None:
                 opener()
+            else:
+                opener = openers.get("CHAT")
+                if opener is not None:
+                    opener()
             return
         if action_key == "settings":
             opener = openers.get("CHAT_SETTINGS")
             if opener is not None:
                 opener()
             return
-        # new_chat, resume_chat, chat_history → open chat
+        if action_key == "new_chat":
+            opener = openers.get("CHAT_NEW")
+            if opener is not None:
+                opener()
+            else:
+                opener = openers.get("CHAT")
+                if opener is not None:
+                    opener()
+            return
+        if action_key == "resume_chat":
+            opener = openers.get("CHAT_RESUME")
+            if opener is not None:
+                opener()
+            else:
+                opener = openers.get("CHAT")
+                if opener is not None:
+                    opener()
+            return
+        if action_key == "chat_history":
+            opener = openers.get("CHAT_HISTORY")
+            if opener is not None:
+                opener()
+            return
+        # Fallback: open default chat
         opener = openers.get("CHAT")
         if opener is not None:
             opener()

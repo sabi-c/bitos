@@ -205,7 +205,11 @@ class WM8960Pipeline(AudioPipeline):
         from audio.player import AudioPlayer
         from audio.tts import TextToSpeech
 
-        TextToSpeech(AudioPlayer()).speak(text)
+        logger.info("wm8960_speak: text_len=%d starting TTS pipeline", len(text))
+        tts = TextToSpeech(AudioPlayer())
+        logger.info("wm8960_speak: engine=%s volume=%.0f%%", tts.engine, tts.player._volume * 100)
+        ok = tts.speak(text)
+        logger.info("wm8960_speak: result=%s", "ok" if ok else "failed")
 
     def _play_audio(self, path: str, timeout: int) -> None:
         self._speak_proc = subprocess.Popen(

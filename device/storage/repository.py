@@ -479,6 +479,34 @@ class DeviceRepository:
                 "msg_count": int(row[4]),
             }
 
+    def list_sessions(self, limit: int = 20, offset: int = 0) -> list[dict]:
+        """List chat sessions (non-greeting) with message count, newest first."""
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                """
+                SELECT s.id, s.title, s.created_at, s.updated_at,
+                       COUNT(m.id) as msg_count
+                FROM sessions s
+                LEFT JOIN messages m ON m.session_id = s.id
+                WHERE COALESCE(s.session_type, 'chat') = 'chat'
+                GROUP BY s.id
+                HAVING msg_count > 0
+                ORDER BY s.updated_at DESC
+                LIMIT ? OFFSET ?
+                """,
+                (limit, offset),
+            ).fetchall()
+            return [
+                {
+                    "id": int(row[0]),
+                    "title": row[1],
+                    "created_at": row[2],
+                    "updated_at": row[3],
+                    "msg_count": int(row[4]),
+                }
+                for row in rows
+            ]
+
     def get_session_messages(self, session_id: str, limit: int = 10) -> list[dict]:
         """Returns last N messages for a session."""
         with closing(self._connect()) as conn:
