@@ -60,10 +60,6 @@ from integrations.adapters import create_runtime_adapter
 from integrations.queue import OutboundCommandQueue
 from integrations.runtime import OutboundWorkerRuntimeLoop
 from integrations.worker import OutboundCommandWorker
-# NOTE: VoicePipeline is currently unused — ChatPanel drives audio_pipeline directly.
-# Kept as import for future hands-free / fob voice loop.
-from device.audio.voice_pipeline import VoicePipeline  # noqa: F401
-
 logger = logging.getLogger(__name__)
 
 
@@ -189,29 +185,6 @@ def main():
     status_state = StatusState()
     screen_mgr = ScreenManager(notification_queue=notification_queue, status_state=status_state)
     idle_mgr = IdleManager(driver, repository)
-
-    openai_key = os.getenv("OPENAI_API_KEY", "")
-
-    def ai_send_fn(text: str) -> str:
-        # Placeholder — replace with real Anthropic call later
-        import anthropic
-
-        client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
-        msg = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=300,
-            messages=[{"role": "user", "content": text}],
-        )
-        return msg.content[0].text
-
-    # VoicePipeline is instantiated here but not consumed by any screen.
-    # ChatPanel uses audio_pipeline directly. Keeping for future hands-free mode.
-    voice_pipeline = VoicePipeline(
-        openai_key=openai_key,
-        ai_send_fn=ai_send_fn,
-        voice_model=os.getenv("PIPER_VOICE_MODEL", "assets/voices/en_US-ryan-low.onnx"),
-    )
-    screen_mgr._voice_pipeline = voice_pipeline  # stashed but unused today
 
     def _active_screen_name() -> str:
         current = screen_mgr.current
