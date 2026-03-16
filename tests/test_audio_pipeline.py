@@ -25,8 +25,12 @@ class AudioPipelineTests(unittest.TestCase):
         os.environ["BITOS_AUDIO"] = "hw:1"
         self.assertIsInstance(get_audio_pipeline(), WM8960Pipeline)
 
-    def test_factory_falls_back_to_mock_for_unknown_mode(self):
-        os.environ["BITOS_AUDIO"] = "invalid"
+    def test_factory_uses_real_pipeline_for_non_mock_value(self):
+        os.environ["BITOS_AUDIO"] = "default"
+        self.assertIsInstance(get_audio_pipeline(), WM8960Pipeline)
+
+    def test_factory_uses_mock_for_empty_string(self):
+        os.environ["BITOS_AUDIO"] = ""
         self.assertIsInstance(get_audio_pipeline(), MockAudioPipeline)
 
 

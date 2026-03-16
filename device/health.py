@@ -116,15 +116,18 @@ def check_mic() -> dict:
     """Check if ALSA recording device is accessible."""
     import subprocess
 
-    mode = os.environ.get("BITOS_AUDIO", "mock")
-    if mode == "mock":
+    mode = os.environ.get("BITOS_AUDIO", "mock").strip()
+    if not mode or mode == "mock":
         return {"ok": True, "detail": "mock mode", "latency_ms": 0}
 
+    device = mode if mode.startswith("hw:") else "hw:0"
+
     def _do():
-        # Quick 0.1s test recording
+        # Quick test: record 0.1s stereo (WM8960 requires stereo)
         r = subprocess.run(
-            ["arecord", "-D", mode, "-d", "0", "-f", "S16_LE", "/dev/null"],
-            capture_output=True, timeout=3, check=False,
+            ["arecord", "-D", device, "-f", "S16_LE", "-r", "16000",
+             "-c", "2", "-d", "1", "/dev/null"],
+            capture_output=True, timeout=5, check=False,
         )
         if r.returncode != 0:
             raise RuntimeError(r.stderr.decode(errors="replace")[:60])
@@ -133,7 +136,7 @@ def check_mic() -> dict:
     result, ms = _timed(_do)
     if isinstance(result, Exception):
         return {"ok": False, "detail": str(result)[:40], "latency_ms": ms}
-    return {"ok": True, "detail": f"device={mode}", "latency_ms": ms}
+    return {"ok": True, "detail": f"device={device}", "latency_ms": ms}
 
 
 class ServiceHealth:
