@@ -179,27 +179,57 @@ class LockScreen(BaseScreen):
             pass
 
     def _draw_pin_dots(self, surface: pygame.Surface, y: int, color, is_flashing: bool):
-        """Draw confirmed dots + current cycling bracket."""
-        # Build the PIN display string: ● for confirmed, [N] for current
-        parts = []
+        """Draw confirmed dots + current cycling digit with inverted highlight."""
+        spacing = 4  # pixels between parts
+
+        # Build list of (text, is_active) tuples
+        parts: list[tuple[str, bool]] = []
         for _d in self._entered:
-            parts.append("\u25cf")  # filled circle
+            parts.append(("\u25cf", False))  # filled circle — confirmed
 
         if len(self._entered) < 4:
             if self._cycling:
-                parts.append(f"[{self._current_digit}]")
+                parts.append((str(self._current_digit), True))  # active digit
             else:
-                parts.append("[ ]")
+                parts.append(("_", True))  # waiting for first press
 
-        # Pad remaining slots with underscores
+        # Pad remaining slots
         remaining = 4 - len(self._entered) - (1 if len(self._entered) < 4 else 0)
         for _ in range(remaining):
-            parts.append("_")
+            parts.append(("_", False))
 
-        display = "  ".join(parts)
-        pin_surf = self._font_body.render(display, False, color)
-        pin_x = (PHYSICAL_W - pin_surf.get_width()) // 2
-        surface.blit(pin_surf, (pin_x, y))
+        # Pre-render to measure total width
+        rendered: list[tuple[pygame.Surface, bool, int, int]] = []
+        total_w = 0
+        for text, active in parts:
+            if active:
+                # Render with title font (larger) for emphasis
+                surf = self._font_title.render(text, False, BLACK if not is_flashing else WHITE)
+            else:
+                surf = self._font_body.render(text, False, color)
+            rendered.append((surf, active, surf.get_width(), surf.get_height()))
+            total_w += surf.get_width() + spacing
+        total_w -= spacing  # remove trailing space
+
+        # Draw centered
+        dx = (PHYSICAL_W - total_w) // 2
+        for surf, active, w, h in rendered:
+            if active:
+                # Inverted background highlight + underline
+                pad_x, pad_y = 3, 2
+                bg_rect = pygame.Rect(dx - pad_x, y - pad_y, w + pad_x * 2, h + pad_y * 2)
+                bg_color = WHITE if not is_flashing else color
+                pygame.draw.rect(surface, bg_color, bg_rect)
+                surface.blit(surf, (dx, y))
+                # Underline beneath the box
+                pygame.draw.line(
+                    surface, bg_color,
+                    (bg_rect.left, bg_rect.bottom + 1),
+                    (bg_rect.right - 1, bg_rect.bottom + 1),
+                )
+            else:
+                surface.blit(surf, (dx, y))
+            dx += w + spacing
 
     def _verify_pin(self):
         entered_str = "".join(str(d) for d in self._entered)
