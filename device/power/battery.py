@@ -43,9 +43,14 @@ class BatteryMonitor:
         self._running = False
 
     def get_status(self) -> dict:
-        """Return a compatibility status payload for current callers."""
+        """Return a compatibility status payload for current callers.
+
+        When the battery level is unknown (PiSugar unavailable), ``pct`` is
+        ``None`` instead of ``0`` so callers can distinguish "no battery" from
+        "empty battery".
+        """
         with self._lock:
-            pct = 0 if self.level is None else int(self.level)
+            pct = None if self.level is None else int(self.level)
             status = {
                 "pct": pct,
                 "percentage": pct,

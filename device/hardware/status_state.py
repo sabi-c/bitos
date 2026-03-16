@@ -29,6 +29,8 @@ class StatusState:
         with self._lock:
             if self.battery_text:
                 return self.battery_text
+            if self.battery_pct is None:
+                return "--%"
             if self.battery_pct < 10:
                 return f"⚡{self.battery_pct}%"
             arrow = "↑" if self.charging else ""

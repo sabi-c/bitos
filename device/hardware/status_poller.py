@@ -35,7 +35,12 @@ class StatusPoller:
             integrations = self._api.get_integrations_status() if hasattr(self._api, "get_integrations_status") else {}
             msgs_unread = int((integrations.get("bluebubbles") or {}).get("unread", 0))
             gmail_unread = int((integrations.get("gmail") or {}).get("unread", 0))
-            battery_text = self._battery.get_status_text() if hasattr(self._battery, "get_status_text") else f"{int(batt['pct'])}%"
+            if hasattr(self._battery, "get_status_text"):
+                battery_text = self._battery.get_status_text()
+            elif batt["pct"] is not None:
+                battery_text = f"{int(batt['pct'])}%"
+            else:
+                battery_text = "--%"
             self._state.update(
                 battery_pct=batt["pct"],
                 battery_text=battery_text,

@@ -342,10 +342,11 @@ def main():
         current = screen_mgr.current
         active_screen = current.__class__.__name__.replace("Panel", "").replace("Screen", "").lower() if current else "none"
         battery = battery_monitor.get_status()
-        repository.set_setting("battery_pct", int(battery["pct"]))
+        batt_pct = int(battery["pct"]) if battery["pct"] is not None else None
+        repository.set_setting("battery_pct", batt_pct if batt_pct is not None else -1)
         repository.set_setting("charging", bool(battery["charging"]))
         return {
-            "battery_pct": int(battery["pct"]),
+            "battery_pct": batt_pct,
             "charging": bool(battery["charging"]),
             "wifi_connected": bool(wifi_status_char._status.get("connected", False)),
             "wifi_ssid": str(wifi_status_char._status.get("ssid", "")),
@@ -540,7 +541,8 @@ def main():
         screen_mgr.push(CapturesPanel(repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
 
     def open_messages():
-        battery_pct = int(battery_monitor.get_status().get("pct", 84))
+        raw_pct = battery_monitor.get_status().get("pct")
+        battery_pct = int(raw_pct) if raw_pct is not None else 84
         screen_mgr.push(
             MessagesPanel(
                 client=client,
@@ -553,7 +555,8 @@ def main():
         )
 
     def open_mail():
-        battery_pct = int(battery_monitor.get_status().get("pct", 84))
+        raw_pct = battery_monitor.get_status().get("pct")
+        battery_pct = int(raw_pct) if raw_pct is not None else 84
         screen_mgr.push(
             MailPanel(
                 client=client,

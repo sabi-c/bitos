@@ -110,7 +110,8 @@ class BackendClient:
             logging.debug("chat_context_load_failed error=%s", exc)
 
         try:
-            battery_pct = int(BatteryMonitor().get_status().get("pct"))
+            raw_pct = BatteryMonitor().get_status().get("pct")
+            battery_pct = int(raw_pct) if raw_pct is not None else None
         except Exception as exc:
             logging.debug("battery_read_failed error=%s", exc)
 
