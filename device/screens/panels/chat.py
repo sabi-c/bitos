@@ -1,5 +1,6 @@
 """BITOS Chat Panel — gesture-driven voice-first chat with mode-based input."""
 import json
+import logging
 from collections import deque
 from enum import Enum, auto
 import threading
@@ -546,8 +547,8 @@ class ChatPanel(BaseScreen):
                     if self._led:
                         self._led.speaking()
                     self._audio_pipeline.speak(response_text)
-                except Exception:
-                    pass
+                except Exception as tts_exc:
+                    logging.getLogger(__name__).error("tts_failed: %s", tts_exc)
 
             with self._messages_lock:
                 self._status = self.STATUS_CONNECTED
