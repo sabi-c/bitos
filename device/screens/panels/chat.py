@@ -139,9 +139,9 @@ class ChatPanel(BaseScreen):
                 except Exception:
                     pass
             self._resumed_until = 0.0
-            latest = self._repository.get_latest_session()
+            latest = self._repository.get_latest_chat_session()
             if latest:
-                age_seconds = time.time() - float(latest.get("created_at", 0.0))
+                age_seconds = time.time() - float(latest.get("updated_at", latest.get("created_at", 0.0)))
                 if age_seconds <= 24 * 3600:
                     self._session_id = int(latest["id"])
                     restored = self._repository.get_session_messages(str(self._session_id), limit=10)
