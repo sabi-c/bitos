@@ -28,14 +28,15 @@
 │ two other tasks.             │
 │                              │
 │             1/3              │  ← centered, hint font, DIM1
-├──────────────────────────────┤
-│ ○ RECORD  ◎ ACTIONS ⊙⊙⊙NEXT│  action bar
+│ ○rec  ◉talk  ◎act  ⊙⊙⊙next │  hint line (1 line, compact, always visible)
 └──────────────────────────────┘
 ```
 
 - **Context header:** User's last message, truncated to 1 line with "...". Color: DIM2. Stays visible on all pages.
 - **Response area:** Body text, word-wrapped. Typewriter animation on first view per page.
 - **Page indicator:** Centered, hint font (8px), DIM1. Only visible when 2+ pages. Reads "1/3", "2/3", etc. No separator lines — it's part of the page, like a book page number.
+- **Hint line:** Single line at the very bottom. Compact gesture icons + labels in hint font, DIM1. Always visible. Takes ~12px.
+- **Actions overlay:** When user double-taps, the template menu (MORNING BRIEF, etc.) overlays on top of the page content. Exiting actions returns to full page view. The overlay does NOT resize the page — text stays in place underneath.
 - **Non-paginated mode:** When response fits on one page, no indicator shown. Behaves exactly as current.
 
 ## 2. Page Splitting
@@ -80,19 +81,19 @@ After the full response text arrives and streaming completes:
 
 No gesture conflicts. Triple-tap was previously unused in IDLE mode. In ACTIONS mode it already means "prev item" — that's fine since pagination is only active in IDLE.
 
-## 6. Action Bar Hints
+## 6. Hint Line + Actions Overlay
 
-**IDLE mode (paginated, 2+ pages):**
-```
-○ RECORD   ◉ TALK   ◎ ACTIONS   ⊙⊙⊙ NEXT
-```
+**Hint line** (always visible, 1 line, ~12px at very bottom):
+- Paginated (2+ pages): `○rec  ◉talk  ◎act  ⊙⊙⊙next`
+- Single page / no response: `○rec  ◉talk  ◎act`
+- Hint font (8px), DIM1 color. Icons same as current but more compact.
+- Triple-tap icon: three small interlocking circle outlines. Drawn with 3 overlapping `pygame.draw.circle(surface, DIM2, (x+offset, y), 3, 1)` calls, offset by ~4px each.
 
-**IDLE mode (single page or no response):**
-```
-○ RECORD   ◉ TALK   ◎ ACTIONS
-```
-
-Triple-tap icon: three small interlocking circle outlines. Drawn with 3 overlapping `pygame.draw.circle(surface, DIM2, (x+offset, y), 3, 1)` calls, offset by ~4px each.
+**Actions overlay** (on double-tap):
+- Template menu renders as an opaque overlay on top of page content (solid BLACK background).
+- Occupies the bottom ~60-80px of the screen (3 visible rows + its own hint line).
+- Page text stays rendered underneath — no reflow or resize.
+- Exiting actions (LONG_PRESS or selecting BACK) removes overlay, page is fully visible again.
 
 ## 7. Agent Prompt Nudge
 
@@ -121,9 +122,32 @@ Page state is reset when:
 - New user message is sent (clears pages, starts streaming)
 - New response arrives (pages recomputed)
 
-## 9. Files to Modify
+## 9. Font Size Increase (prerequisite)
 
-- **Modify:** `device/screens/panels/chat.py` — page splitting, page state, triple-tap handler, render with pagination, context header, page indicator
+Must be done before pagination so page character budgets are accurate.
+
+Current sizes → proposed (needs device testing):
+```python
+FONT_SIZES = {
+    "time_large": 24,    # keep
+    "timer": 20,         # keep
+    "title": 16 → 18,    # slightly larger
+    "body": 12 → 14,     # main readability improvement
+    "small": 10 → 11,    # slight bump
+    "hint": 8 → 9,       # slight bump
+}
+```
+
+Add bold support: `font.set_bold(True)` for body text in chat responses and menu labels. This is a display-wide change in `display/tokens.py` and `display/theme.py`.
+
+After font change, recalculate lines_per_page for pagination.
+
+## 10. Files to Modify
+
+- **Modify:** `device/display/tokens.py` — font size increase
+- **Modify:** `device/display/theme.py` — bold font support
+- **Modify:** `device/screens/panels/chat.py` — page splitting, page state, triple-tap handler, render with pagination, context header, page indicator, actions as overlay, hint line (compact 1-liner)
 - **Modify:** `device/display/typewriter.py` — no changes needed (reuse existing)
 - **Modify:** `device/client/api.py` — add response format nudge to system context
 - **Test:** `tests/test_chat_panel.py` — page splitting tests, triple-tap navigation, typewriter per page
+- **Test:** `tests/test_typewriter.py` — verify existing tests still pass with new font sizes
