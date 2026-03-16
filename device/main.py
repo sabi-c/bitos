@@ -371,8 +371,6 @@ def main():
 
     restored_state = _restore_state()
 
-    right_panels = create_right_panels()
-
     def on_home():
         panel_openers = {
             "HOME": lambda: None,  # already showing home
@@ -385,6 +383,7 @@ def main():
             "MUSIC": lambda: None,  # not yet implemented
             "HISTORY": open_captures,
         }
+        right_panels = create_right_panels(panel_openers=panel_openers)
         home = CompositeScreen(
             panel_openers=panel_openers,
             status_state=status_state,

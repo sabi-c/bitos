@@ -15,9 +15,23 @@ All zones respect SAFE_INSET=16 to avoid corner-clipped areas.
 │     ACTION BAR (20px)          │
 │          (16px inset)           │
 └─────────────────────────────────┘ 280
+
+Navigation state machine:
+  SIDEBAR mode (default):
+    SHORT  → next sidebar item
+    TRIPLE → prev sidebar item
+    DOUBLE → enter SUBMENU mode for selected item
+    LONG   → no-op
+
+  SUBMENU mode:
+    SHORT  → next submenu item (routed to preview panel)
+    DOUBLE → execute submenu action (routed to preview panel)
+    LONG   → back to SIDEBAR mode
 """
 
 from __future__ import annotations
+
+from enum import Enum
 
 import pygame
 
@@ -33,6 +47,11 @@ HINT_BAR_H = 20  # Upgraded action bar height (was 12)
 CONTENT_TOP = SAFE_INSET + STATUS_BAR_H  # 36
 CONTENT_BOTTOM = PHYSICAL_H - SAFE_INSET - HINT_BAR_H  # 244
 RIGHT_PANEL_H = CONTENT_BOTTOM - CONTENT_TOP  # 208
+
+
+class _Focus(Enum):
+    SIDEBAR = "sidebar"
+    SUBMENU = "submenu"
 
 
 class CompositeScreen(BaseScreen):
@@ -55,9 +74,15 @@ class CompositeScreen(BaseScreen):
         self._sidebar = Sidebar()
         self._status_bar = StatusBar()
         self._action_bar = ActionBar()
+        self._focus = _Focus.SIDEBAR
 
         # Subsurface for right panel rendering (156x208)
         self._right_surface = pygame.Surface((CONTENT_W, RIGHT_PANEL_H))
+
+    @property
+    def focus(self) -> str:
+        """Current focus mode as string: 'sidebar' or 'submenu'."""
+        return self._focus.value
 
     # ── Lifecycle ────────────────────────────────────────────────
 
@@ -95,18 +120,54 @@ class CompositeScreen(BaseScreen):
 
     # ── Input ────────────────────────────────────────────────────
 
+    def _active_panel(self):
+        """Return the preview panel for the currently selected sidebar item."""
+        label = self._sidebar.items[self._sidebar.selected_index]
+        return self._right_panels.get(label)
+
     def handle_action(self, action: str) -> None:
+        if self._focus == _Focus.SIDEBAR:
+            self._handle_sidebar_action(action)
+        else:
+            self._handle_submenu_action(action)
+
+    def _handle_sidebar_action(self, action: str) -> None:
         n = len(self._sidebar.items)
         if action == "SHORT_PRESS":
             self._sidebar.selected_index = (self._sidebar.selected_index + 1) % n
         elif action == "TRIPLE_PRESS":
             self._sidebar.selected_index = (self._sidebar.selected_index - 1) % n
         elif action == "DOUBLE_PRESS":
-            label = self._sidebar.items[self._sidebar.selected_index]
-            opener = self._panel_openers.get(label)
-            if opener is not None:
-                opener()
+            # Enter submenu mode if panel exists
+            panel = self._active_panel()
+            if panel is not None and hasattr(panel, "handle_action"):
+                self._focus = _Focus.SUBMENU
+                # Reset submenu selection when entering
+                if hasattr(panel, "selected_index"):
+                    panel.selected_index = 0
+            else:
+                # Fallback: call opener directly (legacy behavior)
+                label = self._sidebar.items[self._sidebar.selected_index]
+                opener = self._panel_openers.get(label)
+                if opener is not None:
+                    opener()
         # LONG_PRESS is no-op at root level
+
+    def _handle_submenu_action(self, action: str) -> None:
+        if action == "LONG_PRESS":
+            # Back to sidebar
+            self._focus = _Focus.SIDEBAR
+            return
+
+        panel = self._active_panel()
+        if panel is not None and hasattr(panel, "handle_action"):
+            # Check if the action is "back" before routing
+            if action == "DOUBLE_PRESS" and hasattr(panel, "items") and hasattr(panel, "selected_index"):
+                item = panel.items[panel.selected_index]
+                if item.get("action") == "back":
+                    self._focus = _Focus.SIDEBAR
+                    return
+            panel.handle_action(action)
 
     def handle_input(self, event: pygame.event.Event) -> None:
         """Keyboard support for desktop testing."""
@@ -118,6 +179,8 @@ class CompositeScreen(BaseScreen):
             self.handle_action("TRIPLE_PRESS")
         elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
             self.handle_action("DOUBLE_PRESS")
+        elif event.key == pygame.K_ESCAPE:
+            self.handle_action("LONG_PRESS")
 
     # ── Hints / breadcrumb ───────────────────────────────────────
 

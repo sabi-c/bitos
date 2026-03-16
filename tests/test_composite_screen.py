@@ -1,4 +1,4 @@
-"""Tests for CompositeScreen — sidebar navigation + layout composition."""
+"""Tests for CompositeScreen — sidebar navigation + submenu system."""
 
 import os
 import sys
@@ -18,6 +18,18 @@ sys.path.insert(0, str(_repo))
 
 from device.ui.composite_screen import CompositeScreen
 from device.ui.components.sidebar import ITEMS
+from device.ui.panels.base import PreviewPanel
+
+
+def _make_preview_panel(actions_log=None):
+    """Create a simple PreviewPanel for testing."""
+    items = [
+        {"label": "ITEM A", "description": "First", "action": "action_a"},
+        {"label": "ITEM B", "description": "Second", "action": "action_b"},
+        {"label": "BACK", "description": "Return", "action": "back"},
+    ]
+    log = actions_log if actions_log is not None else []
+    return PreviewPanel(items=items, on_action=lambda key: log.append(key))
 
 
 class CompositeScreenTests(unittest.TestCase):
@@ -51,7 +63,6 @@ class CompositeScreenTests(unittest.TestCase):
         cs = CompositeScreen()
         cs.render(self.surface)
         # Selected item (index 0) at sidebar left, just below status bar
-        # y = 18 (status bar) + a few pixels into first item
         color = self.surface.get_at((10, 22))
         self.assertEqual((color.r, color.g, color.b), (255, 255, 255))
 
@@ -59,9 +70,6 @@ class CompositeScreenTests(unittest.TestCase):
         """Hint bar occupies bottom 12px."""
         cs = CompositeScreen()
         cs.render(self.surface)
-        # Hint bar has a separator line at y=268, pixel should not be pure black
-        # (the separator or text exists there)
-        # Just verify render completes — pixel-level check is fragile
         self.assertTrue(True)
 
     def test_render_calls_right_panel(self):
@@ -102,37 +110,116 @@ class CompositeScreenTests(unittest.TestCase):
         cs.handle_action("TRIPLE_PRESS")
         self.assertEqual(cs._sidebar.selected_index, len(ITEMS) - 1)
 
-    # ── DOUBLE_PRESS calls opener (select) ──────────────────────
+    # ── DOUBLE_PRESS enters submenu (new behavior) ───────────────
 
-    def test_double_press_calls_opener(self):
+    def test_double_press_enters_submenu_mode(self):
+        """DOUBLE on sidebar with preview panel enters submenu mode."""
+        panel = _make_preview_panel()
+        cs = CompositeScreen(right_panels={"HOME": panel})
+        self.assertEqual(cs.focus, "sidebar")
+        cs.handle_action("DOUBLE_PRESS")
+        self.assertEqual(cs.focus, "submenu")
+
+    def test_double_press_no_panel_calls_opener(self):
+        """DOUBLE on sidebar with no preview panel falls back to opener."""
         called = {}
         cs = CompositeScreen(panel_openers={"HOME": lambda: called.update(home=True)})
         cs.handle_action("DOUBLE_PRESS")
         self.assertTrue(called.get("home"))
 
-    def test_double_press_no_opener_is_noop(self):
-        cs = CompositeScreen()
-        cs.handle_action("DOUBLE_PRESS")  # should not raise
-
-    def test_double_press_correct_item(self):
-        """DOUBLE_PRESS opens the currently selected sidebar item."""
-        calls = []
-        openers = {
-            "HOME": lambda: calls.append("HOME"),
-            "CHAT": lambda: calls.append("CHAT"),
-        }
-        cs = CompositeScreen(panel_openers=openers)
-        cs.handle_action("SHORT_PRESS")  # move to CHAT
+    def test_double_press_resets_submenu_selection(self):
+        """Entering submenu resets selected_index to 0."""
+        panel = _make_preview_panel()
+        panel.selected_index = 2
+        cs = CompositeScreen(right_panels={"HOME": panel})
         cs.handle_action("DOUBLE_PRESS")
-        self.assertEqual(calls, ["CHAT"])
+        self.assertEqual(panel.selected_index, 0)
 
-    # ── LONG_PRESS is no-op (back at root) ───────────────────────
+    # ── Submenu: SHORT scrolls items ──────────────────────────────
 
-    def test_long_press_is_noop(self):
+    def test_short_in_submenu_scrolls_items(self):
+        """SHORT in submenu mode advances submenu selection."""
+        panel = _make_preview_panel()
+        cs = CompositeScreen(right_panels={"HOME": panel})
+        cs.handle_action("DOUBLE_PRESS")  # enter submenu
+        self.assertEqual(panel.selected_index, 0)
+        cs.handle_action("SHORT_PRESS")
+        self.assertEqual(panel.selected_index, 1)
+        cs.handle_action("SHORT_PRESS")
+        self.assertEqual(panel.selected_index, 2)
+
+    def test_short_in_submenu_wraps(self):
+        """SHORT wraps around submenu items."""
+        panel = _make_preview_panel()
+        cs = CompositeScreen(right_panels={"HOME": panel})
+        cs.handle_action("DOUBLE_PRESS")  # enter submenu
+        panel.selected_index = 2  # last item
+        cs.handle_action("SHORT_PRESS")
+        self.assertEqual(panel.selected_index, 0)
+
+    def test_short_in_submenu_does_not_move_sidebar(self):
+        """SHORT in submenu should NOT change sidebar selection."""
+        panel = _make_preview_panel()
+        cs = CompositeScreen(right_panels={"HOME": panel})
+        cs.handle_action("DOUBLE_PRESS")
+        sidebar_idx = cs._sidebar.selected_index
+        cs.handle_action("SHORT_PRESS")
+        self.assertEqual(cs._sidebar.selected_index, sidebar_idx)
+
+    # ── Submenu: DOUBLE triggers action ──────────────────────────
+
+    def test_double_in_submenu_triggers_action(self):
+        """DOUBLE in submenu calls on_action with the action key."""
+        actions = []
+        panel = _make_preview_panel(actions_log=actions)
+        cs = CompositeScreen(right_panels={"HOME": panel})
+        cs.handle_action("DOUBLE_PRESS")  # enter submenu
+        cs.handle_action("DOUBLE_PRESS")  # execute first item
+        self.assertEqual(actions, ["action_a"])
+
+    def test_double_in_submenu_second_item(self):
+        """Navigate to second item and execute."""
+        actions = []
+        panel = _make_preview_panel(actions_log=actions)
+        cs = CompositeScreen(right_panels={"HOME": panel})
+        cs.handle_action("DOUBLE_PRESS")  # enter submenu
+        cs.handle_action("SHORT_PRESS")   # move to item B
+        cs.handle_action("DOUBLE_PRESS")  # execute
+        self.assertEqual(actions, ["action_b"])
+
+    # ── Submenu: BACK item returns to sidebar ─────────────────────
+
+    def test_back_action_returns_to_sidebar(self):
+        """Selecting BACK item returns focus to sidebar."""
+        panel = _make_preview_panel()
+        cs = CompositeScreen(right_panels={"HOME": panel})
+        cs.handle_action("DOUBLE_PRESS")  # enter submenu
+        self.assertEqual(cs.focus, "submenu")
+        # Navigate to BACK item (index 2)
+        cs.handle_action("SHORT_PRESS")  # index 1
+        cs.handle_action("SHORT_PRESS")  # index 2 (BACK)
+        cs.handle_action("DOUBLE_PRESS")  # execute BACK
+        self.assertEqual(cs.focus, "sidebar")
+
+    # ── Submenu: LONG returns to sidebar ──────────────────────────
+
+    def test_long_in_submenu_returns_to_sidebar(self):
+        """LONG press in submenu mode returns to sidebar mode."""
+        panel = _make_preview_panel()
+        cs = CompositeScreen(right_panels={"HOME": panel})
+        cs.handle_action("DOUBLE_PRESS")  # enter submenu
+        self.assertEqual(cs.focus, "submenu")
+        cs.handle_action("LONG_PRESS")
+        self.assertEqual(cs.focus, "sidebar")
+
+    # ── LONG_PRESS is no-op in sidebar ───────────────────────────
+
+    def test_long_press_sidebar_is_noop(self):
         cs = CompositeScreen()
         idx = cs._sidebar.selected_index
         cs.handle_action("LONG_PRESS")
         self.assertEqual(cs._sidebar.selected_index, idx)
+        self.assertEqual(cs.focus, "sidebar")
 
     # ── Keyboard input ───────────────────────────────────────────
 
@@ -149,12 +236,22 @@ class CompositeScreenTests(unittest.TestCase):
         cs.handle_input(event)
         self.assertEqual(cs._sidebar.selected_index, 1)
 
-    def test_keyboard_enter_maps_to_long_press(self):
-        calls = []
-        cs = CompositeScreen(panel_openers={"HOME": lambda: calls.append("HOME")})
+    def test_keyboard_enter_maps_to_double_press(self):
+        """Enter key now enters submenu (if panel exists) instead of calling opener."""
+        panel = _make_preview_panel()
+        cs = CompositeScreen(right_panels={"HOME": panel})
         event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)
         cs.handle_input(event)
-        self.assertEqual(calls, ["HOME"])
+        self.assertEqual(cs.focus, "submenu")
+
+    def test_keyboard_escape_maps_to_long_press(self):
+        """Escape key returns from submenu to sidebar."""
+        panel = _make_preview_panel()
+        cs = CompositeScreen(right_panels={"HOME": panel})
+        cs.handle_action("DOUBLE_PRESS")  # enter submenu
+        event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE)
+        cs.handle_input(event)
+        self.assertEqual(cs.focus, "sidebar")
 
     def test_keyboard_j_moves_down(self):
         cs = CompositeScreen()
