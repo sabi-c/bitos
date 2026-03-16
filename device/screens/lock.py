@@ -6,7 +6,7 @@ import pygame
 from screens.base import BaseScreen
 from display.tokens import BLACK, WHITE, DIM3, HAIRLINE, PHYSICAL_W, PHYSICAL_H, STATUS_BAR_H
 from display.theme import merge_runtime_ui_settings, load_ui_font
-from hardware.battery import BatteryMonitor
+from power.battery import BatteryMonitor
 
 _RED = (255, 0, 0)
 _DEFAULT_PIN = "1234"
