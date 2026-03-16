@@ -7,6 +7,7 @@ import time
 
 import pygame
 
+from display.text_utils import wrap_text
 from display.theme import load_ui_font, merge_runtime_ui_settings
 from display.tokens import BLACK, DIM2, DIM3, DIM4, HAIRLINE, PHYSICAL_H, PHYSICAL_W, ROW_H_MIN, STATUS_BAR_H, WHITE
 from screens.base import BaseScreen
@@ -278,7 +279,7 @@ class MailPanel(BaseScreen):
         x, y, w, h = 6, STATUS_BAR_H + 16, PHYSICAL_W - 12, 80
         pygame.draw.rect(surface, WHITE, pygame.Rect(x, y, w, h), width=2)
         confirm_line_step = self._font_small.get_height() + 4
-        lines = self._wrap_text(self._draft_text, w - 10)[:5]
+        lines = wrap_text(self._draft_text, w - 10, self._font_small)[:5]
         yy = y + 5
         for line in lines:
             s = self._font_small.render(line, False, WHITE)
@@ -290,19 +291,3 @@ class MailPanel(BaseScreen):
             line = self._font_small.render(row, False, WHITE)
             surface.blit(line, ((PHYSICAL_W - line.get_width()) // 2, hy))
             hy += confirm_line_step
-
-    def _wrap_text(self, text: str, max_width: int) -> list[str]:
-        if not text:
-            return [""]
-        out: list[str] = []
-        cur = ""
-        for char in text:
-            test = cur + char
-            if self._font_small.size(test)[0] <= max_width:
-                cur = test
-            else:
-                out.append(cur)
-                cur = char
-        if cur:
-            out.append(cur)
-        return out

@@ -6,6 +6,7 @@ import time
 
 import pygame
 
+from display.text_utils import wrap_text
 from display.theme import load_ui_font, merge_runtime_ui_settings
 from display.tokens import BLACK, DIM2, DIM3, DIM4, HAIRLINE, PAD_WIDGET, PHYSICAL_H, PHYSICAL_W, ROW_H_MIN, STATUS_BAR_H, WHITE
 from screens.base import BaseScreen
@@ -294,7 +295,7 @@ class MessagesPanel(BaseScreen):
     def render_confirm(self, surface: pygame.Surface):
         x, y, w, h = PAD_WIDGET, STATUS_BAR_H + CONFIRM_BOX_TOP_PAD, PHYSICAL_W - (PAD_WIDGET * 2), CONFIRM_BOX_H
         pygame.draw.rect(surface, WHITE, pygame.Rect(x, y, w, h), width=CONFIRM_BOX_BORDER)
-        lines = self._wrap_text(self._draft_text or "", w - (PAD_WIDGET * 2))
+        lines = wrap_text(self._draft_text or "", w - (PAD_WIDGET * 2), self._font_small)
         if len(lines) > CONFIRM_MAX_LINES:
             lines = lines[:CONFIRM_MAX_LINES]
             lines[-1] = (lines[-1][: max(0, len(lines[-1]) - 3)] + "...") if lines[-1] else "..."
@@ -303,19 +304,3 @@ class MessagesPanel(BaseScreen):
             s = self._font_small.render(line, False, WHITE)
             surface.blit(s, (x + PAD_WIDGET, yy))
             yy += TEXT_LINE_STEP
-
-    def _wrap_text(self, text: str, max_width: int) -> list[str]:
-        if not text:
-            return [""]
-        out: list[str] = []
-        cur = ""
-        for char in text:
-            test = cur + char
-            if self._font_small.size(test)[0] <= max_width:
-                cur = test
-            else:
-                out.append(cur)
-                cur = char
-        if cur:
-            out.append(cur)
-        return out
