@@ -205,9 +205,9 @@ class MessagesPanel(BaseScreen):
             self._render_confirm(surface)
 
     def _render_status_bar(self, surface: pygame.Surface, title: str):
-        pygame.draw.rect(surface, WHITE, pygame.Rect(0, 0, PHYSICAL_W, STATUS_BAR_H))
-        label = self._font_small.render(f"\u25cf {title}  {self._battery_pct}%", False, BLACK)
-        surface.blit(label, (PAD_WIDGET, (STATUS_BAR_H - label.get_height()) // 2))
+        from display.panel_status_bar import render_panel_status_bar
+        render_panel_status_bar(surface, f"\u25cf {title}", self._font_small,
+                                right_text=f"{self._battery_pct}%")
 
     def _render_list(self, surface: pygame.Surface):
         self._render_status_bar(surface, "MESSAGES")

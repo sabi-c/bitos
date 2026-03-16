@@ -189,8 +189,10 @@ class MailPanel(BaseScreen):
             self._render_confirm(surface)
 
     def _render_status_bar(self, surface: pygame.Surface, title: str):
-        label = self._font_small.render(f"\u25cf {title}  {self._battery_pct}%", False, WHITE)
-        surface.blit(label, (6, (STATUS_BAR_H - label.get_height()) // 2))
+        from display.panel_status_bar import render_panel_status_bar
+        render_panel_status_bar(surface, f"\u25cf {title}", self._font_small,
+                                right_text=f"{self._battery_pct}%",
+                                bg_color=BLACK, text_color=WHITE)
 
     def _render_list(self, surface: pygame.Surface):
         self._render_status_bar(surface, "MAIL")
