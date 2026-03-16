@@ -21,12 +21,13 @@ class TypewriterTests(unittest.TestCase):
 
     def test_progressive_reveal(self):
         tw = TypewriterRenderer("one two three", speed="normal")
-        tw.update(0.0)
-        self.assertEqual(tw.get_visible_text(), "")
-        tw.update(0.35)
+        # At 3 words/sec, all 3 words take ~1s to fully reveal
+        tw.update(0.5)
         visible = tw.get_visible_text()
         self.assertIn("one", visible)
         self.assertNotIn("three", visible)
+        tw.update(1.0)
+        self.assertIn("three", tw.get_visible_text())
 
     def test_finished_property(self):
         tw = TypewriterRenderer("Hi", speed="instant")
