@@ -46,25 +46,25 @@ FONT_NAME = "PressStart2P"
 FONT_PATH = FONT_REGISTRY[DEFAULT_FONT_FAMILY]
 
 FONT_SIZES = {
-    "time_large": 24,
-    "timer": 20,
-    "title": 18,
-    "body": 14,
-    "small": 11,
-    "hint": 9,
+    "time_large": 28,
+    "timer": 24,
+    "title": 22,
+    "body": 17,
+    "small": 13,
+    "hint": 11,
 }
 
 # Font size named constants (migrated from ui/font_sizes.py)
-FONT_SIZE_TIME_LARGE = 24
-FONT_SIZE_TIMER = 20
-FONT_SIZE_TITLE = 16
-FONT_SIZE_BODY = 12
-FONT_SIZE_SIDEBAR_ITEM = 12
-FONT_SIZE_CAPTION = 10
-FONT_SIZE_SMALL = 10
-FONT_SIZE_HINT = 8
-FONT_SIZE_STATUS_BAR = 10
-FONT_SIZE_PANEL_HEADER = 12
+FONT_SIZE_TIME_LARGE = 28
+FONT_SIZE_TIMER = 24
+FONT_SIZE_TITLE = 22
+FONT_SIZE_BODY = 17
+FONT_SIZE_SIDEBAR_ITEM = 14
+FONT_SIZE_CAPTION = 13
+FONT_SIZE_SMALL = 13
+FONT_SIZE_HINT = 11
+FONT_SIZE_STATUS_BAR = 13
+FONT_SIZE_PANEL_HEADER = 14
 
 # ── Borders & Padding ─────────────────────────────────────────
 BORDER_OUTER = 2   # px, screen edge
