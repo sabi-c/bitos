@@ -1,7 +1,7 @@
 """CompositeScreen — full 240x280 layout with sidebar navigation.
 
 Extends BaseScreen so the old ScreenManager can push/pop it.
-Composes: StatusBar (20px) | Sidebar (84px left) + RightPanel (156x208) | HintBar (20px).
+Composes: StatusBar (20px) | Sidebar (84px left) + RightPanel (156x208) | ActionBar (20px).
 All zones respect SAFE_INSET=16 to avoid corner-clipped areas.
 
 ┌─────────────────────────────────┐ 0
@@ -12,7 +12,7 @@ All zones respect SAFE_INSET=16 to avoid corner-clipped areas.
 │  84px    │    156x208px        │
 │          │  [panel.render()]   │
 ├──────────┴──────────────────────┤ 244
-│      HINT BAR (20px)           │
+│     ACTION BAR (20px)          │
 │          (16px inset)           │
 └─────────────────────────────────┘ 280
 """
@@ -24,7 +24,7 @@ import pygame
 from device.display.tokens import PHYSICAL_W, PHYSICAL_H, SIDEBAR_W, CONTENT_W, STATUS_BAR_H, SAFE_INSET
 from device.ui.components.sidebar import Sidebar, ITEMS
 from device.ui.components.status_bar import StatusBar
-from device.ui.components.hint_bar import HintBar
+from device.ui.components.action_bar import ActionBar
 from device.screens.base import BaseScreen
 
 BLACK = (0, 0, 0)
@@ -54,7 +54,7 @@ class CompositeScreen(BaseScreen):
 
         self._sidebar = Sidebar()
         self._status_bar = StatusBar()
-        self._hint_bar = HintBar()
+        self._action_bar = ActionBar()
 
         # Subsurface for right panel rendering (156x208)
         self._right_surface = pygame.Surface((CONTENT_W, RIGHT_PANEL_H))
@@ -86,8 +86,8 @@ class CompositeScreen(BaseScreen):
             panel.render(self._right_surface)
             surface.blit(self._right_surface, (SIDEBAR_W, CONTENT_TOP))
 
-        # Hint bar at bottom (full width, 20px)
-        self._hint_bar.render(surface, y=CONTENT_BOTTOM, width=PHYSICAL_W)
+        # Action bar at bottom (full width, 20px)
+        self._action_bar.render(surface, y=CONTENT_BOTTOM, width=PHYSICAL_W)
 
     def draw(self, surface: pygame.Surface) -> None:
         """Alias for ScreenManager compatibility (calls render)."""
@@ -122,7 +122,9 @@ class CompositeScreen(BaseScreen):
     # ── Hints / breadcrumb ───────────────────────────────────────
 
     def get_hint(self) -> str:
-        return self._hint_bar.text
+        if self._action_bar.text:
+            return self._action_bar.text
+        return " · ".join(label for _, label in self._action_bar.actions)
 
     def get_breadcrumb(self) -> str:
         return self._sidebar.items[self._sidebar.selected_index]
