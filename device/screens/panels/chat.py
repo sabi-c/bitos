@@ -1,6 +1,5 @@
 """
-BITOS Chat Panel (Phase 2 — reliability UX)
-Text input via keyboard/button, streaming response rendered line-by-line.
+BITOS Chat Panel — voice-first with action menu (SPEAK/ACTIONS/BACK).
 """
 import json
 from collections import deque
@@ -49,8 +48,10 @@ DEFAULT_TEMPLATES = [
 
 
 class ChatPanel(BaseScreen):
-    """Chat panel with reliability status and retry controls."""
+    """Voice-first chat panel with action menu."""
     _owns_status_bar = True
+
+    ACTION_ITEMS = ["SPEAK", "ACTIONS", "BACK"]
 
     STATUS_CONNECTED = "connected"
     STATUS_RETRYING = "retrying"
@@ -67,6 +68,10 @@ class ChatPanel(BaseScreen):
         "request": "request failed",
         "unknown": "unknown error",
     }
+
+    # Layout constants
+    _ACTION_ROW_H = 18
+    _HINT_H = 12
 
     def __init__(self, client: BackendClient, ui_settings: dict | None = None, repository: DeviceRepository | None = None, audio_pipeline: AudioPipeline | None = None, led=None, on_back=None):
         self._client = client
@@ -91,6 +96,11 @@ class ChatPanel(BaseScreen):
         self._templates = list(DEFAULT_TEMPLATES)
         self._resumed_until = 0.0
         self._voice_stop_requested = False
+
+        # Action menu state
+        self._action_index = 0
+        self._showing_actions = False
+        self._action_template_index = 0
 
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
         self._font = load_ui_font("body", self._ui_settings)
@@ -147,6 +157,7 @@ class ChatPanel(BaseScreen):
             self._input_text += event.unicode
 
     def handle_action(self, action: str):
+        # If speaking, any press stops audio
         if action == "SHORT_PRESS" and self._audio_pipeline and self._audio_pipeline.is_speaking():
             self._audio_pipeline.stop_speaking()
             with self._messages_lock:
@@ -154,59 +165,82 @@ class ChatPanel(BaseScreen):
             return
 
         # Stop voice recording on any press while recording
-        if action in ("SHORT_PRESS", "DOUBLE_PRESS") and self._is_streaming and self._voice_stop_requested is False and self._status_detail == "recording...":
+        if action in ("SHORT_PRESS", "DOUBLE_PRESS") and self._status_detail == "recording...":
             self._voice_stop_requested = True
             return
 
-        if self._showing_templates() and action == "SHORT_PRESS":
-            if self._templates:
-                self._template_index = (self._template_index + 1) % len(self._templates)
+        # Actions sub-menu mode
+        if self._showing_actions:
+            self._handle_actions_submenu(action)
             return
+
         if action == "SHORT_PRESS":
-            self._scroll_offset += 1
-            return
-
-        if action == "TRIPLE_PRESS":
-            self._session_id = self._repository.create_session(title="NEW CHAT") if self._repository else None
-            with self._messages_lock:
-                self._messages = deque(maxlen=50)
-                self._input_text = ""
-                self._status_detail = "new chat"
-            return
-
-        if action == "LONG_PRESS":
+            self._action_index = (self._action_index + 1) % len(self.ACTION_ITEMS)
+        elif action == "TRIPLE_PRESS":
+            if self._messages:
+                self._action_index = (self._action_index - 1) % len(self.ACTION_ITEMS)
+        elif action == "DOUBLE_PRESS":
+            item = self.ACTION_ITEMS[self._action_index]
+            if item == "SPEAK":
+                self._capture_voice_input()
+            elif item == "ACTIONS":
+                self._showing_actions = True
+                self._action_template_index = 0
+            elif item == "BACK":
+                if self._on_back:
+                    self._on_back()
+        elif action == "LONG_PRESS":
             if self._on_back:
                 self._on_back()
-            return
 
-        if action == "DOUBLE_PRESS":
-            # VERIFIED: DOUBLE_PRESS in chat starts voice capture and status updates to "recording...".
-            if self._showing_templates() and self._templates:
-                self._send_template_message(self._templates[self._template_index])
-                return
-            if self._can_retry():
-                self._retry_last_failed()
+    def _handle_actions_submenu(self, action: str):
+        """Handle navigation within the ACTIONS template sub-menu."""
+        # Build items: templates + BACK TO MENU
+        items = list(self._templates) + [{"label": "BACK TO MENU", "message": ""}]
+        if action == "SHORT_PRESS":
+            self._action_template_index = (self._action_template_index + 1) % len(items)
+        elif action == "TRIPLE_PRESS":
+            self._action_template_index = (self._action_template_index - 1) % len(items)
+        elif action == "DOUBLE_PRESS":
+            selected = items[self._action_template_index]
+            if selected["label"] == "BACK TO MENU":
+                self._showing_actions = False
             else:
-                self._capture_voice_input()
+                self._send_template_message(selected)
+                self._showing_actions = False
+        elif action == "LONG_PRESS":
+            self._showing_actions = False
 
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
 
-        # ── Status bar: 18px, dark variant (black bg, white text, hairline border) ──
+        # ── Status bar (20px) ──
         pygame.draw.line(surface, HAIRLINE, (0, STATUS_BAR_H - 1), (PHYSICAL_W, STATUS_BAR_H - 1))
         header_text = self._font_small.render("CHAT", False, WHITE)
         surface.blit(header_text, (6, (STATUS_BAR_H - header_text.get_height()) // 2))
 
-        status_copy = self._status_copy()
-        status_color = self._status_color()
-        status_surface = self._font_small.render(status_copy, False, status_color)
-        status_x = max(70, PHYSICAL_W - status_surface.get_width() - 6)
-        surface.blit(status_surface, (status_x, (STATUS_BAR_H - status_surface.get_height()) // 2))
+        # Recording indicator or connection status
+        if self._status_detail == "recording...":
+            # Pulsing red dot
+            pulse = (pygame.time.get_ticks() // 500) % 2 == 0
+            rec_color = (255, 60, 60) if pulse else DIM1
+            rec_surface = self._font_small.render("\u25cfREC", False, rec_color)
+            rec_x = PHYSICAL_W - rec_surface.get_width() - 6
+            surface.blit(rec_surface, (rec_x, (STATUS_BAR_H - rec_surface.get_height()) // 2))
+        else:
+            status_copy = self._status_copy()
+            status_color = self._status_color()
+            status_surface = self._font_small.render(status_copy, False, status_color)
+            status_x = max(70, PHYSICAL_W - status_surface.get_width() - 6)
+            surface.blit(status_surface, (status_x, (STATUS_BAR_H - status_surface.get_height()) // 2))
+
+        # ── Layout calculations ──
+        action_menu_h = self._ACTION_ROW_H * 3
+        hint_h = self._HINT_H
+        msg_area_top = STATUS_BAR_H + 2
+        msg_area_bottom = PHYSICAL_H - action_menu_h - hint_h - 2
 
         # ── Messages area ──
-        msg_y = STATUS_BAR_H + 2
-        max_y = PHYSICAL_H - 26  # Leave room for input bar + hint
-
         with self._messages_lock:
             snapshot = list(self._messages)
 
@@ -218,57 +252,77 @@ class ChatPanel(BaseScreen):
             for line in lines:
                 visible_lines.append((line, color))
 
-        if self._showing_templates():
-            msg_y = self._render_templates(surface=surface, start_y=msg_y, max_y=max_y)
-        else:
-            start = max(0, len(visible_lines) - int((max_y - msg_y) / self._line_height) - self._scroll_offset)
-            for line_text, color in visible_lines[start:]:
-                if msg_y > max_y:
-                    break
-                text_surface = self._font.render(line_text, False, color)
-                surface.blit(text_surface, (4, msg_y))
-                msg_y += self._line_height
+        msg_y = msg_area_top
+        max_visible = int((msg_area_bottom - msg_area_top) / self._line_height)
+        start = max(0, len(visible_lines) - max_visible - self._scroll_offset)
+        for line_text, color in visible_lines[start:]:
+            if msg_y > msg_area_bottom:
+                break
+            text_surface = self._font.render(line_text, False, color)
+            surface.blit(text_surface, (4, msg_y))
+            msg_y += self._line_height
 
-        # ── Streaming indicator / retry hint + queue debug status ──
+        # ── Streaming indicator / retry hint ──
         if self._is_streaming:
             dots = "." * ((pygame.time.get_ticks() // 400) % 4)
             indicator = self._font_small.render(dots, False, DIM3)
-            surface.blit(indicator, (4, max_y - 8))
+            surface.blit(indicator, (4, msg_area_bottom - 8))
         elif self._can_retry():
-            hint = self._font_small.render("R/DBL: retry", False, DIM1)
-            surface.blit(hint, (4, max_y - 8))
+            hint = self._font_small.render("DBL: retry", False, DIM1)
+            surface.blit(hint, (4, msg_area_bottom - 8))
 
         queue_status = self._queue_status_copy()
         if queue_status:
             queue_surface = self._font_small.render(queue_status, False, DIM2)
             queue_x = max(96, PHYSICAL_W - queue_surface.get_width() - 4)
-            surface.blit(queue_surface, (queue_x, max_y - 8))
+            surface.blit(queue_surface, (queue_x, msg_area_bottom - 8))
 
-        # ── Input bar ──
-        input_y = PHYSICAL_H - 20
-        pygame.draw.line(surface, HAIRLINE, (0, input_y - 2), (PHYSICAL_W, input_y - 2))
+        # ── Action menu (3 rows) ──
+        action_top = PHYSICAL_H - action_menu_h - hint_h
+        pygame.draw.line(surface, HAIRLINE, (0, action_top - 1), (PHYSICAL_W, action_top - 1))
 
-        display_text = self._input_text
-        if len(display_text) > 28:
-            display_text = "..." + display_text[-25:]
+        if self._showing_actions:
+            self._render_actions_submenu(surface, action_top)
+        else:
+            for i, label in enumerate(self.ACTION_ITEMS):
+                y = action_top + i * self._ACTION_ROW_H
+                focused = i == self._action_index
+                prefix = "> " if focused else "- "
+                text_color = WHITE if focused else DIM2
+                row_surface = self._font.render(prefix + label, False, text_color)
+                surface.blit(row_surface, (8, y + 1))
 
-        input_surface = self._font.render(display_text, False, WHITE)
-        surface.blit(input_surface, (4, input_y))
-
-        if not self._is_streaming and self._cursor_anim.step == 0:
-            cursor_x = 4 + input_surface.get_width() + 1
-            pygame.draw.rect(surface, WHITE, (cursor_x, input_y, 6, self._font.get_height()))
-
-        # ── Key hint bar ──
+        # ── Hint bar ──
+        hint_y = PHYSICAL_H - hint_h
         if self._status_detail == "recording...":
             hint_text = "TAP:STOP RECORDING"
-        elif self._showing_templates():
-            hint_text = "SHORT:NEXT \u00b7 DBL:SEND \u00b7 LONG:BACK"
+        elif self._showing_actions:
+            hint_text = "SHORT:NEXT \u00b7 DBL:SEL \u00b7 LONG:BACK"
         else:
-            hint_text = "SHORT:SCROLL \u00b7 DBL:VOICE \u00b7 LONG:BACK"
+            hint_text = "SHORT:NEXT \u00b7 DBL:SEL \u00b7 LONG:BACK"
         hint = self._font_hint.render(hint_text, False, DIM3)
-        surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 1))
+        surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, hint_y))
 
+    def _render_actions_submenu(self, surface: pygame.Surface, top_y: int):
+        """Render the templates sub-menu in the action area."""
+        items = list(self._templates) + [{"label": "BACK TO MENU", "message": ""}]
+        # Show 3 rows centered around selected index
+        visible_count = 3
+        start_idx = max(0, self._action_template_index - 1)
+        if start_idx + visible_count > len(items):
+            start_idx = max(0, len(items) - visible_count)
+
+        for row in range(visible_count):
+            idx = start_idx + row
+            if idx >= len(items):
+                break
+            y = top_y + row * self._ACTION_ROW_H
+            focused = idx == self._action_template_index
+            label = str(items[idx].get("label", ""))
+            prefix = "> " if focused else "- "
+            text_color = WHITE if focused else DIM2
+            row_surface = self._font.render(prefix + label, False, text_color)
+            surface.blit(row_surface, (8, y + 1))
 
     def _capture_voice_input(self):
         if self._is_streaming or not self._audio_pipeline:
@@ -314,7 +368,7 @@ class ChatPanel(BaseScreen):
             self._led.off()
         if not text:
             with self._messages_lock:
-                self._status_detail = "Didn't catch that — try again"
+                self._status_detail = "Didn't catch that \u2014 try again"
             return
         self._input_text = text
         self._send_message()
@@ -387,7 +441,7 @@ class ChatPanel(BaseScreen):
             if self._audio_pipeline and response_text:
                 try:
                     with self._messages_lock:
-                        self._status_detail = "◎ SPEAKING..."
+                        self._status_detail = "\u25ce SPEAKING..."
                     if self._led:
                         self._led.speaking()
                     self._audio_pipeline.speak(response_text)
