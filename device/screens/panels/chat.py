@@ -92,7 +92,6 @@ class ChatPanel(BaseScreen):
         self._last_failed_message: str | None = None
         self._last_error_retryable = False
         self._session_id = None
-        self._template_index = 0
         self._templates = list(DEFAULT_TEMPLATES)
         self._resumed_until = 0.0
         self._voice_stop_requested = False
@@ -177,8 +176,7 @@ class ChatPanel(BaseScreen):
         if action == "SHORT_PRESS":
             self._action_index = (self._action_index + 1) % len(self.ACTION_ITEMS)
         elif action == "TRIPLE_PRESS":
-            if self._messages:
-                self._action_index = (self._action_index - 1) % len(self.ACTION_ITEMS)
+            self._action_index = (self._action_index - 1) % len(self.ACTION_ITEMS)
         elif action == "DOUBLE_PRESS":
             item = self.ACTION_ITEMS[self._action_index]
             if item == "SPEAK":
@@ -519,26 +517,6 @@ class ChatPanel(BaseScreen):
         if current:
             lines.append(current)
         return lines or [""]
-
-    def _showing_templates(self) -> bool:
-        return not self._messages and bool(self._templates)
-
-    def _render_templates(self, surface: pygame.Surface, start_y: int, max_y: int) -> int:
-        y = start_y
-        row_h = max(self._line_height, 20)
-        for idx, template in enumerate(self._templates):
-            if y > max_y:
-                break
-            label = str(template.get("label", "TEMPLATE"))
-            focused = idx == self._template_index
-            if focused:
-                pygame.draw.rect(surface, WHITE, pygame.Rect(0, y - 2, PHYSICAL_W, row_h + 2))
-            text_color = BLACK if focused else DIM2
-            text_surface = self._font.render(label, False, text_color)
-            surface.blit(text_surface, (8, y))
-            y += row_h
-        return y
-
 
     def get_active_compose_target(self) -> str | None:
         return "compose_body"
