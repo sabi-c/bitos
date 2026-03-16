@@ -24,8 +24,13 @@ DIM4 = (51, 51, 51)       # 20%
 HAIRLINE = (26, 26, 26)   # Subtle borders
 
 # ── Typography ─────────────────────────────────────────────────
+FONT_REGISTRY = {
+    "press_start_2p": "assets/fonts/PressStart2P.ttf",
+    "monocraft": "assets/fonts/Monocraft.ttf",
+}
+DEFAULT_FONT_FAMILY = "press_start_2p"
 FONT_NAME = "PressStart2P"
-FONT_PATH = "assets/fonts/PressStart2P.ttf"
+FONT_PATH = FONT_REGISTRY[DEFAULT_FONT_FAMILY]
 
 FONT_SIZES = {
     "time_large": 24,
