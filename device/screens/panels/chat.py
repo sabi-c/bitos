@@ -446,11 +446,11 @@ class ChatPanel(BaseScreen):
                 self._status_detail = "transcribing..."
             text = self._audio_pipeline.transcribe(audio_path).strip()
         except Exception as exc:
+            logging.getLogger(__name__).error("voice_capture_failed: %s", exc, exc_info=True)
             self._mode = ChatMode.IDLE
             if self._led:
                 self._led.error()
-            self._mark_failed("", "unknown", False)
-            self._status_detail = f"voice err: {str(exc)[:20]}"
+            self._mark_failed("", "unknown", False, custom_copy=f"voice: {str(exc)[:25]}")
             return
 
         if self._led:
@@ -556,8 +556,9 @@ class ChatPanel(BaseScreen):
                 self._last_error_retryable = False
         except BackendChatError as exc:
             self._mark_failed(message, exc.kind, exc.retryable)
-        except Exception:
-            self._mark_failed(message, "unknown", True)
+        except Exception as exc:
+            logging.getLogger(__name__).error("stream_response_failed: %s", exc, exc_info=True)
+            self._mark_failed(message, "unknown", True, custom_copy=f"error: {str(exc)[:30]}")
         finally:
             self._is_streaming = False
             if self._mode in (ChatMode.STREAMING, ChatMode.SPEAKING):
