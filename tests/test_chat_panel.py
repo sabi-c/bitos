@@ -135,14 +135,14 @@ class ChatModeTests(unittest.TestCase):
         labels = [c[1] for c in content]
         self.assertIn("RECORD", labels)
 
-    def test_recording_action_bar_has_send_cancel(self):
+    def test_recording_action_bar_has_release_send(self):
         panel = self._make_panel()
         panel._mode = ChatMode.RECORDING
         content = panel._get_action_bar_content()
         self.assertEqual(len(content), 2)
         labels = [c[1] for c in content]
+        self.assertIn("RELEASE", labels)
         self.assertIn("SEND", labels)
-        self.assertIn("CANCEL", labels)
 
     def test_streaming_action_bar_empty(self):
         panel = self._make_panel()

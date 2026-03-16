@@ -192,8 +192,10 @@ class ChatPanel(BaseScreen):
             self._hold_timer = time.time()
             return
         if action == "HOLD_END":
-            # Only clear hold timer if recording hasn't started yet
-            if self._mode != ChatMode.RECORDING:
+            if self._mode == ChatMode.RECORDING:
+                # Release button → stop recording and send
+                self._voice_stop_event.set()
+            elif self._hold_timer is not None:
                 self._hold_timer = None
             return
 
@@ -265,7 +267,7 @@ class ChatPanel(BaseScreen):
         if self._mode == ChatMode.IDLE:
             return [("hold", "RECORD"), ("double", "ACTIONS"), ("tap", "SCROLL")]
         elif self._mode == ChatMode.RECORDING:
-            return [("tap", "SEND"), ("hold", "CANCEL")]
+            return [("hold", "RELEASE"), ("tap", "SEND")]
         elif self._mode == ChatMode.ACTIONS:
             return [("tap", "NEXT"), ("double", "SELECT"), ("hold", "BACK")]
         elif self._mode == ChatMode.SPEAKING:
@@ -471,10 +473,15 @@ class ChatPanel(BaseScreen):
 
             logger.info("recording_captured path=%s size=%d", audio_path, file_size)
 
+            # Save a copy for re-transcription / history
+            self._save_recording(audio_path)
+
             self._mode = ChatMode.STREAMING
             with self._messages_lock:
                 self._status_detail = "transcribing..."
+            logger.info("stt_starting path=%s", audio_path)
             text = self._audio_pipeline.transcribe(audio_path).strip()
+            logger.info("stt_result len=%d text=%s", len(text), text[:80] if text else "(empty)")
         except Exception as exc:
             logger.error("voice_capture_failed: %s", exc, exc_info=True)
             self._mode = ChatMode.IDLE
@@ -492,6 +499,20 @@ class ChatPanel(BaseScreen):
             return
         self._input_text = text
         self._send_message()
+
+    def _save_recording(self, audio_path: str) -> None:
+        """Copy recording to persistent storage for history/re-transcription."""
+        import os
+        import shutil
+
+        save_dir = os.path.join(os.environ.get("BITOS_DATA_DIR", "device/data"), "recordings")
+        try:
+            os.makedirs(save_dir, exist_ok=True)
+            dest = os.path.join(save_dir, os.path.basename(audio_path))
+            shutil.copy2(audio_path, dest)
+            logger.info("recording_saved dest=%s", dest)
+        except Exception as exc:
+            logger.warning("recording_save_failed: %s", exc)
 
     def _send_message(self):
         text = self._input_text.strip()
