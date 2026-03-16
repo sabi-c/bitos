@@ -61,6 +61,10 @@ class ChatActionMenuTests(unittest.TestCase):
         panel.handle_action("LONG_PRESS")
         self.assertTrue(called)
 
+    @unittest.skipIf(
+        os.environ.get("SDL_VIDEODRIVER") == "dummy",
+        "pygame segfaults rendering fonts with dummy video driver on macOS",
+    )
     def test_render_without_error(self):
         panel = self._make_panel()
         panel.render(self.surface)
