@@ -12,6 +12,60 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "device"))
 from display.driver import PygameDriver, ST7789Driver, create_driver
 
 
+class RGB565ConversionTests(unittest.TestCase):
+    """Verify RGB888-to-RGB565 conversion correctness and numpy/python parity."""
+
+    def _make_rgb_bytes(self, pixels):
+        """Build raw RGB888 bytes from a list of (r, g, b) tuples."""
+        return bytes(c for px in pixels for c in px)
+
+    def test_known_values(self):
+        """Pure white, pure black, and primary colours produce expected RGB565."""
+        pixels = [
+            (255, 255, 255),  # white  -> 0xFFFF
+            (0, 0, 0),        # black  -> 0x0000
+            (255, 0, 0),      # red    -> 0xF800
+            (0, 255, 0),      # green  -> 0x07E0
+            (0, 0, 255),      # blue   -> 0x001F
+        ]
+        raw = self._make_rgb_bytes(pixels)
+        result = ST7789Driver._rgb888_to_rgb565(raw)
+        # Each pixel becomes 2 bytes (big-endian)
+        self.assertEqual(len(result), len(pixels) * 2)
+        # White
+        self.assertEqual(result[0], 0xFF)
+        self.assertEqual(result[1], 0xFF)
+        # Black
+        self.assertEqual(result[2], 0x00)
+        self.assertEqual(result[3], 0x00)
+        # Red
+        self.assertEqual(result[4], 0xF8)
+        self.assertEqual(result[5], 0x00)
+        # Green
+        self.assertEqual(result[6], 0x07)
+        self.assertEqual(result[7], 0xE0)
+        # Blue
+        self.assertEqual(result[8], 0x00)
+        self.assertEqual(result[9], 0x1F)
+
+    def test_numpy_python_parity(self):
+        """Numpy and pure-Python paths must produce identical output."""
+        import random
+        random.seed(42)
+        pixel_count = 240 * 280
+        raw = bytes(random.randint(0, 255) for _ in range(pixel_count * 3))
+        py_result = ST7789Driver._rgb888_to_rgb565_python(raw)
+        try:
+            np_result = ST7789Driver._rgb888_to_rgb565_numpy(raw)
+        except Exception:
+            self.skipTest("numpy not available")
+        self.assertEqual(py_result, np_result)
+
+    def test_empty_input(self):
+        result = ST7789Driver._rgb888_to_rgb565(b"")
+        self.assertEqual(result, [])
+
+
 class DisplayDriverTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

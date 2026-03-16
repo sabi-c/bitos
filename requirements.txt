@@ -6,6 +6,7 @@ python-dotenv>=1.0.0
 
 # Device
 pygame>=2.6.0
+numpy>=1.24.0
 httpx>=0.28.0
 
 # Web Preview

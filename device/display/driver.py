@@ -12,6 +12,13 @@ from abc import ABC, abstractmethod
 
 import pygame
 
+try:
+    import numpy as np
+
+    _HAS_NUMPY = True
+except ImportError:
+    _HAS_NUMPY = False
+
 from display.tokens import PHYSICAL_H, PHYSICAL_W, WINDOW_H, WINDOW_W, BLACK, FPS
 
 logger = logging.getLogger(__name__)
@@ -98,6 +105,29 @@ class ST7789Driver(DisplayDriver):
 
     @staticmethod
     def _rgb888_to_rgb565(raw_rgb: bytes) -> list[int]:
+        if _HAS_NUMPY:
+            return ST7789Driver._rgb888_to_rgb565_numpy(raw_rgb)
+        return ST7789Driver._rgb888_to_rgb565_python(raw_rgb)
+
+    @staticmethod
+    def _rgb888_to_rgb565_numpy(raw_rgb: bytes) -> list[int]:
+        """Vectorized RGB888→RGB565 conversion using numpy (~10x faster)."""
+        arr = np.frombuffer(raw_rgb, dtype=np.uint8).reshape(-1, 3)
+        r = arr[:, 0].astype(np.uint16)
+        g = arr[:, 1].astype(np.uint16)
+        b = arr[:, 2].astype(np.uint16)
+        rgb565 = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
+        # Big-endian byte pair per pixel
+        high = ((rgb565 >> 8) & 0xFF).astype(np.uint8)
+        low = (rgb565 & 0xFF).astype(np.uint8)
+        interleaved = np.empty(len(high) * 2, dtype=np.uint8)
+        interleaved[0::2] = high
+        interleaved[1::2] = low
+        return interleaved.tolist()
+
+    @staticmethod
+    def _rgb888_to_rgb565_python(raw_rgb: bytes) -> list[int]:
+        """Pure-Python fallback for environments without numpy."""
         payload = bytearray((len(raw_rgb) // 3) * 2)
         out_i = 0
         for i in range(0, len(raw_rgb), 3):
