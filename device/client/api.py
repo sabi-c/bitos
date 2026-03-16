@@ -304,6 +304,37 @@ class BackendClient:
             logging.warning("device_stats_failed error=%s", exc)
             return {}
 
+    def get_files(self, path: str = "") -> list[dict]:
+        """GET /files — list files in curated file system."""
+        try:
+            params = {"path": path} if path else {}
+            resp = httpx.get(f"{self.base_url}/files", params=params, timeout=5, headers=self._request_headers())
+            resp.raise_for_status()
+            return resp.json().get("files", [])
+        except Exception as exc:
+            logging.warning("files_list_failed error=%s", exc)
+            return []
+
+    def get_file_content(self, file_id: str) -> dict:
+        """GET /files/{file_id} — get file content."""
+        try:
+            resp = httpx.get(f"{self.base_url}/files/{file_id}", timeout=5, headers=self._request_headers())
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as exc:
+            logging.warning("file_content_failed file=%s error=%s", file_id[:24], exc)
+            return {}
+
+    def parse_file(self, file_id: str) -> dict:
+        """POST /files/{file_id}/parse — parse file into device-friendly pages."""
+        try:
+            resp = httpx.post(f"{self.base_url}/files/{file_id}/parse", timeout=30, headers=self._request_headers())
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as exc:
+            logging.warning("file_parse_failed file=%s error=%s", file_id[:24], exc)
+            return {}
+
     def get_morning_brief(self) -> dict:
         """GET /brief from server."""
         try:
