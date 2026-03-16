@@ -10,7 +10,7 @@ from contextlib import closing
 
 
 DEFAULT_DB_PATH = "device/data/bitos.db"
-LATEST_SCHEMA_VERSION = 5
+LATEST_SCHEMA_VERSION = 6
 
 
 MIGRATIONS: dict[int, str] = {
@@ -107,6 +107,11 @@ MIGRATIONS: dict[int, str] = {
 
     CREATE INDEX IF NOT EXISTS idx_quick_captures_created
       ON quick_captures(created_at DESC);
+    """,
+    6: """
+    ALTER TABLE sessions ADD COLUMN session_type TEXT DEFAULT 'chat';
+    CREATE INDEX IF NOT EXISTS idx_sessions_type_created
+      ON sessions(session_type, created_at);
     """,
 }
 
@@ -412,6 +417,67 @@ class DeviceRepository:
             if not row:
                 return None
             return {"id": row[0], "created_at": row[1], "msg_count": row[2]}
+
+    def create_greeting_session(self, greeting_text: str) -> int:
+        """Create a greeting session with the agent's greeting as first message."""
+        now = time.time()
+        with closing(self._connect()) as conn:
+            cur = conn.execute(
+                "INSERT INTO sessions(title, session_type, created_at, updated_at) VALUES (?, 'greeting', ?, ?)",
+                ("greeting", now, now),
+            )
+            session_id = int(cur.lastrowid)
+            conn.execute(
+                "INSERT INTO messages(session_id, role, text, created_at) VALUES (?, 'assistant', ?, ?)",
+                (session_id, greeting_text, now),
+            )
+            conn.commit()
+            return session_id
+
+    def get_greeting_session(self) -> dict | None:
+        """Get the most recent greeting session if less than 1 hour old."""
+        cutoff = time.time() - 3600
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                """
+                SELECT s.id, s.created_at, s.updated_at
+                FROM sessions s
+                WHERE s.session_type = 'greeting'
+                  AND s.created_at > ?
+                ORDER BY s.created_at DESC
+                LIMIT 1
+                """,
+                (cutoff,),
+            ).fetchone()
+            if not row:
+                return None
+            return {"id": int(row[0]), "created_at": row[1], "updated_at": row[2]}
+
+    def get_latest_chat_session(self) -> dict | None:
+        """Get the most recent non-greeting session with messages."""
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                """
+                SELECT s.id, s.title, s.created_at, s.updated_at,
+                       COUNT(m.id) as msg_count
+                FROM sessions s
+                LEFT JOIN messages m ON m.session_id = s.id
+                WHERE COALESCE(s.session_type, 'chat') = 'chat'
+                GROUP BY s.id
+                HAVING msg_count > 0
+                ORDER BY s.updated_at DESC
+                LIMIT 1
+                """
+            ).fetchone()
+            if not row:
+                return None
+            return {
+                "id": int(row[0]),
+                "title": row[1],
+                "created_at": row[2],
+                "updated_at": row[3],
+                "msg_count": int(row[4]),
+            }
 
     def get_session_messages(self, session_id: str, limit: int = 10) -> list[dict]:
         """Returns last N messages for a session."""

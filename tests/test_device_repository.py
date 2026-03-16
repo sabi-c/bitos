@@ -63,6 +63,14 @@ class DeviceRepositoryTests(unittest.TestCase):
             conn.execute("CREATE TABLE schema_version(version INTEGER NOT NULL)")
             conn.execute("INSERT INTO schema_version(version) VALUES (2)")
             conn.execute("""
+                CREATE TABLE sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT,
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL
+                )
+            """)
+            conn.execute("""
                 CREATE TABLE tasks (
                     id TEXT PRIMARY KEY,
                     title TEXT NOT NULL,
@@ -96,6 +104,48 @@ class DeviceRepositoryTests(unittest.TestCase):
             self.assertEqual(latest, session_id)
             self.assertEqual([m["role"] for m in messages], ["user", "assistant"])
             self.assertEqual([m["text"] for m in messages], ["hey", "yo"])
+
+
+class GreetingSessionTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.db_path = str(Path(self._tmp.name) / "bitos.db")
+        self.repo = DeviceRepository(db_path=self.db_path)
+        self.repo.initialize()
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_create_greeting_session(self):
+        sid = self.repo.create_greeting_session("good morning")
+        self.assertIsNotNone(sid)
+        msgs = self.repo.list_messages(sid)
+        self.assertEqual(len(msgs), 1)
+        self.assertEqual(msgs[0]["role"], "assistant")
+        self.assertEqual(msgs[0]["text"], "good morning")
+
+    def test_get_greeting_session_returns_recent(self):
+        sid = self.repo.create_greeting_session("hello there")
+        result = self.repo.get_greeting_session()
+        self.assertIsNotNone(result)
+        self.assertEqual(result["id"], sid)
+
+    def test_get_greeting_session_returns_none_when_empty(self):
+        result = self.repo.get_greeting_session()
+        self.assertIsNone(result)
+
+    def test_get_latest_chat_session_excludes_greeting(self):
+        self.repo.create_greeting_session("hi there")
+        chat_id = self.repo.create_session(title="real chat")
+        self.repo.add_message(chat_id, "user", "hello")
+        result = self.repo.get_latest_chat_session()
+        self.assertIsNotNone(result)
+        self.assertEqual(result["id"], chat_id)
+
+    def test_get_latest_chat_session_returns_none_when_only_greeting(self):
+        self.repo.create_greeting_session("hi")
+        result = self.repo.get_latest_chat_session()
+        self.assertIsNone(result)
 
 
 if __name__ == "__main__":
