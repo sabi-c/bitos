@@ -61,6 +61,11 @@ class TypewriterTests(unittest.TestCase):
         self.assertFalse(tw.finished)
         self.assertEqual(tw.get_visible_text(), "")
 
+    def test_slow_preset_uses_80ms_base(self):
+        tw = TypewriterRenderer("hi", speed="slow")
+        tw.update(0.05)  # 50ms — should reveal at most 1 char
+        self.assertLess(len(tw.get_visible_text()), 2)
+
     def test_full_reveal(self):
         text = "The quick brown fox."
         tw = TypewriterRenderer(text, speed="normal")
