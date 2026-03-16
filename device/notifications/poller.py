@@ -18,6 +18,7 @@ class NotificationPoller:
         self._thread: threading.Thread | None = None
         self._last_health_state: bool | None = None
         self._notified_overdue_task_ids: set[str] = set()
+        self._notified_subtask_ids: set[str] = set()
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -34,6 +35,7 @@ class NotificationPoller:
     def _poll_loop(self) -> None:
         next_health_poll = 0.0
         next_task_poll = 0.0
+        next_subtask_poll = 0.0
         while not self._stop.wait(1.0):
             now = time.time()
             if now >= next_health_poll:
@@ -42,6 +44,9 @@ class NotificationPoller:
             if now >= next_task_poll:
                 self._poll_overdue_tasks()
                 next_task_poll = now + 300.0
+            if now >= next_subtask_poll:
+                self._poll_completed_subtasks()
+                next_subtask_poll = now + 10.0
 
     def _poll_health_state(self) -> None:
         state = bool(self._api_client.health())
@@ -76,6 +81,30 @@ class NotificationPoller:
                 type="TASK",
                 app_name="TASKS",
                 message=f"{title} — overdue",
+                time_str=time.strftime("%H:%M"),
+                source_id=task_id,
+            )
+            self._queue.push_record(record)
+
+    def _poll_completed_subtasks(self) -> None:
+        if not hasattr(self._api_client, "get_agent_subtasks"):
+            return
+        try:
+            subtasks = self._api_client.get_agent_subtasks(status="complete")
+        except Exception:
+            return
+        for task in subtasks:
+            task_id = str(task.get("id", ""))
+            if not task_id or task_id in self._notified_subtask_ids:
+                continue
+            self._notified_subtask_ids.add(task_id)
+            name = str(task.get("name", "subtask"))
+            cost = task.get("cost_usd", 0.0)
+            record = NotificationRecord(
+                id=f"subtask:{task_id}:{uuid.uuid4().hex}",
+                type="TASK",
+                app_name="Agent",
+                message=f"{name} \u2713 ${cost:.3f}",
                 time_str=time.strftime("%H:%M"),
                 source_id=task_id,
             )
