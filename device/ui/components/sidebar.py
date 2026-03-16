@@ -13,10 +13,10 @@ from device.ui.panels.base import WHITE, BLACK, GRAY_444, GRAY_AAA, GRAY_080808,
 SEP_COLOR = GRAY_0A
 
 SIDEBAR_W = 84
-ITEM_H = 28  # padding top+bottom + 12px font
+ITEM_H = 27  # padding top+bottom + 12px font (27*9=243 fits in 248px)
 FONT_SIZE = SIDEBAR_ITEM
 PAD_X = 7
-PAD_Y = 8
+PAD_Y = 7
 
 ITEMS = ["HOME", "CHAT", "TASKS", "SETTINGS", "FOCUS", "MAIL", "MSGS", "MUSIC", "HISTORY"]
 

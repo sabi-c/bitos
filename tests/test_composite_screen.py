@@ -102,20 +102,20 @@ class CompositeScreenTests(unittest.TestCase):
         cs.handle_action("TRIPLE_PRESS")
         self.assertEqual(cs._sidebar.selected_index, len(ITEMS) - 1)
 
-    # ── LONG_PRESS calls opener ──────────────────────────────────
+    # ── DOUBLE_PRESS calls opener (select) ──────────────────────
 
-    def test_long_press_calls_opener(self):
+    def test_double_press_calls_opener(self):
         called = {}
         cs = CompositeScreen(panel_openers={"HOME": lambda: called.update(home=True)})
-        cs.handle_action("LONG_PRESS")
+        cs.handle_action("DOUBLE_PRESS")
         self.assertTrue(called.get("home"))
 
-    def test_long_press_no_opener_is_noop(self):
+    def test_double_press_no_opener_is_noop(self):
         cs = CompositeScreen()
-        cs.handle_action("LONG_PRESS")  # should not raise
+        cs.handle_action("DOUBLE_PRESS")  # should not raise
 
-    def test_long_press_correct_item(self):
-        """LONG_PRESS opens the currently selected sidebar item."""
+    def test_double_press_correct_item(self):
+        """DOUBLE_PRESS opens the currently selected sidebar item."""
         calls = []
         openers = {
             "HOME": lambda: calls.append("HOME"),
@@ -123,15 +123,15 @@ class CompositeScreenTests(unittest.TestCase):
         }
         cs = CompositeScreen(panel_openers=openers)
         cs.handle_action("SHORT_PRESS")  # move to CHAT
-        cs.handle_action("LONG_PRESS")
+        cs.handle_action("DOUBLE_PRESS")
         self.assertEqual(calls, ["CHAT"])
 
-    # ── DOUBLE_PRESS is no-op ────────────────────────────────────
+    # ── LONG_PRESS is no-op (back at root) ───────────────────────
 
-    def test_double_press_is_noop(self):
+    def test_long_press_is_noop(self):
         cs = CompositeScreen()
         idx = cs._sidebar.selected_index
-        cs.handle_action("DOUBLE_PRESS")
+        cs.handle_action("LONG_PRESS")
         self.assertEqual(cs._sidebar.selected_index, idx)
 
     # ── Keyboard input ───────────────────────────────────────────

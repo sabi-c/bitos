@@ -21,9 +21,9 @@ class IntegrationDetailPanel(BaseScreen):
         self._font_hint = load_ui_font("hint", self._ui_settings)
 
     def handle_action(self, action: str):
-        if action == "DOUBLE_PRESS" and self._on_back:
+        if action == "LONG_PRESS" and self._on_back:
             self._on_back()
-        elif action in {"SHORT_PRESS", "LONG_PRESS", "TRIPLE_PRESS"}:
+        elif action in {"SHORT_PRESS", "DOUBLE_PRESS", "TRIPLE_PRESS"}:
             return
 
     def handle_input(self, event: pygame.event.Event):
@@ -61,5 +61,5 @@ class IntegrationDetailPanel(BaseScreen):
         surface.blit(copy1, (8, y))
         surface.blit(copy2, (8, y + copy1.get_height() + 4))
 
-        hint = self._font_hint.render("HINT: DBL:BACK", False, DIM3)
+        hint = self._font_hint.render("HINT: LONG:BACK", False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))

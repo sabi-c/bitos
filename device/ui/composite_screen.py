@@ -96,12 +96,12 @@ class CompositeScreen(BaseScreen):
             self._sidebar.selected_index = (self._sidebar.selected_index + 1) % n
         elif action == "TRIPLE_PRESS":
             self._sidebar.selected_index = (self._sidebar.selected_index - 1) % n
-        elif action == "LONG_PRESS":
+        elif action == "DOUBLE_PRESS":
             label = self._sidebar.items[self._sidebar.selected_index]
             opener = self._panel_openers.get(label)
             if opener is not None:
                 opener()
-        # DOUBLE_PRESS is no-op at root level
+        # LONG_PRESS is no-op at root level
 
     def handle_input(self, event: pygame.event.Event) -> None:
         """Keyboard support for desktop testing."""
@@ -112,7 +112,7 @@ class CompositeScreen(BaseScreen):
         elif event.key in (pygame.K_UP, pygame.K_k):
             self.handle_action("TRIPLE_PRESS")
         elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
-            self.handle_action("LONG_PRESS")
+            self.handle_action("DOUBLE_PRESS")
 
     # ── Hints / breadcrumb ───────────────────────────────────────
 

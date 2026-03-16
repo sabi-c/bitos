@@ -45,7 +45,7 @@ class PowerOverlay:
         self._render_choice(surface, body_font, tokens, "REBOOT", right_x, y, row_w, row_h, selected=self._choice == 1)
 
         hint_font = self._font(tokens, "hint")
-        hint = hint_font.render("SHORT:TOGGLE \u00b7 LONG:CONFIRM \u00b7 DBL:CANCEL", False, tokens.DIM2)
+        hint = hint_font.render("SHORT:TOGGLE \u00b7 DBL:CONFIRM \u00b7 LONG:CANCEL", False, tokens.DIM2)
         surface.blit(hint, ((tokens.PHYSICAL_W - hint.get_width()) // 2, tokens.PHYSICAL_H - hint.get_height() - 2))
 
     def handle_input(self, event):
@@ -54,14 +54,14 @@ class PowerOverlay:
             return True
         if event == "SHORT_PRESS":
             self._choice = 1 - self._choice
-        elif event == "LONG_PRESS":
+        elif event == "DOUBLE_PRESS":
             self._saving = True
             if self._choice == 0:
                 self._on_shutdown()
             else:
                 self._on_reboot()
             self._saved = True
-        elif event == "DOUBLE_PRESS":
+        elif event == "LONG_PRESS":
             self._on_cancel()
         return True
 

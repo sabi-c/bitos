@@ -46,25 +46,25 @@ class PinLockTests(unittest.TestCase):
         """Default PIN 1234 should unlock."""
         # Digit 1: cycle to 1, confirm
         self.lock.handle_action("SHORT_PRESS")  # 0->1
-        self.lock.handle_action("LONG_PRESS")   # confirm 1
+        self.lock.handle_action("DOUBLE_PRESS")  # confirm 1
 
         # Digit 2: cycle to 2, confirm
         self.lock.handle_action("SHORT_PRESS")  # 0->1
         self.lock.handle_action("SHORT_PRESS")  # 1->2
-        self.lock.handle_action("LONG_PRESS")   # confirm 2
+        self.lock.handle_action("DOUBLE_PRESS")  # confirm 2
 
         # Digit 3: cycle to 3, confirm
         self.lock.handle_action("SHORT_PRESS")  # 0->1
         self.lock.handle_action("SHORT_PRESS")  # 1->2
         self.lock.handle_action("SHORT_PRESS")  # 2->3
-        self.lock.handle_action("LONG_PRESS")   # confirm 3
+        self.lock.handle_action("DOUBLE_PRESS")  # confirm 3
 
         # Digit 4: cycle to 4, confirm (auto-verify on 4th digit)
         self.lock.handle_action("SHORT_PRESS")  # 0->1
         self.lock.handle_action("SHORT_PRESS")  # 1->2
         self.lock.handle_action("SHORT_PRESS")  # 2->3
         self.lock.handle_action("SHORT_PRESS")  # 3->4
-        self.lock.handle_action("LONG_PRESS")   # confirm 4 → auto-verify
+        self.lock.handle_action("DOUBLE_PRESS")  # confirm 4 -> auto-verify
 
         self.assertTrue(self.unlocked)
 
@@ -72,7 +72,7 @@ class PinLockTests(unittest.TestCase):
         """Wrong PIN should not unlock and should reset entered digits."""
         # Enter 0000
         for _ in range(4):
-            self.lock.handle_action("LONG_PRESS")  # confirm 0 each time
+            self.lock.handle_action("DOUBLE_PRESS")  # confirm 0 each time
 
         self.assertFalse(self.unlocked)
         # After flash timeout, entered should be reset
@@ -80,7 +80,7 @@ class PinLockTests(unittest.TestCase):
         self.assertEqual(self.lock._entered, [])
 
     def test_short_press_cycles_digit(self):
-        """SHORT_PRESS should cycle current digit 0→1→2→...→9→0."""
+        """SHORT_PRESS should cycle current digit 0->1->2->...->9->0."""
         self.assertEqual(self.lock._current_digit, 0)
 
         self.lock.handle_action("SHORT_PRESS")
@@ -94,40 +94,40 @@ class PinLockTests(unittest.TestCase):
             self.lock.handle_action("SHORT_PRESS")
         self.assertEqual(self.lock._current_digit, 0)
 
-    def test_long_press_confirms_digit(self):
-        """LONG_PRESS should append current digit to entered list."""
+    def test_double_press_confirms_digit(self):
+        """DOUBLE_PRESS should append current digit to entered list."""
         self.lock.handle_action("SHORT_PRESS")  # digit = 1
         self.lock.handle_action("SHORT_PRESS")  # digit = 2
-        self.lock.handle_action("LONG_PRESS")   # confirm 2
+        self.lock.handle_action("DOUBLE_PRESS")  # confirm 2
 
         self.assertEqual(self.lock._entered, [2])
         self.assertEqual(self.lock._current_digit, 0)  # reset after confirm
 
-    def test_double_press_deletes_last_digit(self):
-        """DOUBLE_PRESS should remove last confirmed digit."""
+    def test_long_press_deletes_last_digit(self):
+        """LONG_PRESS should remove last confirmed digit."""
         # Confirm two digits
         self.lock.handle_action("SHORT_PRESS")  # 1
-        self.lock.handle_action("LONG_PRESS")   # confirm 1
+        self.lock.handle_action("DOUBLE_PRESS")  # confirm 1
         self.lock.handle_action("SHORT_PRESS")  # 1
         self.lock.handle_action("SHORT_PRESS")  # 2
-        self.lock.handle_action("LONG_PRESS")   # confirm 2
+        self.lock.handle_action("DOUBLE_PRESS")  # confirm 2
 
         self.assertEqual(self.lock._entered, [1, 2])
 
-        self.lock.handle_action("DOUBLE_PRESS")
+        self.lock.handle_action("LONG_PRESS")
         self.assertEqual(self.lock._entered, [1])
 
-        self.lock.handle_action("DOUBLE_PRESS")
+        self.lock.handle_action("LONG_PRESS")
         self.assertEqual(self.lock._entered, [])
 
     def test_four_digit_auto_verify(self):
-        """After 4th LONG_PRESS, verify is called automatically."""
-        # Enter 1234 — correct default
+        """After 4th DOUBLE_PRESS, verify is called automatically."""
+        # Enter 1234 -- correct default
         digits = [1, 2, 3, 4]
         for d in digits:
             for _ in range(d):
                 self.lock.handle_action("SHORT_PRESS")
-            self.lock.handle_action("LONG_PRESS")
+            self.lock.handle_action("DOUBLE_PRESS")
 
         self.assertTrue(self.unlocked)
 
@@ -140,7 +140,7 @@ class PinLockTests(unittest.TestCase):
         for d in [5, 6, 7, 8]:
             for _ in range(d):
                 lock.handle_action("SHORT_PRESS")
-            lock.handle_action("LONG_PRESS")
+            lock.handle_action("DOUBLE_PRESS")
 
         self.assertTrue(self.unlocked)
 
@@ -152,16 +152,16 @@ class PinLockTests(unittest.TestCase):
         for d in [1, 2, 3, 4]:
             for _ in range(d):
                 lock.handle_action("SHORT_PRESS")
-            lock.handle_action("LONG_PRESS")
+            lock.handle_action("DOUBLE_PRESS")
 
         self.assertTrue(unlocked)
 
     def test_cycling_flag(self):
-        """_cycling should be True after SHORT_PRESS, False after LONG_PRESS."""
+        """_cycling should be True after SHORT_PRESS, False after DOUBLE_PRESS."""
         self.assertFalse(self.lock._cycling)
         self.lock.handle_action("SHORT_PRESS")
         self.assertTrue(self.lock._cycling)
-        self.lock.handle_action("LONG_PRESS")
+        self.lock.handle_action("DOUBLE_PRESS")
         self.assertFalse(self.lock._cycling)
 
 
@@ -190,15 +190,15 @@ class ChangePinTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def _enter_digits(self, digits):
-        """Helper to enter a sequence of digits via SHORT_PRESS + LONG_PRESS."""
+        """Helper to enter a sequence of digits via SHORT_PRESS + DOUBLE_PRESS."""
         for d in digits:
             for _ in range(d):
                 self.panel.handle_action("SHORT_PRESS")
-            self.panel.handle_action("LONG_PRESS")
+            self.panel.handle_action("DOUBLE_PRESS")
             self.panel._flash_until = 0.0  # clear any flash
 
     def test_full_pin_change_flow(self):
-        """Enter current PIN → new PIN → confirm → saved."""
+        """Enter current PIN -> new PIN -> confirm -> saved."""
         # Step 0: enter current PIN (1234)
         self._enter_digits([1, 2, 3, 4])
         self.assertEqual(self.panel._step, 1)
@@ -232,9 +232,9 @@ class ChangePinTests(unittest.TestCase):
         self.assertEqual(self.panel._step, 2)
         self.assertEqual(self.repo.get_setting("device_pin", default="1234"), "1234")
 
-    def test_double_press_with_no_digits_goes_back(self):
-        """DOUBLE_PRESS with empty entry should go back."""
-        self.panel.handle_action("DOUBLE_PRESS")
+    def test_long_press_with_no_digits_goes_back(self):
+        """LONG_PRESS with empty entry should go back."""
+        self.panel.handle_action("LONG_PRESS")
         self.assertTrue(self.went_back)
 
 

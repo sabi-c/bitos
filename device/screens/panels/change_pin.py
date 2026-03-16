@@ -72,13 +72,13 @@ class ChangePinPanel(BaseScreen):
         if action == "SHORT_PRESS":
             self._cycling = True
             self._current_digit = (self._current_digit + 1) % 10
-        elif action == "LONG_PRESS":
+        elif action == "DOUBLE_PRESS":
             self._entered.append(self._current_digit)
             self._current_digit = 0
             self._cycling = False
             if len(self._entered) == 4:
                 self._on_step_complete()
-        elif action == "DOUBLE_PRESS":
+        elif action == "LONG_PRESS":
             if self._entered:
                 self._entered.pop()
                 self._current_digit = 0
@@ -94,9 +94,9 @@ class ChangePinPanel(BaseScreen):
         if event.key == pygame.K_SPACE:
             self.handle_action("SHORT_PRESS")
         elif event.key == pygame.K_RETURN:
-            self.handle_action("LONG_PRESS")
-        elif event.key in (pygame.K_BACKSPACE, pygame.K_ESCAPE):
             self.handle_action("DOUBLE_PRESS")
+        elif event.key in (pygame.K_BACKSPACE, pygame.K_ESCAPE):
+            self.handle_action("LONG_PRESS")
 
     def render(self, surface: pygame.Surface):
         now = time.time()
@@ -143,12 +143,12 @@ class ChangePinPanel(BaseScreen):
         pygame.draw.line(surface, line_color, (40, sep_y), (PHYSICAL_W - 40, sep_y))
 
         # ── Hints ──
-        hint1 = self._font_hint.render("SHORT:NEXT \u00b7 LONG:ENTER", False, DIM3 if not is_flashing else text_color)
+        hint1 = self._font_hint.render("SHORT:NEXT \u00b7 DBL:ENTER", False, DIM3 if not is_flashing else text_color)
         hint1_x = (PHYSICAL_W - hint1.get_width()) // 2
         hint1_y = sep_y + 8
         surface.blit(hint1, (hint1_x, hint1_y))
 
-        hint2 = self._font_hint.render("DBL:DELETE/BACK", False, DIM3 if not is_flashing else text_color)
+        hint2 = self._font_hint.render("LONG:DELETE/BACK", False, DIM3 if not is_flashing else text_color)
         hint2_x = (PHYSICAL_W - hint2.get_width()) // 2
         hint2_y = hint1_y + hint1.get_height() + 4
         surface.blit(hint2, (hint2_x, hint2_y))

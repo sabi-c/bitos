@@ -53,7 +53,7 @@ class TasksPanel(BaseScreen):
         _ = event
 
     def handle_action(self, action: str):
-        if action == "DOUBLE_PRESS":
+        if action == "LONG_PRESS":
             if self._on_back:
                 self._on_back()
             return
@@ -65,8 +65,8 @@ class TasksPanel(BaseScreen):
         elif action == "TRIPLE_PRESS":
             self._confirm_complete = False
             self._cursor = (self._cursor - 1) % len(self._tasks)
-        elif action == "LONG_PRESS":
-            # VERIFIED: LONG_PRESS first shows confirm hint, second LONG marks task complete in-place.
+        elif action == "DOUBLE_PRESS":
+            # VERIFIED: DOUBLE_PRESS first shows confirm hint, second DBL marks task complete in-place.
             if not self._confirm_complete:
                 self._confirm_complete = True
                 return
@@ -106,5 +106,5 @@ class TasksPanel(BaseScreen):
             y += ROW_H_MIN
 
         if self._confirm_complete:
-            hint = self._font_small.render("LONG AGAIN TO COMPLETE", False, DIM2)
+            hint = self._font_small.render("DBL AGAIN TO COMPLETE", False, DIM2)
             surface.blit(hint, (6, PHYSICAL_H - 16))

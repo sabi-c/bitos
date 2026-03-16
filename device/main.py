@@ -18,6 +18,7 @@ import time
 
 import pygame
 
+from display.corner_mask import CornerMask
 from display.driver import create_driver
 import display.tokens as tokens
 from display.tokens import FPS
@@ -48,7 +49,7 @@ from screens.panels.captures import CapturesPanel
 from screens.panels.messages import MessagesPanel
 from screens.panels.mail import MailPanel
 from screens.panels.notifications import NotificationsPanel
-from screens.panels.settings import SettingsPanel, ModelPickerPanel, AgentModePanel, SleepTimerPanel, AboutPanel, BatteryPanel, DevPanel
+from screens.panels.settings import SettingsPanel, ModelPickerPanel, AgentModePanel, SleepTimerPanel, AboutPanel, BatteryPanel, DevPanel, FontScalePanel
 from screens.panels.change_pin import ChangePinPanel
 from screens.subscreens.integration_detail import IntegrationDetailPanel
 from overlays.power import PowerOverlay
@@ -172,6 +173,7 @@ def main():
 
     driver = create_driver(board=board)
     driver.init()
+    corner_mask = CornerMask()
 
     audio_pipeline = get_audio_pipeline()
     led = LEDController(board=board)
@@ -370,6 +372,13 @@ def main():
     except Exception as exc:
         logger.warning("[BITOS] UI settings unavailable, using defaults (%s)", exc)
 
+    # Apply on-device font scale override from local repository
+    local_font_scale = repository.get_setting("font_scale", default=None)
+    if local_font_scale is not None:
+        if ui_settings is None:
+            ui_settings = {}
+        ui_settings["font_scale"] = float(local_font_scale)
+
     restored_state = _restore_state()
 
     right_panels = create_right_panels()
@@ -455,6 +464,7 @@ def main():
                 on_open_change_pin=open_change_pin,
                 on_open_battery=open_battery,
                 on_open_dev=open_dev,
+                on_open_font_scale=open_font_scale,
                 on_push_overlay=screen_mgr.push_overlay,
                 on_dismiss_overlay=screen_mgr.dismiss_overlay,
                 get_ble_address=gatt_server.get_device_address,
@@ -482,6 +492,9 @@ def main():
 
     def open_battery():
         screen_mgr.push(BatteryPanel(battery_monitor=battery_monitor, repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
+
+    def open_font_scale():
+        screen_mgr.push(FontScalePanel(repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
 
     def open_dev():
         screen_mgr.push(DevPanel(system_monitor=monitor, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
@@ -626,6 +639,7 @@ def main():
         screen_mgr.render(surface)
         if power_overlay is not None:
             power_overlay.render(surface, tokens)
+        corner_mask.apply(surface)
         driver.update()
 
         clock.tick(FPS)

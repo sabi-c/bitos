@@ -82,10 +82,10 @@ class HomePanel(BaseScreen):
     def handle_action(self, action: str):
         if action == "SHORT_PRESS":
             self._nav.move(1)
-        elif action == "DOUBLE_PRESS":
+        elif action == "LONG_PRESS":
             if self._on_back:
                 self._on_back()
-        elif action == "LONG_PRESS":
+        elif action == "DOUBLE_PRESS":
             self._nav.activate_focused()
         elif action == "TRIPLE_PRESS":
             self._nav.move(-1)
@@ -135,7 +135,7 @@ class HomePanel(BaseScreen):
                 pygame.draw.line(surface, HAIRLINE, (0, y + ROW_H_MIN - 1), (PHYSICAL_W, y + ROW_H_MIN - 1))
             y += ROW_H_MIN
 
-        hint = self._font_hint.render("SHORT:NEXT · LONG:SEL · DBL:BACK", False, DIM3)
+        hint = self._font_hint.render("SHORT:NEXT · DBL:SEL · LONG:BACK", False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
 
     def _open_chat(self):

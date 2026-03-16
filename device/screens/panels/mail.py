@@ -17,7 +17,7 @@ class MailPanel(BaseScreen):
     STATE_THREAD = "thread"
     STATE_DRAFT_VOICE = "draft_voice"
     STATE_CONFIRM = "confirm"
-    CONFIRM_HINT_ROWS = ["SHORT: REFINE", "LONG:  SAVE DRAFT ✓", "DBL:   DISCARD"]
+    CONFIRM_HINT_ROWS = ["SHORT: REFINE", "DBL:   SAVE DRAFT ✓", "LONG:  DISCARD"]
 
     def __init__(self, client, battery_pct: int = 84, audio_pipeline=None, led=None, on_back=None, ui_settings: dict | None = None):
         self._client = client
@@ -71,7 +71,7 @@ class MailPanel(BaseScreen):
             self._handle_confirm(action)
 
     def _handle_list(self, action: str):
-        if action == "DOUBLE_PRESS":
+        if action == "LONG_PRESS":
             if self._on_back:
                 self._on_back()
             return
@@ -81,7 +81,7 @@ class MailPanel(BaseScreen):
             self._focused_idx = (self._focused_idx + 1) % len(self._threads)
         elif action == "TRIPLE_PRESS":
             self._focused_idx = (self._focused_idx - 1) % len(self._threads)
-        elif action == "LONG_PRESS":
+        elif action == "DOUBLE_PRESS":
             selected = self._threads[self._focused_idx]
             self._selected_thread_id = str(selected.get("thread_id", ""))
             self._selected_sender = str(selected.get("sender", "CONTACT"))
@@ -90,21 +90,21 @@ class MailPanel(BaseScreen):
             self._state = self.STATE_THREAD
 
     def _handle_thread(self, action: str):
-        if action == "DOUBLE_PRESS":
+        if action == "LONG_PRESS":
             self._state = self.STATE_LIST
             return
         if action == "SHORT_PRESS":
             self._thread_offset = min(self._thread_offset + 1, max(0, len(self._messages) - 1))
         elif action == "TRIPLE_PRESS":
             self._thread_offset = max(self._thread_offset - 1, 0)
-        elif action == "LONG_PRESS":
+        elif action == "DOUBLE_PRESS":
             self._state = self.STATE_DRAFT_VOICE
 
     def _handle_draft_voice(self, action: str):
-        if action == "DOUBLE_PRESS":
+        if action == "LONG_PRESS":
             self._state = self.STATE_THREAD
             return
-        if action == "LONG_PRESS":
+        if action == "DOUBLE_PRESS":
             self._capture_and_draft()
         elif action == "SHORT_PRESS":
             return
@@ -112,12 +112,12 @@ class MailPanel(BaseScreen):
             return
 
     def _handle_confirm(self, action: str):
-        if action == "DOUBLE_PRESS":
+        if action == "LONG_PRESS":
             self._draft_text = ""
             self._state = self.STATE_THREAD
         elif action == "SHORT_PRESS":
             self._state = self.STATE_DRAFT_VOICE
-        elif action == "LONG_PRESS":
+        elif action == "DOUBLE_PRESS":
             if self._led:
                 self._led.thinking()
             draft_id = self._client.create_mail_draft(self._selected_thread_id, self._draft_text, confirmed=True)
@@ -207,7 +207,7 @@ class MailPanel(BaseScreen):
                 surface.blit(sub, (6, y + self._font_small.get_height() + 4))
                 y += row_h
 
-        hint = self._font_hint.render("SHORT:↕  LONG:OPEN  DBL:BACK", False, DIM3)
+        hint = self._font_hint.render("SHORT:↕  DBL:OPEN  LONG:BACK", False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 1))
 
     def _render_thread(self, surface: pygame.Surface):
@@ -235,7 +235,7 @@ class MailPanel(BaseScreen):
             toast = self._font_small.render(self._status_toast, False, DIM2)
             surface.blit(toast, (6, PHYSICAL_H - 26))
 
-        hint = self._font_hint.render("SHORT:↕  LONG:REPLY  DBL:BACK", False, DIM3)
+        hint = self._font_hint.render("SHORT:↕  DBL:REPLY  LONG:BACK", False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 1))
 
     def _render_draft_voice(self, surface: pygame.Surface):
@@ -258,7 +258,7 @@ class MailPanel(BaseScreen):
                 surface.blit(line, ((PHYSICAL_W - line.get_width()) // 2, y))
             y += draft_line_step
 
-        hint = self._font_hint.render("LONG:▶ SPEAK  DBL:CANCEL", False, DIM3)
+        hint = self._font_hint.render("DBL:▶ SPEAK  LONG:CANCEL", False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 1))
 
     def _render_confirm(self, surface: pygame.Surface):

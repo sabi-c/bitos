@@ -154,7 +154,7 @@ class ChatPanel(BaseScreen):
             return
 
         # Stop voice recording on any press while recording
-        if action in ("SHORT_PRESS", "LONG_PRESS") and self._is_streaming and self._voice_stop_requested is False and self._status_detail == "recording...":
+        if action in ("SHORT_PRESS", "DOUBLE_PRESS") and self._is_streaming and self._voice_stop_requested is False and self._status_detail == "recording...":
             self._voice_stop_requested = True
             return
 
@@ -174,13 +174,13 @@ class ChatPanel(BaseScreen):
                 self._status_detail = "new chat"
             return
 
-        if action == "DOUBLE_PRESS":
+        if action == "LONG_PRESS":
             if self._on_back:
                 self._on_back()
             return
 
-        if action == "LONG_PRESS":
-            # VERIFIED: LONG_PRESS in chat starts voice capture and status updates to "recording...".
+        if action == "DOUBLE_PRESS":
+            # VERIFIED: DOUBLE_PRESS in chat starts voice capture and status updates to "recording...".
             if self._showing_templates() and self._templates:
                 self._send_template_message(self._templates[self._template_index])
                 return
@@ -235,7 +235,7 @@ class ChatPanel(BaseScreen):
             indicator = self._font_small.render(dots, False, DIM3)
             surface.blit(indicator, (4, max_y - 8))
         elif self._can_retry():
-            hint = self._font_small.render("R/LONG: retry", False, DIM1)
+            hint = self._font_small.render("R/DBL: retry", False, DIM1)
             surface.blit(hint, (4, max_y - 8))
 
         queue_status = self._queue_status_copy()
@@ -263,9 +263,9 @@ class ChatPanel(BaseScreen):
         if self._status_detail == "recording...":
             hint_text = "TAP:STOP RECORDING"
         elif self._showing_templates():
-            hint_text = "SHORT:NEXT \u00b7 LONG:SEND \u00b7 DBL:BACK"
+            hint_text = "SHORT:NEXT \u00b7 DBL:SEND \u00b7 LONG:BACK"
         else:
-            hint_text = "SHORT:SCROLL \u00b7 LONG:VOICE \u00b7 DBL:BACK"
+            hint_text = "SHORT:SCROLL \u00b7 DBL:VOICE \u00b7 LONG:BACK"
         hint = self._font_hint.render(hint_text, False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 1))
 

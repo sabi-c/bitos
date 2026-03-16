@@ -42,7 +42,7 @@ class QuickCaptureOverlay:
         if self._saved_until and time.time() < self._saved_until:
             self._draw_line(surface, "CAPTURED ✓", 8, y=PHYSICAL_H - 34)
 
-        self._draw_line(surface, "LONG:SAVE · DBL:CANCEL · TAB:MODE", 4, y=PHYSICAL_H - 16, small=True, dim=True)
+        self._draw_line(surface, "DBL:SAVE · LONG:CANCEL · TAB:MODE", 4, y=PHYSICAL_H - 16, small=True, dim=True)
 
     def _draw_line(self, surface, text: str, x: int, y: int, small: bool = False, dim: bool = False):
         key = "small" if small else "body"
@@ -69,15 +69,15 @@ class QuickCaptureOverlay:
         return True
 
     def handle_input(self, action: str) -> bool:
-        # VERIFIED: DOUBLE cancels; LONG saves and then toast is shown by runtime callback.
-        if action == "DOUBLE_PRESS":
+        # VERIFIED: LONG cancels; DBL saves and then toast is shown by runtime callback.
+        if action == "LONG_PRESS":
             if self._on_dismiss:
                 self._on_dismiss()
             return False
         if action == "TRIPLE_PRESS":
             self._mode = "keyboard" if self._mode == "voice" else "voice"
             return True
-        if action == "LONG_PRESS":
+        if action == "DOUBLE_PRESS":
             self._confirm_and_save()
             return True
         return True

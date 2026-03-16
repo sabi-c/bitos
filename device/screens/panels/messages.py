@@ -88,7 +88,7 @@ class MessagesPanel(BaseScreen):
             self._handle_confirm(action)
 
     def _handle_list(self, action: str):
-        if action == "DOUBLE_PRESS":
+        if action == "LONG_PRESS":
             if self._on_back:
                 self._on_back()
             return
@@ -98,7 +98,7 @@ class MessagesPanel(BaseScreen):
             self._focused_idx = (self._focused_idx + 1) % len(self._conversations)
         elif action == "TRIPLE_PRESS":
             self._focused_idx = (self._focused_idx - 1) % len(self._conversations)
-        elif action == "LONG_PRESS":
+        elif action == "DOUBLE_PRESS":
             selected = self._conversations[self._focused_idx]
             self._selected_chat_id = str(selected.get("chat_id", ""))
             self._selected_title = str(selected.get("title", "CONTACT"))
@@ -106,21 +106,21 @@ class MessagesPanel(BaseScreen):
             self._state = self.STATE_THREAD
 
     def _handle_thread(self, action: str):
-        if action == "DOUBLE_PRESS":
+        if action == "LONG_PRESS":
             self._state = self.STATE_LIST
             return
         if action == "SHORT_PRESS":
             self._thread_offset = min(self._thread_offset + 1, max(0, len(self._messages) - 1))
         elif action == "TRIPLE_PRESS":
             self._thread_offset = max(self._thread_offset - 1, 0)
-        elif action == "LONG_PRESS":
+        elif action == "DOUBLE_PRESS":
             self._state = self.STATE_DRAFT_VOICE
 
     def _handle_draft_voice(self, action: str):
-        if action == "DOUBLE_PRESS":
+        if action == "LONG_PRESS":
             self._state = self.STATE_THREAD
             return
-        if action == "LONG_PRESS":
+        if action == "DOUBLE_PRESS":
             self._capture_and_draft()
         elif action == "SHORT_PRESS":
             return
@@ -128,12 +128,12 @@ class MessagesPanel(BaseScreen):
             return
 
     def _handle_confirm(self, action: str):
-        if action == "DOUBLE_PRESS":
+        if action == "LONG_PRESS":
             self._draft_text = ""
             self._state = self.STATE_THREAD
         elif action == "SHORT_PRESS":
             self._state = self.STATE_DRAFT_VOICE
-        elif action == "LONG_PRESS":
+        elif action == "DOUBLE_PRESS":
             self._status_toast = "Sending..."
             if self._led:
                 self._led.thinking()
@@ -226,7 +226,7 @@ class MessagesPanel(BaseScreen):
                 surface.blit(sub, (PAD_WIDGET, y + LIST_SNIPPET_TOP_PAD))
                 y += row_h
 
-        hint = self._font_hint.render("SHORT:↕  LONG:OPEN  DBL:BACK", False, DIM3)
+        hint = self._font_hint.render("SHORT:↕  DBL:OPEN  LONG:BACK", False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - HINT_MARGIN_BOTTOM))
 
     def _render_thread(self, surface: pygame.Surface):
@@ -247,7 +247,7 @@ class MessagesPanel(BaseScreen):
             toast = self._font_small.render(self._status_toast, False, DIM2)
             surface.blit(toast, (PAD_WIDGET, PHYSICAL_H - ROW_H_MIN))
 
-        hint = self._font_hint.render("SHORT:↕  LONG:REPLY  DBL:BACK", False, DIM3)
+        hint = self._font_hint.render("SHORT:↕  DBL:REPLY  LONG:BACK", False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - HINT_MARGIN_BOTTOM))
 
     def _render_draft_voice(self, surface: pygame.Surface):
@@ -266,20 +266,20 @@ class MessagesPanel(BaseScreen):
                 surface.blit(line, ((PHYSICAL_W - line.get_width()) // 2, y))
             y += TEXT_LINE_STEP
 
-        hint = self._font_hint.render("LONG:▶ SPEAK  DBL:CANCEL", False, DIM3)
+        hint = self._font_hint.render("DBL:▶ SPEAK  LONG:CANCEL", False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - HINT_MARGIN_BOTTOM))
 
     def _render_confirm(self, surface: pygame.Surface):
         self._render_status_bar(surface, "DRAFT")
         self.render_confirm(surface)
-        hint_rows = ["[SHORT]  REFINE", "[LONG ]  SEND ✓", "[DBL  ]  DISCARD"]
+        hint_rows = ["[SHORT]  REFINE", "[DBL  ]  SEND ✓", "[LONG ]  DISCARD"]
         y = STATUS_BAR_H + CONFIRM_HINT_START_Y
         for row in hint_rows:
             line = self._font_small.render(row, False, WHITE)
             surface.blit(line, ((PHYSICAL_W - line.get_width()) // 2, y))
             y += CONFIRM_HINT_ROW_STEP
 
-        hint = self._font_hint.render("SHORT:REFINE  LONG:SEND  DBL:BACK", False, DIM3)
+        hint = self._font_hint.render("SHORT:REFINE  DBL:SEND  LONG:BACK", False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - HINT_MARGIN_BOTTOM))
 
     def render_confirm(self, surface: pygame.Surface):

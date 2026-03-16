@@ -100,7 +100,7 @@ class PasskeyOverlay:
         surface.blit(line2, ((PHYSICAL_W - line2.get_width()) // 2, 180))
 
         # ── Key hint bar ──
-        hint = hint_font.render("DBL:CANCEL", False, DIM3)
+        hint = hint_font.render("LONG:CANCEL", False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
 
     def _render_result(self, surface, body_font, small_font, message, color):
@@ -127,8 +127,8 @@ class PasskeyOverlay:
     # ── Input ─────────────────────────────────────────────────────
 
     def handle_input(self, action: str) -> bool:
-        """Only DOUBLE_PRESS cancels. Everything else is consumed (blocked)."""
-        if action == "DOUBLE_PRESS" and self._state == "showing":
+        """Only LONG_PRESS cancels. Everything else is consumed (blocked)."""
+        if action == "LONG_PRESS" and self._state == "showing":
             self._state = "failed"
             if self._on_cancelled:
                 self._on_cancelled()

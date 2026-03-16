@@ -38,6 +38,7 @@ class SettingsPanel(BaseScreen):
         on_open_change_pin=None,
         on_open_battery=None,
         on_open_dev=None,
+        on_open_font_scale=None,
         get_ble_address=None,
         on_set_discoverable=None,
         on_push_overlay=None,
@@ -56,6 +57,7 @@ class SettingsPanel(BaseScreen):
         self._on_open_change_pin = on_open_change_pin
         self._on_open_battery = on_open_battery
         self._on_open_dev = on_open_dev
+        self._on_open_font_scale = on_open_font_scale
         self._get_ble_address = get_ble_address or (lambda: "mock-BT-addr")
         self._on_set_discoverable = on_set_discoverable or (lambda _enabled, _timeout: None)
         self._on_push_overlay = on_push_overlay
@@ -85,6 +87,7 @@ class SettingsPanel(BaseScreen):
             NavItem(key="ai_model", label="AI MODEL", status="", action=self._open_model_picker),
             NavItem(key="agent_mode", label="AGENT MODE", status="", action=self._open_agent_mode),
             NavItem(key="sleep", label="SLEEP TIMER", status="", action=self._open_sleep_timer),
+            NavItem(key="font_scale", label="FONT SCALE", status="", action=self._open_font_scale),
             NavItem(key="about", label="ABOUT", status="", action=self._open_about),
             NavItem(key="battery", label="BATTERY", status="", action=self._open_battery),
             NavItem(key="companion", label="COMPANION APP", status="", action=self._open_companion_app),
@@ -102,10 +105,11 @@ class SettingsPanel(BaseScreen):
         self._ai_model = str(self._repo.get_setting("ai_model", default="claude-sonnet-4-6"))
         self._agent_mode = str(self._repo.get_setting("agent_mode", default="producer"))
         self._sleep_sec = int(self._repo.get_setting("sleep_timeout_seconds", default=60))
+        self._font_scale_val = float(self._repo.get_setting("font_scale", default=1.0) or 1.0)
         self._refresh_integration_status()
 
     def handle_action(self, action: str):
-        if action == "LONG_PRESS":
+        if action == "DOUBLE_PRESS":
             focused = self._nav.focused_item
             if focused and focused.key in {"imessage", "vikunja"}:
                 self._open_integration_detail(focused.key)
@@ -113,7 +117,7 @@ class SettingsPanel(BaseScreen):
                 self._nav.activate_focused()
         elif action == "SHORT_PRESS":
             self._nav.move(1)
-        elif action == "DOUBLE_PRESS":
+        elif action == "LONG_PRESS":
             self._go_back()
         elif action == "TRIPLE_PRESS":
             self._nav.move(-1)
@@ -144,6 +148,7 @@ class SettingsPanel(BaseScreen):
             "ai_model": _compact_model_label(self._ai_model) + " \u203a",
             "agent_mode": self._agent_mode[:10].upper() + " \u203a",
             "sleep": f"{self._sleep_sec}s \u203a",
+            "font_scale": f"{self._font_scale_val:.1f}x \u203a",
             "about": "v1.0 \u203a",
             "companion": "PAIR \u203a",
             "battery": "\u203a",
@@ -182,7 +187,7 @@ class SettingsPanel(BaseScreen):
             y += ROW_H_MIN
 
         # ── Key hint bar: 4px font, spec format ──
-        hint = self._font_hint.render("SHORT:NEXT \u00b7 LONG:OPEN/TOGGLE \u00b7 DBL:BACK", False, DIM3)
+        hint = self._font_hint.render("SHORT:NEXT \u00b7 DBL:OPEN/TOGGLE \u00b7 LONG:BACK", False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
 
     def _toggle_web_search(self):
@@ -208,6 +213,10 @@ class SettingsPanel(BaseScreen):
     def _open_sleep_timer(self):
         if self._on_open_sleep_timer:
             self._on_open_sleep_timer()
+
+    def _open_font_scale(self):
+        if self._on_open_font_scale:
+            self._on_open_font_scale()
 
     def _open_about(self):
         if self._on_open_about:
@@ -320,12 +329,12 @@ class ModelPickerPanel(BaseScreen):
     def handle_action(self, action: str):
         if action == "SHORT_PRESS":
             self._index = (self._index + 1) % len(self.OPTIONS)
-        elif action == "LONG_PRESS":
+        elif action == "DOUBLE_PRESS":
             self._repo.set_setting("ai_model", self.OPTIONS[self._index][1])
             self.on_enter()
             if self._on_back:
                 self._on_back()
-        elif action == "DOUBLE_PRESS":
+        elif action == "LONG_PRESS":
             if self._on_back:
                 self._on_back()
         elif action == "TRIPLE_PRESS":
@@ -333,7 +342,7 @@ class ModelPickerPanel(BaseScreen):
 
     def handle_input(self, event: pygame.event.Event):
         if event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_SPACE):
-            self.handle_action("LONG_PRESS")
+            self.handle_action("DOUBLE_PRESS")
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             if self._on_back:
                 self._on_back()
@@ -372,7 +381,7 @@ class ModelPickerPanel(BaseScreen):
             y += ROW_H_MIN
 
         # ── Key hint bar ──
-        hint = self._font_hint.render("SHORT:NEXT \u00b7 LONG:SELECT \u00b7 DBL:BACK", False, DIM3)
+        hint = self._font_hint.render("SHORT:NEXT \u00b7 DBL:SELECT \u00b7 LONG:BACK", False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
 
 
@@ -409,12 +418,12 @@ class AgentModePanel(BaseScreen):
     def handle_action(self, action: str):
         if action == "SHORT_PRESS":
             self._index = (self._index + 1) % len(self.OPTIONS)
-        elif action == "LONG_PRESS":
+        elif action == "DOUBLE_PRESS":
             self._repo.set_setting("agent_mode", self.OPTIONS[self._index])
             self.on_enter()
             if self._on_back:
                 self._on_back()
-        elif action == "DOUBLE_PRESS":
+        elif action == "LONG_PRESS":
             if self._on_back:
                 self._on_back()
         elif action == "TRIPLE_PRESS":
@@ -422,7 +431,7 @@ class AgentModePanel(BaseScreen):
 
     def handle_input(self, event: pygame.event.Event):
         if event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_SPACE):
-            self.handle_action("LONG_PRESS")
+            self.handle_action("DOUBLE_PRESS")
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             if self._on_back:
                 self._on_back()
@@ -461,12 +470,12 @@ class AgentModePanel(BaseScreen):
             y += ROW_H_MIN
 
         # ── Key hint bar ──
-        hint = self._font_hint.render("SHORT:NEXT \u00b7 LONG:SELECT \u00b7 DBL:BACK", False, DIM3)
+        hint = self._font_hint.render("SHORT:NEXT \u00b7 DBL:SELECT \u00b7 LONG:BACK", False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
 
 
 class SleepTimerPanel(BaseScreen):
-    """Sleep timer picker — cycle through timeout values, save on LONG_PRESS."""
+    """Sleep timer picker — cycle through timeout values, save on DOUBLE_PRESS."""
     _owns_status_bar = True
 
     OPTIONS = [
@@ -505,18 +514,18 @@ class SleepTimerPanel(BaseScreen):
             self._index = (self._index + 1) % len(self.OPTIONS)
         elif action == "TRIPLE_PRESS":
             self._index = (self._index - 1) % len(self.OPTIONS)
-        elif action == "LONG_PRESS":
+        elif action == "DOUBLE_PRESS":
             self._repo.set_setting("sleep_timeout_seconds", self.OPTIONS[self._index][0])
             if self._on_back:
                 self._on_back()
-        elif action == "DOUBLE_PRESS":
+        elif action == "LONG_PRESS":
             if self._on_back:
                 self._on_back()
 
     def handle_input(self, event: pygame.event.Event):
         if event.type == pygame.KEYDOWN:
             if event.key in (pygame.K_RETURN, pygame.K_SPACE):
-                self.handle_action("LONG_PRESS")
+                self.handle_action("DOUBLE_PRESS")
             elif event.key == pygame.K_ESCAPE:
                 if self._on_back:
                     self._on_back()
@@ -549,7 +558,7 @@ class SleepTimerPanel(BaseScreen):
             y += ROW_H_MIN
 
         # ── Key hint bar ──
-        hint = self._font_hint.render("SHORT:NEXT \u00b7 LONG:SELECT \u00b7 DBL:BACK", False, DIM3)
+        hint = self._font_hint.render("SHORT:NEXT \u00b7 DBL:SELECT \u00b7 LONG:BACK", False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
 
 
@@ -565,9 +574,9 @@ class AboutPanel(BaseScreen):
         self._font_hint = load_ui_font("hint", self._ui_settings)
 
     def handle_action(self, action: str):
-        if action == "DOUBLE_PRESS" and self._on_back:
+        if action == "LONG_PRESS" and self._on_back:
             self._on_back()
-        elif action in {"SHORT_PRESS", "LONG_PRESS", "TRIPLE_PRESS"}:
+        elif action in {"SHORT_PRESS", "DOUBLE_PRESS", "TRIPLE_PRESS"}:
             return
 
     def handle_input(self, event: pygame.event.Event):
@@ -597,7 +606,7 @@ class AboutPanel(BaseScreen):
             y += ROW_H_MIN
 
         # ── Key hint bar ──
-        hint = self._font_hint.render("DBL:BACK", False, DIM3)
+        hint = self._font_hint.render("LONG:BACK", False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
 
 
@@ -638,19 +647,19 @@ class BatteryPanel(BaseScreen):
                 self._threshold_index = (self._threshold_index + 1) % len(self.SHUTDOWN_OPTIONS)
             elif action == "TRIPLE_PRESS":
                 self._threshold_index = (self._threshold_index - 1) % len(self.SHUTDOWN_OPTIONS)
-            elif action == "LONG_PRESS":
+            elif action == "DOUBLE_PRESS":
                 new_val = self.SHUTDOWN_OPTIONS[self._threshold_index]
                 self._repo.set_setting("safe_shutdown_pct", new_val)
                 self._shutdown_threshold = new_val
                 self._battery.configure_safe_shutdown(threshold_pct=new_val, delay_s=30)
                 self._editing_threshold = False
-            elif action == "DOUBLE_PRESS":
+            elif action == "LONG_PRESS":
                 self._editing_threshold = False
             return
 
-        if action == "LONG_PRESS":
+        if action == "DOUBLE_PRESS":
             self._editing_threshold = True
-        elif action == "DOUBLE_PRESS":
+        elif action == "LONG_PRESS":
             if self._on_back:
                 self._on_back()
 
@@ -723,9 +732,9 @@ class BatteryPanel(BaseScreen):
 
         # Hint
         if self._editing_threshold:
-            hint_text = "SHORT:NEXT \u00b7 LONG:SAVE \u00b7 DBL:CANCEL"
+            hint_text = "SHORT:NEXT \u00b7 DBL:SAVE \u00b7 LONG:CANCEL"
         else:
-            hint_text = "LONG:EDIT SHUTDOWN \u00b7 DBL:BACK"
+            hint_text = "DBL:EDIT SHUTDOWN \u00b7 LONG:BACK"
         hint = self._font_hint.render(hint_text, False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
 
@@ -762,7 +771,7 @@ class DevPanel(BaseScreen):
         self._snapshot = self._monitor.get_snapshot()
 
     def handle_action(self, action: str):
-        if action == "DOUBLE_PRESS":
+        if action == "LONG_PRESS":
             if self._on_back:
                 self._on_back()
 
@@ -824,7 +833,7 @@ class DevPanel(BaseScreen):
             y += ROW_H_MIN
 
         # Hint
-        hint = self._font_hint.render("DBL:BACK \u00b7 AUTO-REFRESH 2S", False, DIM3)
+        hint = self._font_hint.render("LONG:BACK \u00b7 AUTO-REFRESH 2S", False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
 
     @staticmethod
@@ -851,6 +860,102 @@ class DevPanel(BaseScreen):
             return result.stdout.strip() or "unknown"
         except Exception:
             return "unknown"
+
+
+class FontScalePanel(BaseScreen):
+    """Font scale picker — cycle through scale multipliers, save on DOUBLE_PRESS."""
+    _owns_status_bar = True
+
+    OPTIONS = [
+        (1.0, "1.0x DEFAULT"),
+        (1.2, "1.2x MEDIUM"),
+        (1.5, "1.5x LARGE"),
+    ]
+
+    def __init__(self, repository: DeviceRepository, on_back=None, ui_settings: dict | None = None):
+        self._repo = repository
+        self._on_back = on_back
+
+        self._ui_settings = merge_runtime_ui_settings(ui_settings)
+        self._font_body = load_ui_font("body", self._ui_settings)
+        self._font_small = load_ui_font("small", self._ui_settings)
+        self._font_hint = load_ui_font("hint", self._ui_settings)
+
+        self._scale = float(self._repo.get_setting("font_scale", default=1.0) or 1.0)
+        self._index = self._find_index(self._scale)
+
+    def _find_index(self, scale: float) -> int:
+        for i, (val, _) in enumerate(self.OPTIONS):
+            if abs(val - scale) < 0.01:
+                return i
+        return 0
+
+    def on_enter(self):
+        self._scale = float(self._repo.get_setting("font_scale", default=1.0) or 1.0)
+        self._index = self._find_index(self._scale)
+
+    def handle_action(self, action: str):
+        if action == "SHORT_PRESS":
+            self._index = (self._index + 1) % len(self.OPTIONS)
+        elif action == "TRIPLE_PRESS":
+            self._index = (self._index - 1) % len(self.OPTIONS)
+        elif action == "DOUBLE_PRESS":
+            self._repo.set_setting("font_scale", self.OPTIONS[self._index][0])
+            if self._on_back:
+                self._on_back()
+        elif action == "LONG_PRESS":
+            if self._on_back:
+                self._on_back()
+
+    def handle_input(self, event: pygame.event.Event):
+        if event.type == pygame.KEYDOWN:
+            if event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                self.handle_action("DOUBLE_PRESS")
+            elif event.key == pygame.K_ESCAPE:
+                if self._on_back:
+                    self._on_back()
+
+    def render(self, surface: pygame.Surface):
+        surface.fill(BLACK)
+
+        # ── Status bar: inverted ──
+        pygame.draw.rect(surface, WHITE, pygame.Rect(0, 0, PHYSICAL_W, STATUS_BAR_H))
+        title = self._font_small.render("FONT SCALE", False, BLACK)
+        surface.blit(title, (6, (STATUS_BAR_H - title.get_height()) // 2))
+
+        # ── Options list ──
+        y = STATUS_BAR_H + 2
+        for i, (val, label) in enumerate(self.OPTIONS):
+            focused = i == self._index
+            is_active = abs(val - self._scale) < 0.01
+            if focused:
+                pygame.draw.rect(surface, WHITE, pygame.Rect(0, y, PHYSICAL_W, ROW_H_MIN))
+            row_color = BLACK if focused else (WHITE if is_active else DIM2)
+            row = self._font_body.render(label, False, row_color)
+            text_y = y + (ROW_H_MIN - row.get_height()) // 2
+            surface.blit(row, (8, text_y))
+            if is_active:
+                badge_color = BLACK if focused else DIM2
+                badge = self._font_small.render("ACTIVE", False, badge_color)
+                surface.blit(badge, (PHYSICAL_W - badge.get_width() - 8, text_y + 2))
+            if not focused:
+                pygame.draw.line(surface, HAIRLINE, (0, y + ROW_H_MIN - 1), (PHYSICAL_W, y + ROW_H_MIN - 1))
+            y += ROW_H_MIN
+
+        # ── Preview line ──
+        y += 8
+        preview_size = max(5, int(round(8 * self.OPTIONS[self._index][0])))
+        try:
+            from display.tokens import FONT_PATH
+            preview_font = pygame.font.Font(FONT_PATH, preview_size)
+        except Exception:
+            preview_font = pygame.font.SysFont("monospace", preview_size)
+        preview = preview_font.render("HELLO WORLD", False, DIM2)
+        surface.blit(preview, (8, y))
+
+        # ── Key hint bar ──
+        hint = self._font_hint.render("SHORT:NEXT \u00b7 DBL:SELECT \u00b7 LONG:BACK", False, DIM3)
+        surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
 
 
 def _compact_model_label(model: str) -> str:

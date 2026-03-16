@@ -28,7 +28,7 @@ class CapturesPanel(BaseScreen):
 
     def handle_action(self, action: str):
         items = self._items()
-        if action == "DOUBLE_PRESS":
+        if action == "LONG_PRESS":
             if self._on_back:
                 self._on_back()
             return
@@ -40,7 +40,7 @@ class CapturesPanel(BaseScreen):
             self._cursor = (self._cursor + 1) % len(items)
         elif action == "TRIPLE_PRESS":
             self._cursor = (self._cursor - 1) % len(items)
-        elif action == "LONG_PRESS":
+        elif action == "DOUBLE_PRESS":
             item = items[self._cursor]
             try:
                 from pathlib import Path

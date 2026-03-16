@@ -28,9 +28,9 @@ class ButtonEvent(Enum):
     HOLD_END = auto()
 
 
-DEBOUNCE_S = 0.030
-LONG_PRESS_S = 0.600
-CLICK_TIMEOUT_S = 0.400
+DEBOUNCE_S = 0.020
+LONG_PRESS_S = 0.400
+CLICK_TIMEOUT_S = 0.200
 POWER_PRESS_COUNT = 5
 POWER_WINDOW_S = 1.200
 
@@ -79,10 +79,10 @@ class ButtonHandler:
     def handle_pygame_event(self, event: pygame.event.Event) -> bool:
         if self._keyboard_mode and event.type == pygame.KEYDOWN:
             if event.key == pygame.K_RETURN:
-                self._emit(ButtonEvent.LONG_PRESS)
+                self._emit(ButtonEvent.DOUBLE_PRESS)
                 return True
             if event.key == pygame.K_BACKSPACE:
-                self._emit(ButtonEvent.DOUBLE_PRESS)
+                self._emit(ButtonEvent.LONG_PRESS)
                 return True
             if event.key == pygame.K_TAB:
                 self._emit(ButtonEvent.TRIPLE_PRESS)

@@ -38,18 +38,18 @@ class SettingsWiringTests(unittest.TestCase):
         self.assertTrue(self.repo.get_setting("web_search", default=True))
         self.assertTrue(self.repo.get_setting("memory", default=True))
 
-        panel.handle_action("LONG_PRESS")  # web_search toggle
+        panel.handle_action("DOUBLE_PRESS")  # web_search toggle
         self.assertFalse(self.repo.get_setting("web_search", default=True))
 
         panel.handle_action("SHORT_PRESS")  # move to memory
-        panel.handle_action("LONG_PRESS")  # memory toggle
+        panel.handle_action("DOUBLE_PRESS")  # memory toggle
         self.assertFalse(self.repo.get_setting("memory", default=True))
 
     def test_model_picker_persists_selection(self):
         picker = ModelPickerPanel(repository=self.repo)
 
         picker.handle_action("SHORT_PRESS")  # opus
-        picker.handle_action("LONG_PRESS")
+        picker.handle_action("DOUBLE_PRESS")
 
         self.assertEqual(self.repo.get_setting("ai_model", default="claude-sonnet-4-6"), "claude-opus-4-6")
 
@@ -58,7 +58,7 @@ class SettingsWiringTests(unittest.TestCase):
 
         panel.handle_action("SHORT_PRESS")  # clown
         panel.handle_action("SHORT_PRESS")  # monk
-        panel.handle_action("LONG_PRESS")
+        panel.handle_action("DOUBLE_PRESS")
 
         self.assertEqual(self.repo.get_setting("agent_mode", default="producer"), "monk")
 
