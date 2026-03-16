@@ -43,7 +43,7 @@ _GENERIC_CONFIGS = {
 }
 
 
-def create_right_panels(panel_openers: dict | None = None) -> dict:
+def create_right_panels(panel_openers: dict | None = None, repository=None) -> dict:
     """Create preview panels keyed by sidebar label.
 
     Args:
@@ -57,11 +57,22 @@ def create_right_panels(panel_openers: dict | None = None) -> dict:
     def chat_action(action_key):
         if action_key == "back":
             return  # handled by CompositeScreen (returns focus to sidebar)
+        if action_key == "respond":
+            opener = openers.get("CHAT")
+            if opener is not None:
+                opener()
+            return
+        if action_key == "settings":
+            opener = openers.get("CHAT_SETTINGS")
+            if opener is not None:
+                opener()
+            return
+        # new_chat, resume_chat, chat_history → open chat
         opener = openers.get("CHAT")
         if opener is not None:
             opener()
 
-    panels["CHAT"] = ChatPreviewPanel(on_action=chat_action)
+    panels["CHAT"] = ChatPreviewPanel(on_action=chat_action, repository=repository)
 
     # ── Tasks: custom preview panel ──
     def tasks_action(action_key):

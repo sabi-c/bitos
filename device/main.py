@@ -2,6 +2,7 @@
 import json
 import logging
 import os
+import threading
 
 try:
     from dotenv import load_dotenv
@@ -383,7 +384,61 @@ def main():
             "MUSIC": lambda: None,  # not yet implemented
             "HISTORY": open_captures,
         }
-        right_panels = create_right_panels(panel_openers=panel_openers)
+        right_panels = create_right_panels(panel_openers=panel_openers, repository=repository)
+
+        # Fetch greeting for chat preview
+        def _fetch_greeting():
+            try:
+                existing = repository.get_greeting_session()
+                if existing:
+                    msgs = repository.get_session_messages(str(existing["id"]), limit=1)
+                    if msgs:
+                        chat_panel = right_panels.get("CHAT")
+                        if chat_panel and hasattr(chat_panel, "set_greeting"):
+                            chat_panel.set_greeting(msgs[0]["text"], session_id=existing["id"])
+                    return
+
+                # No recent greeting — request one from backend
+                result = client.chat(
+                    "Give a brief contextual greeting in under 100 characters. "
+                    "Lowercase, casual, no emojis. Mention time of day and any "
+                    "relevant tasks or context."
+                )
+                greeting_text = ""
+                if isinstance(result, dict) and result.get("error"):
+                    logger.warning("greeting_fetch_error: %s", result.get("error"))
+                    return
+                for chunk in result:
+                    greeting_text += chunk
+                greeting_text = greeting_text.strip()[:120]
+
+                if greeting_text:
+                    sid = repository.create_greeting_session(greeting_text)
+                    chat_panel = right_panels.get("CHAT")
+                    if chat_panel and hasattr(chat_panel, "set_greeting"):
+                        chat_panel.set_greeting(greeting_text, session_id=sid)
+            except Exception as exc:
+                logger.warning("greeting_fetch_failed: %s", exc)
+
+        threading.Thread(target=_fetch_greeting, daemon=True).start()
+
+        # Set resume info on chat preview
+        latest_chat = repository.get_latest_chat_session()
+        if latest_chat:
+            age_s = time.time() - float(latest_chat.get("updated_at", 0))
+            if age_s < 60:
+                time_ago = "just now"
+            elif age_s < 3600:
+                time_ago = f"{int(age_s / 60)}m ago"
+            elif age_s < 86400:
+                time_ago = f"{int(age_s / 3600)}h ago"
+            else:
+                time_ago = f"{int(age_s / 86400)}d ago"
+            title = str(latest_chat.get("title", ""))[:16] or "untitled"
+            chat_panel = right_panels.get("CHAT")
+            if chat_panel and hasattr(chat_panel, "set_resume_info"):
+                chat_panel.set_resume_info(title, time_ago)
+
         home = CompositeScreen(
             panel_openers=panel_openers,
             status_state=status_state,
