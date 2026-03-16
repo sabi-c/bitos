@@ -294,6 +294,50 @@ class ChatPanel(BaseScreen):
             return [("tap", "STOP")]
         return []  # STREAMING — render plain text instead
 
+    @staticmethod
+    def _split_into_pages(lines: list[str], lines_per_page: int, max_pages: int = 4) -> list[list[str]]:
+        """Split wrapped lines into pages, preferring paragraph boundaries."""
+        if not lines or lines_per_page <= 0:
+            return [lines] if lines else [[]]
+
+        total = len(lines)
+        if total <= lines_per_page:
+            return [lines]
+
+        pages: list[list[str]] = []
+        pos = 0
+
+        while pos < total and len(pages) < max_pages:
+            if len(pages) == max_pages - 1:
+                # Last allowed page — take remaining, truncate if needed
+                remaining = lines[pos:]
+                if len(remaining) > lines_per_page:
+                    page = remaining[:lines_per_page]
+                    page[-1] = page[-1].rstrip() + "..."
+                else:
+                    page = remaining
+                pages.append(page)
+                break
+
+            end = min(pos + lines_per_page, total)
+
+            # Look for paragraph break (empty line) within ±2 lines of boundary
+            best_break = None
+            for i in range(max(pos + 1, end - 2), min(end + 3, total)):
+                if i < total and lines[i].strip() == "":
+                    best_break = i + 1  # include the empty line
+                    break
+
+            if best_break and best_break > pos:
+                page = lines[pos:best_break]
+            else:
+                page = lines[pos:end]
+
+            pages.append(page)
+            pos += len(page)
+
+        return pages if pages else [[]]
+
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
 

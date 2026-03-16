@@ -197,6 +197,39 @@ class ChatModeTests(unittest.TestCase):
         self.assertTrue(called)
         self.assertEqual(panel._mode, ChatMode.IDLE)
 
+    def test_split_into_pages_single_page(self):
+        panel = self._make_panel()
+        lines = ["line one", "line two", "line three"]
+        pages = panel._split_into_pages(lines, lines_per_page=9)
+        self.assertEqual(len(pages), 1)
+        self.assertEqual(pages[0], lines)
+
+    def test_split_into_pages_multiple(self):
+        panel = self._make_panel()
+        lines = [f"line {i}" for i in range(20)]
+        pages = panel._split_into_pages(lines, lines_per_page=9)
+        self.assertEqual(len(pages), 3)
+        self.assertEqual(len(pages[0]), 9)
+        self.assertEqual(len(pages[1]), 9)
+        self.assertEqual(len(pages[2]), 2)
+
+    def test_split_into_pages_max_four(self):
+        panel = self._make_panel()
+        lines = [f"line {i}" for i in range(50)]
+        pages = panel._split_into_pages(lines, lines_per_page=9)
+        self.assertEqual(len(pages), 4)
+        # Last line of page 4 should end with "..."
+        self.assertTrue(pages[3][-1].endswith("..."))
+
+    def test_split_into_pages_paragraph_boundary(self):
+        panel = self._make_panel()
+        # Lines with a paragraph break (empty line) near page boundary
+        lines = [f"line {i}" for i in range(7)] + [""] + [f"para2 line {i}" for i in range(5)]
+        pages = panel._split_into_pages(lines, lines_per_page=9)
+        # Should split at the paragraph break (after empty line at index 7)
+        self.assertEqual(len(pages), 2)
+        self.assertEqual(pages[0][-1], "")  # empty line at end of page 1
+
 
 if __name__ == "__main__":
     unittest.main()
