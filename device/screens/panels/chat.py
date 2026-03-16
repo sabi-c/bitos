@@ -320,6 +320,33 @@ class ChatPanel(BaseScreen):
                 speed = str(saved_speed)
         self._page_typewriter = TypewriterRenderer(page_text, speed=speed)
 
+    def _build_pages(self, response_text: str, user_message: str = "") -> None:
+        """Split response into paginated pages and start typewriter on page 1."""
+        # Context header: truncated user message
+        if user_message:
+            truncated = user_message[:35]
+            if len(user_message) > 35:
+                truncated += "..."
+            self._context_header = f"> {truncated}"
+        else:
+            self._context_header = ""
+
+        # Calculate available lines per page
+        header_lines = 1 if self._context_header else 0
+        hint_px = 14  # compact hint line
+        available_h = PHYSICAL_H - (SAFE_INSET + STATUS_BAR_H + 2) - SAFE_INSET - hint_px
+        lines_per_page = max(1, int(available_h / self._line_height) - header_lines - 1)  # -1 for page indicator
+
+        # Word-wrap full response
+        wrapped = self._wrap_text(response_text, PHYSICAL_W - SAFE_INSET * 2)
+
+        # Split into pages
+        self._pages = self._split_into_pages(wrapped, lines_per_page)
+        self._current_page = 0
+        self._page_revealed = [False] * len(self._pages)
+        self._page_typewriter = None
+        self._start_page_typewriter()
+
     def _get_action_bar_content(self) -> list[tuple[str, str]]:
         """Return action bar items for the current mode."""
         if self._mode == ChatMode.IDLE:
@@ -785,6 +812,9 @@ class ChatPanel(BaseScreen):
                 if saved_speed:
                     speed = str(saved_speed)
             self._typewriter = TypewriterRenderer(response_text, speed=speed)
+
+            # Build paginated view
+            self._build_pages(response_text, user_message=message)
 
             if self._repository and self._session_id is not None:
                 self._repository.add_message(self._session_id, "assistant", response_text)

@@ -282,5 +282,28 @@ class ChatModeTests(unittest.TestCase):
         self.assertIsNone(panel._page_typewriter)
 
 
+    def test_build_pages_from_response(self):
+        panel = self._make_panel()
+        panel._context_header = ""
+        panel._build_pages("hello world. this is a test response.")
+        self.assertGreaterEqual(len(panel._pages), 1)
+        self.assertEqual(panel._current_page, 0)
+        self.assertEqual(len(panel._page_revealed), len(panel._pages))
+        self.assertFalse(panel._page_revealed[0])
+
+    def test_build_pages_sets_context_header(self):
+        panel = self._make_panel()
+        panel._build_pages("response text", user_message="what should I focus on today?")
+        self.assertTrue(panel._context_header.startswith("> "))
+        self.assertLessEqual(len(panel._context_header), 42)  # "> " + 35 chars + "..."
+
+    def test_build_pages_truncates_long_user_message(self):
+        panel = self._make_panel()
+        long_msg = "a" * 50
+        panel._build_pages("response", user_message=long_msg)
+        self.assertTrue(panel._context_header.endswith("..."))
+        self.assertLessEqual(len(panel._context_header), 42)
+
+
 if __name__ == "__main__":
     unittest.main()
