@@ -77,9 +77,17 @@
         CONNECT TO BITOS
       </button>
     </div>
-    <div class="status" id="ble-warn" style="color:#f84;display:none">
-      ⚠ On iPhone: use Safari with Web Bluetooth enabled.<br>
-      Settings → Safari → Advanced → Experimental Features
+    <div class="status" id="ble-warn" style="color:#f84;display:none;line-height:1.6">
+      ⚠ iOS USERS: Web Bluetooth must be enabled manually.<br>
+      Open Settings → Safari → Advanced → Feature Flags<br>
+      → enable "Web Bluetooth"<br>
+      Then relaunch Safari and return to this page.
+    </div>
+    <div class="status" id="ble-unavailable" style="color:#f44;display:none;line-height:1.6">
+      ✗ Web Bluetooth is not available in this browser.<br>
+      Use Chrome (Android/Desktop) or Safari (iOS 16.4+).<br>
+      On iOS, enable Web Bluetooth in Settings → Safari<br>
+      → Advanced → Feature Flags.
     </div>
   </div>
 
@@ -128,6 +136,11 @@
     </div>
   </div>
 
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+  </script>
   <script src="js/ble.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/crypto.js"></script>
@@ -135,6 +148,12 @@
     // Detect iOS Safari for BLE warning
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     if (isIOS) document.getElementById('ble-warn').style.display = 'block';
+
+    // Show unavailable notice if Web Bluetooth is missing entirely
+    if (!navigator.bluetooth) {
+      document.getElementById('ble-unavailable').style.display = 'block';
+      document.getElementById('btn-connect').disabled = true;
+    }
 
     let companion = null;
 
@@ -159,8 +178,15 @@
       btn.disabled = true;
       setStatus('conn-status', 'Scanning for BITOS...');
       try {
+        if (!navigator.bluetooth) {
+          throw new Error('Web Bluetooth not available. Use Chrome or Safari (iOS 16.4+).');
+        }
         companion = new BitosCompanion();
         const bleAddr = new URLSearchParams(location.search).get('ble');
+        if (!bleAddr) {
+          setStatus('conn-status',
+            'No device address in URL — scanning for any BITOS device...', '');
+        }
         await companion.connect(bleAddr);
         setStatus('conn-status', '✓ Connected to BITOS', 'ok');
         setTimeout(() => goStep(1), 800);
