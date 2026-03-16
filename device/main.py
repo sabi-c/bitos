@@ -49,7 +49,7 @@ from screens.panels.captures import CapturesPanel
 from screens.panels.messages import MessagesPanel
 from screens.panels.mail import MailPanel
 from screens.panels.notifications import NotificationsPanel
-from screens.panels.settings import SettingsPanel, ModelPickerPanel, AgentModePanel, SleepTimerPanel, AboutPanel, BatteryPanel, DevPanel, FontPickerPanel
+from screens.panels.settings import SettingsPanel, ModelPickerPanel, AgentModePanel, SleepTimerPanel, AboutPanel, BatteryPanel, DevPanel, FontPickerPanel, TextSpeedPanel
 from screens.panels.change_pin import ChangePinPanel
 from screens.subscreens.integration_detail import IntegrationDetailPanel
 from overlays.power import PowerOverlay
@@ -234,6 +234,8 @@ def main():
     button.on(ButtonEvent.LONG_PRESS, lambda: _on_button(ButtonEvent.LONG_PRESS))
     button.on(ButtonEvent.DOUBLE_PRESS, lambda: _on_button(ButtonEvent.DOUBLE_PRESS))
     button.on(ButtonEvent.TRIPLE_PRESS, lambda: _on_button(ButtonEvent.TRIPLE_PRESS))
+    button.on(ButtonEvent.HOLD_START, lambda: _on_button(ButtonEvent.HOLD_START))
+    button.on(ButtonEvent.HOLD_END, lambda: _on_button(ButtonEvent.HOLD_END))
     button.on(ButtonEvent.POWER_GESTURE, lambda: open_power_overlay())
 
     notification_poller = NotificationPoller(queue=notification_queue, api_client=client, repository=repository)
@@ -472,6 +474,7 @@ def main():
                 on_open_battery=open_battery,
                 on_open_dev=open_dev,
                 on_open_font_picker=open_font_picker,
+                on_open_text_speed=open_text_speed,
                 on_push_overlay=screen_mgr.push_overlay,
                 on_dismiss_overlay=screen_mgr.dismiss_overlay,
                 get_ble_address=gatt_server.get_device_address,
@@ -502,6 +505,9 @@ def main():
 
     def open_font_picker():
         screen_mgr.push(FontPickerPanel(repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
+
+    def open_text_speed():
+        screen_mgr.push(TextSpeedPanel(repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
 
     def open_dev():
         screen_mgr.push(DevPanel(system_monitor=monitor, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))

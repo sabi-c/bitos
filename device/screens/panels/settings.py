@@ -39,6 +39,7 @@ class SettingsPanel(BaseScreen):
         on_open_battery=None,
         on_open_dev=None,
         on_open_font_picker=None,
+        on_open_text_speed=None,
         get_ble_address=None,
         on_set_discoverable=None,
         on_push_overlay=None,
@@ -58,6 +59,7 @@ class SettingsPanel(BaseScreen):
         self._on_open_battery = on_open_battery
         self._on_open_dev = on_open_dev
         self._on_open_font_picker = on_open_font_picker
+        self._on_open_text_speed = on_open_text_speed
         self._get_ble_address = get_ble_address or (lambda: "mock-BT-addr")
         self._on_set_discoverable = on_set_discoverable or (lambda _enabled, _timeout: None)
         self._on_push_overlay = on_push_overlay
@@ -88,6 +90,7 @@ class SettingsPanel(BaseScreen):
             NavItem(key="agent_mode", label="AGENT MODE", status="", action=self._open_agent_mode),
             NavItem(key="sleep", label="SLEEP TIMER", status="", action=self._open_sleep_timer),
             NavItem(key="font", label="FONT", status="", action=self._open_font_picker),
+            NavItem(key="text_speed", label="TEXT SPEED", status="", action=self._open_text_speed),
             NavItem(key="about", label="ABOUT", status="", action=self._open_about),
             NavItem(key="battery", label="BATTERY", status="", action=self._open_battery),
             NavItem(key="companion", label="COMPANION APP", status="", action=self._open_companion_app),
@@ -218,6 +221,10 @@ class SettingsPanel(BaseScreen):
     def _open_font_picker(self):
         if self._on_open_font_picker:
             self._on_open_font_picker()
+
+    def _open_text_speed(self):
+        if self._on_open_text_speed:
+            self._on_open_text_speed()
 
     def _font_family_label(self) -> str:
         if self._font_family == "monocraft":
@@ -966,6 +973,54 @@ class FontPickerPanel(BaseScreen):
 
         hint = self._font_hint.render("SHORT:NEXT \u00b7 DBL:SELECT \u00b7 LONG:BACK", False, DIM3)
         surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
+
+
+class TextSpeedPanel(BaseScreen):
+    """Pick typewriter text reveal speed."""
+    _owns_status_bar = True
+
+    OPTIONS = [
+        ("slow", "SLOW"),
+        ("normal", "NORMAL"),
+        ("fast", "FAST"),
+        ("instant", "INSTANT"),
+    ]
+
+    def __init__(self, repository: DeviceRepository, on_back=None, ui_settings=None):
+        self._repo = repository
+        self._on_back = on_back
+        self._ui_settings = merge_runtime_ui_settings(ui_settings)
+        self._font = load_ui_font("body", self._ui_settings)
+        self._font_small = load_ui_font("small", self._ui_settings)
+        current = str(self._repo.get_setting("text_speed", "normal"))
+        self._selected = next((i for i, (v, _) in enumerate(self.OPTIONS) if v == current), 1)
+
+    def handle_action(self, action: str):
+        if action == "SHORT_PRESS":
+            self._selected = (self._selected + 1) % len(self.OPTIONS)
+        elif action == "TRIPLE_PRESS":
+            self._selected = (self._selected - 1) % len(self.OPTIONS)
+        elif action == "DOUBLE_PRESS":
+            value, _ = self.OPTIONS[self._selected]
+            self._repo.set_setting("text_speed", value)
+            if self._on_back:
+                self._on_back()
+        elif action == "LONG_PRESS":
+            if self._on_back:
+                self._on_back()
+
+    def render(self, surface: pygame.Surface):
+        surface.fill(BLACK)
+        header = self._font_small.render("TEXT SPEED", False, WHITE)
+        surface.blit(header, (8, 2))
+        y = STATUS_BAR_H + 4
+        for i, (value, label) in enumerate(self.OPTIONS):
+            focused = i == self._selected
+            prefix = "> " if focused else "- "
+            color = WHITE if focused else DIM2
+            text = self._font.render(prefix + label, False, color)
+            surface.blit(text, (8, y))
+            y += ROW_H_MIN
 
 
 def _compact_model_label(model: str) -> str:
