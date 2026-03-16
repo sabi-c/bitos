@@ -8,7 +8,7 @@ from __future__ import annotations
 import pygame
 
 from device.display.theme import get_font
-from device.display.tokens import DIM3
+from device.display.tokens import WHITE
 from device.ui.panels.base import PreviewPanel
 
 
@@ -28,7 +28,7 @@ class GenericPreviewPanel(PreviewPanel):
     def render(self, surface: pygame.Surface) -> None:
         # Title
         font = get_font(TITLE_FONT_SIZE)
-        title_surf = font.render(self._label, False, DIM3)
+        title_surf = font.render(self._label, False, WHITE)
         surface.blit(title_surf, (TITLE_PAD_X, TITLE_PAD_Y))
 
         # Submenu items below title

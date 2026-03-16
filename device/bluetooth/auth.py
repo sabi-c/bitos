@@ -15,6 +15,48 @@ from .constants import (
 )
 
 
+class PairingSession:
+    """Tracks the single active QR pairing session.
+
+    Only one session can be active at a time.  The companion must present
+    the correct token (from the QR URL) alongside the HMAC response.
+    """
+
+    def __init__(self):
+        self._session_id: str | None = None
+        self._token: str | None = None
+        self._expires: float = 0
+
+    @property
+    def active(self) -> bool:
+        return self._session_id is not None and time.time() < self._expires
+
+    @property
+    def session_id(self) -> str | None:
+        return self._session_id if self.active else None
+
+    def start(self, session_id: str, token: str, expires: int) -> None:
+        """Register a new pairing session, replacing any previous one."""
+        self._session_id = session_id
+        self._token = token
+        self._expires = float(expires)
+
+    def validate(self, session_id: str, token: str) -> bool:
+        """Return True if the given credentials match the active session."""
+        if not self.active:
+            return False
+        return (
+            hmac.compare_digest(self._session_id, session_id)  # type: ignore[arg-type]
+            and hmac.compare_digest(self._token, token)  # type: ignore[arg-type]
+        )
+
+    def invalidate(self) -> None:
+        """Clear the active session (after success or manual cancel)."""
+        self._session_id = None
+        self._token = None
+        self._expires = 0
+
+
 class AuthError(RuntimeError):
     """Raised when BLE auth challenge/response validation fails."""
 
@@ -33,6 +75,7 @@ class AuthManager:
         self._sessions: dict[str, float] = {}
         self._attempt_counts: dict[str, int] = {}
         self._lockouts: dict[str, float] = {}
+        self.pairing = PairingSession()
 
     def get_challenge(self) -> dict:
         # SD-002: Challenge nonce/timestamp pair establishes replay-resistant proof-of-possession flow.
@@ -43,9 +86,27 @@ class AuthManager:
         self._cleanup_expired()
         return {"nonce": nonce, "timestamp": now}
 
-    def verify_response(self, client_addr: str, nonce: str, response_hex: str) -> str:
+    def verify_response(
+        self,
+        client_addr: str,
+        nonce: str,
+        response_hex: str,
+        pairing_session_id: str | None = None,
+        pairing_token: str | None = None,
+    ) -> str:
         if self._is_locked_out(client_addr):
             raise AuthError("LOCKED_OUT")
+
+        # If a pairing session is active, the companion MUST present valid
+        # pairing credentials.  This prevents someone who intercepts the
+        # HMAC secret from authenticating without scanning the QR code.
+        if self.pairing.active:
+            if pairing_session_id is None or pairing_token is None:
+                self._record_failed_attempt(client_addr)
+                raise AuthError("PAIRING_TOKEN_REQUIRED")
+            if not self.pairing.validate(pairing_session_id, pairing_token):
+                self._record_failed_attempt(client_addr)
+                raise AuthError("INVALID_PAIRING_TOKEN")
 
         if nonce not in self._seen_nonces:
             self._record_failed_attempt(client_addr)
@@ -86,6 +147,8 @@ class AuthManager:
         self._sessions[token] = time.time() + SESSION_TOKEN_TTL_SECONDS
         self._attempt_counts.pop(client_addr, None)
         self._lockouts.pop(client_addr, None)
+        # Pairing session is single-use — invalidate after successful auth.
+        self.pairing.invalidate()
         self._cleanup_expired()
         return token
 

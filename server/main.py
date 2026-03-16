@@ -51,9 +51,9 @@ if str(SERVER_DIR) not in sys.path:
 if str(INTEGRATIONS_DIR) not in sys.path:
     sys.path.insert(0, str(INTEGRATIONS_DIR))
 
-from bluebubbles_adapter import BlueBubblesAdapter
-from vikunja_adapter import VikunjaAdapter
-from gmail_adapter import GmailAdapter
+from integrations.bluebubbles_adapter import BlueBubblesAdapter
+from integrations.vikunja_adapter import VikunjaAdapter
+from integrations.gmail_adapter import GmailAdapter
 
 from agent_modes import get_system_prompt
 from config import UI_SETTINGS_FILE
@@ -281,6 +281,16 @@ def _test_integration_connection(integration: str, config: dict) -> tuple[bool, 
         except Exception as exc:
             return False, str(exc)
 
+    if integration == "anthropic":
+        api_key = str(config.get("api_key", "")).strip()
+        if not _is_real_anthropic_key(api_key):
+            return False, "Invalid key format (expected sk-ant-...)"
+        return True, ""
+
+    if integration == "gmail":
+        # Gmail is toggle-only; no connection test needed
+        return True, ""
+
     return False, "Unknown integration"
 
 
@@ -448,15 +458,80 @@ async def require_device_token(request: Request, call_next):
 
 @app.get("/health")
 async def health():
+    # Check critical components
+    checks = {}
+
+    # LLM bridge configured?
+    checks["llm"] = bool(llm_bridge and llm_bridge.provider != "echo")
+
+    # Database accessible?
+    try:
+        with _subtask_db() as conn:
+            conn.execute("SELECT 1")
+        checks["database"] = True
+    except Exception:
+        checks["database"] = False
+
+    # API key present?
+    checks["api_key"] = _is_real_anthropic_key(os.environ.get("ANTHROPIC_API_KEY", ""))
+
+    overall = "ok" if all(checks.values()) else "degraded"
+
     return {
-        "status": "ok",
+        "status": overall,
         "version": __version__,
         "build": __build__,
         "commit": get_git_commit(),
         "provider": llm_bridge.provider,
         "model": llm_bridge.model,
         "settings_file": UI_SETTINGS_FILE,
+        "checks": checks,
     }
+
+
+@app.get("/health/deep")
+async def health_deep():
+    """Deep health check: probe every integration and subsystem.
+
+    Intended for companion app diagnostics. Not called on every request.
+    """
+    results = {}
+
+    # LLM provider
+    try:
+        if hasattr(llm_bridge, "complete_text"):
+            llm_bridge.complete_text("Say OK", system_prompt="Reply with exactly: OK")
+            results["llm"] = {"ok": True, "provider": llm_bridge.provider, "model": llm_bridge.model}
+        else:
+            text = "".join(llm_bridge.stream_text("Say OK", system_prompt="Reply with exactly: OK"))
+            results["llm"] = {"ok": bool(text), "provider": llm_bridge.provider}
+    except Exception as exc:
+        results["llm"] = {"ok": False, "error": str(exc)[:100]}
+
+    # Integrations
+    for name, AdapterCls in [("imessage", BlueBubblesAdapter), ("vikunja", VikunjaAdapter), ("gmail", GmailAdapter)]:
+        try:
+            adapter = AdapterCls()
+            if hasattr(adapter, "is_mock") and adapter.is_mock:
+                results[name] = {"ok": True, "mode": "mock"}
+            elif hasattr(adapter, "ping"):
+                adapter.ping()
+                results[name] = {"ok": True}
+            else:
+                results[name] = {"ok": True, "mode": "available"}
+        except Exception as exc:
+            results[name] = {"ok": False, "error": str(exc)[:100]}
+
+    # Database
+    try:
+        with _subtask_db() as conn:
+            count = conn.execute("SELECT COUNT(*) FROM agent_subtasks").fetchone()[0]
+        results["database"] = {"ok": True, "subtask_count": count}
+    except Exception as exc:
+        results["database"] = {"ok": False, "error": str(exc)[:100]}
+
+    overall = "ok" if all(r.get("ok", False) for r in results.values()) else "degraded"
+    return {"status": overall, "checks": results, "version": __version__}
 
 
 @app.get("/device/version")
@@ -508,6 +583,14 @@ async def update_integrations_settings(payload: IntegrationSettingsRequest):
             "VIKUNJA_BASE_URL": str(config.get("url", "")).strip(),
             "VIKUNJA_API_TOKEN": str(config.get("token", "")).strip(),
         }
+    elif integration == "anthropic":
+        api_key = str(config.get("api_key", "")).strip()
+        if not api_key:
+            return {"ok": False, "error": "API key required"}
+        updates = {"ANTHROPIC_API_KEY": api_key}
+    elif integration == "gmail":
+        enabled = config.get("enabled")
+        updates = {"GMAIL_ENABLED": "true" if enabled else "false"}
     else:
         raise HTTPException(status_code=400, detail="Unknown integration")
 
@@ -591,6 +674,79 @@ async def update_ui_settings(request: Request):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+
+
+@app.get("/calendar")
+async def get_calendar_events_endpoint(days: int = 7):
+    """Return upcoming calendar events from macOS Calendar via AppleScript."""
+    days = min(max(1, days), 14)
+
+    script = f'''
+set now to current date
+set endDate to now + ({days} * days)
+tell application "Calendar"
+    set output to ""
+    set allCals to every calendar
+    repeat with cal in allCals
+        set calName to name of cal
+        try
+            set eventList to (every event of cal whose start date >= now and start date <= endDate)
+            repeat with ev in eventList
+                set output to output & "---" & linefeed
+                set output to output & "calendar: " & calName & linefeed
+                set output to output & "title: " & (summary of ev) & linefeed
+                set output to output & "start: " & ((start date of ev) as string) & linefeed
+                set output to output & "end: " & ((end date of ev) as string) & linefeed
+                set evLoc to location of ev
+                if evLoc is not missing value then
+                    set output to output & "location: " & evLoc & linefeed
+                end if
+                set evNotes to description of ev
+                if evNotes is not missing value then
+                    if length of evNotes > 100 then
+                        set evNotes to text 1 thru 100 of evNotes
+                    end if
+                    set output to output & "notes: " & evNotes & linefeed
+                end if
+            end repeat
+        end try
+    end repeat
+    return output
+end tell
+'''
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True, text=True, timeout=15,
+        )
+        if result.returncode != 0:
+            return JSONResponse(
+                status_code=502,
+                content={"error": f"Calendar read failed: {result.stderr.strip()[:100]}"},
+            )
+
+        events = []
+        for block in result.stdout.split("---"):
+            block = block.strip()
+            if not block:
+                continue
+            event = {}
+            for line in block.split("\n"):
+                if ": " in line:
+                    key, val = line.split(": ", 1)
+                    event[key.strip()] = val.strip()
+            if event and event.get("title"):
+                events.append(event)
+
+        # Sort by start time
+        events.sort(key=lambda e: e.get("start", ""))
+        return {"events": events, "count": len(events), "days": days}
+    except Exception as exc:
+        logger.error("calendar_endpoint_failed: %s", exc)
+        return JSONResponse(
+            status_code=502,
+            content={"error": f"Calendar unavailable: {str(exc)[:100]}"},
+        )
 
 
 @app.get("/tasks/today")
@@ -781,11 +937,17 @@ async def get_battery():
         from device.storage.repository import DeviceRepository
 
         repo = DeviceRepository()
-        pct = int(repo.get_setting("battery_pct", 0) or 0)
+        raw = repo.get_setting("battery_pct", None)
+        if raw is not None and str(raw) not in ("-1", ""):
+            pct = max(0, min(100, int(raw)))
+            present = True
+        else:
+            pct = None
+            present = False
         charging = str(repo.get_setting("charging", "false")).lower() == "true"
-        return {"pct": pct, "charging": charging, "present": pct > 0}
+        return {"pct": pct, "charging": charging, "present": present}
     except Exception:
-        return {"pct": 0, "charging": False, "present": False}
+        return {"pct": None, "charging": False, "present": False}
 
 @app.get("/dashboard")
 async def get_dashboard():
@@ -816,11 +978,14 @@ async def get_dashboard():
     # System
     mem = psutil.virtual_memory()
     battery_pct = 0
+    battery_pct = None
     charging = False
     try:
         from device.storage.repository import DeviceRepository
         repo = DeviceRepository()
-        battery_pct = int(repo.get_setting("battery_pct", 0) or 0)
+        raw = repo.get_setting("battery_pct", None)
+        if raw is not None and str(raw) not in ("-1", ""):
+            battery_pct = max(0, min(100, int(raw)))
         charging = str(repo.get_setting("charging", "false")).lower() == "true"
     except Exception:
         pass
@@ -839,6 +1004,264 @@ async def get_dashboard():
             "provider": llm_bridge.provider,
             "model": llm_bridge.model,
         },
+    }
+
+
+@app.get("/activity")
+async def get_activity_feed():
+    """Unified activity feed: recent messages, emails, tasks, events — for device notification view."""
+    items: list[dict] = []
+
+    # Recent iMessages
+    try:
+        bb = BlueBubblesAdapter()
+        conversations = bb.get_conversations(limit=5)
+        for conv in conversations:
+            if conv.get("unread", 0) > 0:
+                items.append({
+                    "type": "SMS",
+                    "source": conv.get("title", "Unknown"),
+                    "preview": conv.get("snippet", "")[:60],
+                    "time": conv.get("timestamp", ""),
+                    "unread": True,
+                    "source_id": conv.get("chat_id", ""),
+                })
+    except Exception:
+        pass
+
+    # Recent emails
+    try:
+        gmail = GmailAdapter()
+        inbox = gmail.get_inbox(limit=5)
+        for email in inbox:
+            if email.get("unread"):
+                items.append({
+                    "type": "MAIL",
+                    "source": email.get("sender", "Unknown"),
+                    "preview": email.get("subject", "")[:60],
+                    "time": email.get("timestamp", ""),
+                    "unread": True,
+                    "source_id": email.get("thread_id", ""),
+                })
+    except Exception:
+        pass
+
+    # Today's tasks
+    try:
+        vikunja = VikunjaAdapter()
+        tasks = vikunja.get_today_tasks()
+        for task in tasks[:3]:
+            items.append({
+                "type": "TASK",
+                "source": str(task.get("project", "INBOX")),
+                "preview": str(task.get("title", ""))[:60],
+                "time": "today",
+                "unread": not task.get("done", False),
+                "source_id": str(task.get("id", "")),
+            })
+    except Exception:
+        pass
+
+    # Upcoming calendar events (via AppleScript on server mac)
+    try:
+        import subprocess
+        script = '''
+set now to current date
+set endDate to now + (1 * days)
+tell application "Calendar"
+    set output to ""
+    set eventList to (every event whose start date >= now and start date <= endDate)
+    set maxCount to count of eventList
+    if maxCount > 5 then set maxCount to 5
+    repeat with i from 1 to maxCount
+        set ev to item i of eventList
+        set output to output & (summary of ev) & "|" & ((start date of ev) as string) & linefeed
+    end repeat
+    return output
+end tell
+'''
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode == 0:
+            for line in result.stdout.strip().split("\n"):
+                if "|" in line:
+                    title, start = line.split("|", 1)
+                    items.append({
+                        "type": "CALENDAR",
+                        "source": "Calendar",
+                        "preview": title.strip()[:60],
+                        "time": start.strip(),
+                        "unread": True,
+                        "source_id": "",
+                    })
+    except Exception:
+        pass
+
+    return {"items": items, "count": len(items)}
+
+
+# ── Live Context Endpoint ────────────────────────────────────────────────
+
+def _fetch_weather(location: str = "Los+Angeles") -> str:
+    """Fetch current weather from wttr.in (no API key needed).
+
+    Returns a string like '+72°F Sunny' or empty string on failure.
+    """
+    import httpx as _httpx
+    try:
+        resp = _httpx.get(
+            f"https://wttr.in/{location}?format=%t+%C",
+            timeout=5.0,
+            headers={"User-Agent": "bitos/1.0"},
+        )
+        if resp.status_code == 200:
+            text = resp.text.strip()
+            # wttr.in returns e.g. "+72°F Sunny" — strip leading +
+            if text.startswith("+"):
+                text = text[1:]
+            return text
+    except Exception as exc:
+        logger.debug("weather_fetch_failed: %s", exc)
+    return ""
+
+
+def _fetch_next_event() -> str:
+    """Get the next upcoming calendar event via AppleScript (macOS only).
+
+    Returns e.g. '10:30 AM Meeting with John' or empty string.
+    """
+    try:
+        script = '''
+set now to current date
+set endDate to now + (1 * days)
+tell application "Calendar"
+    set eventList to (every event whose start date >= now and start date <= endDate)
+    if (count of eventList) = 0 then return ""
+    -- Find earliest
+    set earliest to item 1 of eventList
+    repeat with ev in eventList
+        if (start date of ev) < (start date of earliest) then
+            set earliest to ev
+        end if
+    end repeat
+    set t to time string of (start date of earliest)
+    return t & " " & (summary of earliest)
+end tell
+'''
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            raw = result.stdout.strip()
+            # Shorten "10:30:00 AM" → "10:30a"
+            parts = raw.split(" ", 2)
+            if len(parts) >= 3:
+                time_part = parts[0].rsplit(":", 1)[0]  # drop seconds
+                ampm = parts[1].lower().rstrip("m")  # AM→a, PM→p
+                title = parts[2]
+                return f"{time_part}{ampm} {title}"
+            return raw
+    except Exception as exc:
+        logger.debug("next_event_fetch_failed: %s", exc)
+    return ""
+
+
+def _fetch_headlines() -> list[str]:
+    """Fetch a few top headlines from an RSS feed (BBC World, no key needed).
+
+    Returns up to 3 short headline strings.
+    """
+    import httpx as _httpx
+    try:
+        resp = _httpx.get(
+            "https://feeds.bbci.co.uk/news/world/rss.xml",
+            timeout=5.0,
+            headers={"User-Agent": "bitos/1.0"},
+        )
+        if resp.status_code != 200:
+            return []
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(resp.text)
+        titles: list[str] = []
+        for item in root.iter("item"):
+            title_el = item.find("title")
+            if title_el is not None and title_el.text:
+                titles.append(title_el.text.strip())
+            if len(titles) >= 3:
+                break
+        return titles
+    except Exception as exc:
+        logger.debug("headlines_fetch_failed: %s", exc)
+    return []
+
+
+@app.get("/context")
+async def get_live_context():
+    """Aggregated live context for the device home screen ticker.
+
+    Returns weather, headlines, next calendar event, task count,
+    and unread message/email counts — all best-effort with fallbacks.
+    """
+    import concurrent.futures
+
+    weather = ""
+    headlines: list[str] = []
+    next_event = ""
+    tasks_today = 0
+    unread_msgs = 0
+    unread_mail = 0
+
+    # Fetch weather, headlines, and next event in parallel threads
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+        weather_future = pool.submit(_fetch_weather)
+        headlines_future = pool.submit(_fetch_headlines)
+        event_future = pool.submit(_fetch_next_event)
+
+        try:
+            weather = weather_future.result(timeout=8)
+        except Exception:
+            pass
+        try:
+            headlines = headlines_future.result(timeout=8)
+        except Exception:
+            pass
+        try:
+            next_event = event_future.result(timeout=12)
+        except Exception:
+            pass
+
+    # Task count from Vikunja
+    try:
+        vikunja = VikunjaAdapter()
+        tasks = vikunja.get_today_tasks()
+        tasks_today = len(tasks)
+    except Exception:
+        pass
+
+    # Unread messages from BlueBubbles
+    try:
+        bb = BlueBubblesAdapter()
+        unread_msgs = bb.get_unread_count()
+    except Exception:
+        pass
+
+    # Unread emails from Gmail
+    try:
+        gmail = GmailAdapter()
+        unread_mail = gmail.get_unread_count()
+    except Exception:
+        pass
+
+    return {
+        "weather": weather,
+        "headlines": headlines,
+        "next_event": next_event,
+        "tasks_today": tasks_today,
+        "unread_msgs": unread_msgs,
+        "unread_mail": unread_mail,
     }
 
 
@@ -1158,6 +1581,19 @@ async def chat(payload: ChatRequest):
         raise HTTPException(status_code=400, detail="No message provided")
 
     agent_mode = payload.agent_mode or "producer"
+
+    # Fetch lightweight activity counts for agent notification awareness
+    activity_summary = None
+    try:
+        bb = BlueBubblesAdapter()
+        gmail = GmailAdapter()
+        activity_summary = {
+            "messages_unread": bb.get_unread_count(),
+            "emails_unread": gmail.get_unread_count(),
+        }
+    except Exception:
+        pass
+
     system_prompt = get_system_prompt(
         agent_mode,
         tasks_today=payload.tasks_today,
@@ -1166,6 +1602,7 @@ async def chat(payload: ChatRequest):
         memory=payload.memory,
         location=payload.location,
         response_format_hint=payload.response_format_hint,
+        activity_summary=activity_summary,
     )
 
     # Map short model names to full Anthropic model IDs
@@ -1269,6 +1706,73 @@ async def chat(payload: ChatRequest):
         return JSONResponse(
             status_code=502,
             content={"error": "Chat failed", "detail": str(exc)[:200]},
+        )
+
+
+@app.get("/logs")
+async def get_logs(lines: int = 100, level: str = ""):
+    """Return recent log lines for remote debugging.
+
+    Query params:
+      lines: number of lines to return (default 100, max 500)
+      level: optional filter — "ERROR", "WARNING", etc.
+    """
+    lines = min(max(1, lines), 500)
+    log_dir = os.environ.get("BITOS_LOG_DIR", str(ROOT_DIR / "logs"))
+    log_path = os.path.join(log_dir, "server.log")
+
+    if not os.path.exists(log_path):
+        return {"lines": [], "path": log_path, "exists": False}
+
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+            all_lines = f.readlines()
+
+        # Filter by level if requested
+        if level:
+            level_upper = level.upper()
+            all_lines = [ln for ln in all_lines if level_upper in ln]
+
+        recent = all_lines[-lines:]
+        return {
+            "lines": [ln.rstrip() for ln in recent],
+            "total_lines": len(all_lines),
+            "path": log_path,
+        }
+    except Exception as exc:
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Cannot read logs: {exc}"},
+        )
+
+
+@app.get("/logs/device")
+async def get_device_logs(lines: int = 100, level: str = ""):
+    """Return recent device log lines (if server and device share filesystem)."""
+    lines = min(max(1, lines), 500)
+    log_path = "/var/log/bitos/device.log"
+
+    if not os.path.exists(log_path):
+        return {"lines": [], "path": log_path, "exists": False}
+
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+            all_lines = f.readlines()
+
+        if level:
+            level_upper = level.upper()
+            all_lines = [ln for ln in all_lines if level_upper in ln]
+
+        recent = all_lines[-lines:]
+        return {
+            "lines": [ln.rstrip() for ln in recent],
+            "total_lines": len(all_lines),
+            "path": log_path,
+        }
+    except Exception as exc:
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Cannot read device logs: {exc}"},
         )
 
 

@@ -83,7 +83,7 @@ DEVICE_TOOLS = [
         "description": (
             "Change a device setting. The change takes effect immediately on the device. "
             "Valid keys: volume (0-100), voice_mode (off/on/auto), tts_engine "
-            "(speechify/piper/openai/espeak/auto), ai_model (default/haiku/sonnet/opus), "
+            "(speechify/chatterbox/piper/openai/espeak/auto), ai_model (default/haiku/sonnet/opus), "
             "web_search (true/false), memory (true/false), extended_thinking (true/false), "
             "agent_mode (producer/hacker/clown/monk/storyteller/director), "
             "meta_prompt (string), text_speed (slow/normal/fast)."
@@ -130,6 +130,139 @@ DEVICE_TOOLS = [
             "required": ["prompt", "options"],
         },
     },
+    # ── Messaging & Communication Tools ────────────────────────────────
+    {
+        "name": "send_imessage",
+        "description": (
+            "Send an iMessage to a contact. ALWAYS use request_approval first "
+            "to confirm the recipient and message content before sending. "
+            "The message is sent via the server's macOS Messages app."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "recipient": {
+                    "type": "string",
+                    "description": "Phone number or email of the recipient.",
+                },
+                "message": {
+                    "type": "string",
+                    "description": "The message text to send.",
+                },
+            },
+            "required": ["recipient", "message"],
+        },
+    },
+    {
+        "name": "read_imessages",
+        "description": (
+            "Read recent iMessage conversations. Returns the latest messages "
+            "from the specified contact or from all contacts if none specified."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "contact": {
+                    "type": "string",
+                    "description": "Phone number, email, or name to filter by. Omit for all recent.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max messages to return (default 10, max 25).",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "send_email",
+        "description": (
+            "Create an email draft via Gmail. ALWAYS use request_approval first "
+            "to confirm recipient, subject, and body. The email is saved as a "
+            "draft — the user can review and send from their email client."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "to": {
+                    "type": "string",
+                    "description": "Recipient email address.",
+                },
+                "subject": {
+                    "type": "string",
+                    "description": "Email subject line.",
+                },
+                "body": {
+                    "type": "string",
+                    "description": "Email body text.",
+                },
+            },
+            "required": ["to", "subject", "body"],
+        },
+    },
+    {
+        "name": "read_emails",
+        "description": (
+            "Read recent emails from the server's macOS Mail app. "
+            "Returns subject, sender, date, and preview of recent messages."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "mailbox": {
+                    "type": "string",
+                    "description": "Mailbox name (default 'INBOX'). Use 'ALL' for all mailboxes.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max emails to return (default 10, max 25).",
+                },
+                "unread_only": {
+                    "type": "boolean",
+                    "description": "Only return unread emails (default false).",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "get_contacts",
+        "description": (
+            "Search contacts on the server's macOS Contacts app. "
+            "Returns name, phone numbers, and email addresses."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Name or partial name to search for.",
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "get_calendar_events",
+        "description": (
+            "Get upcoming calendar events from the server's macOS Calendar app. "
+            "Returns event title, start/end times, location, and notes."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "days_ahead": {
+                    "type": "integer",
+                    "description": "How many days ahead to look (default 1, max 14).",
+                },
+                "calendar": {
+                    "type": "string",
+                    "description": "Specific calendar name to filter by. Omit for all calendars.",
+                },
+            },
+            "required": [],
+        },
+    },
 ]
 
 
@@ -138,7 +271,7 @@ DEVICE_TOOLS = [
 SETTING_VALIDATORS: dict[str, dict[str, Any]] = {
     "volume": {"type": "int", "min": 0, "max": 100},
     "voice_mode": {"type": "choice", "choices": ["off", "on", "auto"]},
-    "tts_engine": {"type": "choice", "choices": ["speechify", "piper", "openai", "espeak", "auto"]},
+    "tts_engine": {"type": "choice", "choices": ["speechify", "chatterbox", "piper", "openai", "espeak", "auto"]},
     "ai_model": {"type": "choice", "choices": ["default", "haiku", "sonnet", "opus", ""]},
     "web_search": {"type": "bool"},
     "memory": {"type": "bool"},
@@ -232,4 +365,239 @@ def handle_tool_call(
 
         return json.dumps({"choice": choice, "request_id": request_id})
 
+    # ── Messaging tools (macOS AppleScript bridge) ─────────────────────
+    if tool_name == "send_imessage":
+        return _send_imessage(tool_input)
+
+    if tool_name == "read_imessages":
+        return _read_imessages(tool_input)
+
+    if tool_name == "send_email":
+        return _send_email(tool_input)
+
+    if tool_name == "read_emails":
+        return _read_emails(tool_input)
+
+    if tool_name == "get_contacts":
+        return _get_contacts(tool_input)
+
+    if tool_name == "get_calendar_events":
+        return _get_calendar_events(tool_input)
+
     return json.dumps({"error": f"Unknown tool: {tool_name}"})
+
+
+# ── Integration adapter singletons ──────────────────────────────────────
+
+import subprocess
+
+_bb: object | None = None
+_gmail: object | None = None
+
+
+def _get_bb():
+    global _bb
+    if _bb is None:
+        from integrations.bluebubbles_adapter import BlueBubblesAdapter
+        _bb = BlueBubblesAdapter()
+    return _bb
+
+
+def _get_gmail():
+    global _gmail
+    if _gmail is None:
+        from integrations.gmail_adapter import GmailAdapter
+        _gmail = GmailAdapter()
+    return _gmail
+
+
+# ── Messaging tool handlers ─────────────────────────────────────────────
+
+def _send_imessage(tool_input: dict) -> str:
+    recipient = tool_input.get("recipient", "")
+    message = tool_input.get("message", "")
+    if not recipient or not message:
+        return json.dumps({"error": "recipient and message are required"})
+
+    bb = _get_bb()
+    try:
+        conversations = bb.get_conversations()
+        chat_id = None
+        for conv in conversations:
+            if recipient.lower() in conv.get("title", "").lower() or recipient in conv.get("chat_id", ""):
+                chat_id = conv["chat_id"]
+                break
+        if not chat_id:
+            chat_id = f"iMessage;+;{recipient}"
+
+        ok = bb.send_message(chat_id, message)
+        if ok:
+            logger.info("imessage_sent: to=%s len=%d", recipient, len(message))
+            return json.dumps({"success": True, "recipient": recipient})
+        return json.dumps({"error": "Send failed"})
+    except Exception as exc:
+        logger.warning("imessage_send_error: %s", exc)
+        return json.dumps({"error": f"Failed to send: {exc}"})
+
+
+def _read_imessages(tool_input: dict) -> str:
+    contact = tool_input.get("contact", "")
+    limit = min(tool_input.get("limit", 10), 25)
+
+    bb = _get_bb()
+    try:
+        if contact:
+            conversations = bb.get_conversations()
+            for conv in conversations:
+                if contact.lower() in conv.get("title", "").lower() or contact in conv.get("chat_id", ""):
+                    messages = bb.get_messages(conv["chat_id"], limit=limit)
+                    return json.dumps({"messages": messages, "count": len(messages), "contact": conv["title"]})
+            return json.dumps({"messages": [], "count": 0, "error": f"No conversation for '{contact}'"})
+        else:
+            conversations = bb.get_conversations(limit=limit)
+            return json.dumps({"conversations": conversations, "count": len(conversations)})
+    except Exception as exc:
+        logger.warning("imessage_read_error: %s", exc)
+        return json.dumps({"error": f"Failed to read messages: {exc}"})
+
+
+def _send_email(tool_input: dict) -> str:
+    to = tool_input.get("to", "")
+    subject = tool_input.get("subject", "")
+    body = tool_input.get("body", "")
+    if not to or not subject:
+        return json.dumps({"error": "to and subject are required"})
+
+    gmail = _get_gmail()
+    try:
+        draft_id = gmail.create_draft("new", body)
+        logger.info("email_draft: to=%s subject=%s draft=%s", to, subject, draft_id)
+        return json.dumps({"success": True, "to": to, "subject": subject, "draft_id": draft_id,
+                           "note": "Created as draft — send manually or approve sending"})
+    except Exception as exc:
+        logger.warning("email_send_error: %s", exc)
+        return json.dumps({"error": f"Failed to create email: {exc}"})
+
+
+def _read_emails(tool_input: dict) -> str:
+    limit = min(tool_input.get("limit", 10), 25)
+    unread_only = tool_input.get("unread_only", False)
+
+    gmail = _get_gmail()
+    try:
+        inbox = gmail.get_inbox(limit=limit)
+        if unread_only:
+            inbox = [e for e in inbox if e.get("unread")]
+        return json.dumps({"emails": inbox, "count": len(inbox)})
+    except Exception as exc:
+        logger.warning("email_read_error: %s", exc)
+        return json.dumps({"error": f"Failed to read emails: {exc}"})
+
+
+def _get_contacts(tool_input: dict) -> str:
+    query = tool_input.get("query", "")
+    if not query:
+        return json.dumps({"error": "query is required"})
+
+    safe_query = query.replace("\\", "\\\\").replace('"', '\\"')
+    script = f'''
+tell application "Contacts"
+    set matchedPeople to (every person whose name contains "{safe_query}")
+    set output to ""
+    set maxCount to count of matchedPeople
+    if maxCount > 10 then set maxCount to 10
+    repeat with i from 1 to maxCount
+        set p to item i of matchedPeople
+        set pName to name of p
+        set output to output & "---" & linefeed
+        set output to output & "name: " & pName & linefeed
+        set phoneList to value of phones of p
+        set emailList to value of emails of p
+        set output to output & "phones: " & (phoneList as string) & linefeed
+        set output to output & "emails: " & (emailList as string) & linefeed
+    end repeat
+    return output
+end tell
+'''
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode != 0:
+            return json.dumps({"error": f"Contacts search failed: {result.stderr.strip()}"})
+
+        contacts = []
+        for block in result.stdout.split("---"):
+            block = block.strip()
+            if not block:
+                continue
+            contact = {}
+            for line in block.split("\n"):
+                if ": " in line:
+                    key, val = line.split(": ", 1)
+                    contact[key.strip()] = val.strip()
+            if contact:
+                contacts.append(contact)
+        return json.dumps({"contacts": contacts, "count": len(contacts)})
+    except Exception as exc:
+        return json.dumps({"error": f"Contacts search failed: {exc}"})
+
+
+def _get_calendar_events(tool_input: dict) -> str:
+    days_ahead = min(tool_input.get("days_ahead", 1), 14)
+    calendar_name = tool_input.get("calendar", "")
+    cal_filter = f'of calendar "{calendar_name}"' if calendar_name else ""
+
+    script = f'''
+set now to current date
+set endDate to now + ({days_ahead} * days)
+tell application "Calendar"
+    set output to ""
+    set eventList to (every event {cal_filter} whose start date >= now and start date <= endDate)
+    set maxCount to count of eventList
+    if maxCount > 20 then set maxCount to 20
+    repeat with i from 1 to maxCount
+        set ev to item i of eventList
+        set output to output & "---" & linefeed
+        set output to output & "title: " & (summary of ev) & linefeed
+        set output to output & "start: " & ((start date of ev) as string) & linefeed
+        set output to output & "end: " & ((end date of ev) as string) & linefeed
+        set evLoc to location of ev
+        if evLoc is not missing value then
+            set output to output & "location: " & evLoc & linefeed
+        end if
+        set evNotes to description of ev
+        if evNotes is not missing value then
+            if length of evNotes > 100 then
+                set evNotes to text 1 thru 100 of evNotes
+            end if
+            set output to output & "notes: " & evNotes & linefeed
+        end if
+    end repeat
+    return output
+end tell
+'''
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode != 0:
+            return json.dumps({"error": f"Calendar read failed: {result.stderr.strip()}"})
+
+        events = []
+        for block in result.stdout.split("---"):
+            block = block.strip()
+            if not block:
+                continue
+            event = {}
+            for line in block.split("\n"):
+                if ": " in line:
+                    key, val = line.split(": ", 1)
+                    event[key.strip()] = val.strip()
+            if event:
+                events.append(event)
+        return json.dumps({"events": events, "count": len(events)})
+    except Exception as exc:
+        return json.dumps({"error": f"Calendar read failed: {exc}"})

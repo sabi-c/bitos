@@ -295,6 +295,108 @@ class CompositeScreenTests(unittest.TestCase):
         cs = CompositeScreen()
         cs.update(0.016)  # should not raise
 
+    # ── Transition: slide on enter/exit submenu ───────────────────
+
+    def test_entering_submenu_starts_slide(self):
+        """DOUBLE_PRESS into submenu activates a slide-enter transition."""
+        panel = _make_preview_panel()
+        cs = CompositeScreen(right_panels={"HOME": panel})
+        cs.handle_action("DOUBLE_PRESS")
+        self.assertTrue(cs._slide_active)
+        self.assertEqual(cs._slide_direction, "enter")
+        self.assertAlmostEqual(cs._slide_progress, 0.0)
+
+    def test_exiting_submenu_starts_slide(self):
+        """LONG_PRESS out of submenu activates a slide-exit transition."""
+        panel = _make_preview_panel()
+        cs = CompositeScreen(right_panels={"HOME": panel})
+        cs.handle_action("DOUBLE_PRESS")
+        cs._slide_active = False  # pretend enter slide finished
+        cs.handle_action("LONG_PRESS")
+        self.assertTrue(cs._slide_active)
+        self.assertEqual(cs._slide_direction, "exit")
+
+    def test_slide_advances_with_update(self):
+        """update(dt) advances slide progress toward 1.0."""
+        panel = _make_preview_panel()
+        cs = CompositeScreen(right_panels={"HOME": panel})
+        cs.handle_action("DOUBLE_PRESS")
+        cs.update(0.10)  # half of 200ms
+        self.assertTrue(cs._slide_active)
+        self.assertGreater(cs._slide_progress, 0.0)
+        self.assertLess(cs._slide_progress, 1.0)
+
+    def test_slide_completes_after_duration(self):
+        """Slide becomes inactive after full duration elapses."""
+        panel = _make_preview_panel()
+        cs = CompositeScreen(right_panels={"HOME": panel})
+        cs.handle_action("DOUBLE_PRESS")
+        cs.update(0.25)  # > 200ms
+        self.assertFalse(cs._slide_active)
+        self.assertAlmostEqual(cs._slide_progress, 1.0)
+
+    def test_slide_offset_zero_when_inactive(self):
+        """No offset when no transition is active."""
+        cs = CompositeScreen()
+        self.assertEqual(cs._slide_offset_x(), 0)
+
+    def test_slide_offset_nonzero_during_transition(self):
+        """Positive offset during active slide transition."""
+        panel = _make_preview_panel()
+        cs = CompositeScreen(right_panels={"HOME": panel})
+        cs.handle_action("DOUBLE_PRESS")
+        offset = cs._slide_offset_x()
+        self.assertGreater(offset, 0)
+
+    def test_slide_interruptible(self):
+        """Rapid press snaps previous slide and starts new one."""
+        panel = _make_preview_panel()
+        cs = CompositeScreen(right_panels={"HOME": panel})
+        cs.handle_action("DOUBLE_PRESS")  # enter
+        cs.update(0.05)  # partial
+        cs.handle_action("LONG_PRESS")    # exit immediately
+        # Should be active with direction=exit, fresh progress
+        self.assertTrue(cs._slide_active)
+        self.assertEqual(cs._slide_direction, "exit")
+        self.assertAlmostEqual(cs._slide_progress, 0.0)
+
+    def test_render_during_slide_no_error(self):
+        """render() works during an active slide transition."""
+        panel = _make_preview_panel()
+        cs = CompositeScreen(right_panels={"HOME": panel})
+        cs.handle_action("DOUBLE_PRESS")
+        cs.update(0.05)
+        cs.render(self.surface)  # should not raise
+
+    # ── Transition: sidebar flash on scroll ──────────────────────
+
+    def test_sidebar_scroll_starts_flash(self):
+        """SHORT_PRESS sets flash timer."""
+        cs = CompositeScreen()
+        cs.handle_action("SHORT_PRESS")
+        self.assertGreater(cs._flash_timer, 0.0)
+
+    def test_flash_decays_with_update(self):
+        """Flash timer decreases over time."""
+        cs = CompositeScreen()
+        cs.handle_action("SHORT_PRESS")
+        initial = cs._flash_timer
+        cs.update(0.05)
+        self.assertLess(cs._flash_timer, initial)
+
+    def test_flash_reaches_zero(self):
+        """Flash timer reaches zero after enough time."""
+        cs = CompositeScreen()
+        cs.handle_action("SHORT_PRESS")
+        cs.update(0.20)  # > 150ms
+        self.assertAlmostEqual(cs._flash_timer, 0.0)
+
+    def test_render_with_flash_no_error(self):
+        """render() works with flash overlay active."""
+        cs = CompositeScreen()
+        cs.handle_action("SHORT_PRESS")
+        cs.render(self.surface)  # should not raise
+
 
 if __name__ == "__main__":
     unittest.main()

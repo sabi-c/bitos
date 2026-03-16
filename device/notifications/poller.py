@@ -1,12 +1,15 @@
 """Background pull-based notification sources."""
 from __future__ import annotations
 
+import logging
 import threading
 import time
 import uuid
 from datetime import date
 
 from overlays.notification import NotificationQueue, NotificationRecord
+
+logger = logging.getLogger(__name__)
 
 
 class NotificationPoller:
@@ -20,6 +23,7 @@ class NotificationPoller:
         self._notified_overdue_task_ids: set[str] = set()
         # Optional callback for interactive banners (set by main.py)
         self.on_banner: callable | None = None
+        self._notified_activity_ids: set[str] = set()
         self._notified_subtask_ids: set[str] = set()
         self._update_notified = False
 
@@ -41,23 +45,36 @@ class NotificationPoller:
         next_subtask_poll = 0.0
         next_update_poll = 15.0  # Check for updates 15s after boot
         next_settings_poll = 5.0  # Check for companion app setting changes
+        next_activity_poll = 10.0  # Check activity feed 10s after boot
+        consecutive_errors = 0
         while not self._stop.wait(1.0):
-            now = time.time()
-            if now >= next_health_poll:
-                self._poll_health_state()
-                next_health_poll = now + 30.0
-            if now >= next_task_poll:
-                self._poll_overdue_tasks()
-                next_task_poll = now + 300.0
-            if now >= next_subtask_poll:
-                self._poll_completed_subtasks()
-                next_subtask_poll = now + 10.0
-            if now >= next_update_poll:
-                self._poll_update_available()
-                next_update_poll = now + 3600.0  # Re-check hourly
-            if now >= next_settings_poll:
-                self._poll_pending_settings()
-                next_settings_poll = now + 5.0  # Check every 5s
+            try:
+                now = time.time()
+                if now >= next_health_poll:
+                    self._poll_health_state()
+                    next_health_poll = now + 30.0
+                if now >= next_task_poll:
+                    self._poll_overdue_tasks()
+                    next_task_poll = now + 300.0
+                if now >= next_subtask_poll:
+                    self._poll_completed_subtasks()
+                    next_subtask_poll = now + 10.0
+                if now >= next_update_poll:
+                    self._poll_update_available()
+                    next_update_poll = now + 3600.0  # Re-check hourly
+                if now >= next_settings_poll:
+                    self._poll_pending_settings()
+                    next_settings_poll = now + 5.0  # Check every 5s
+                if now >= next_activity_poll:
+                    self._poll_activity_feed()
+                    next_activity_poll = now + 30.0  # Check every 30s
+                consecutive_errors = 0
+            except Exception as exc:
+                consecutive_errors += 1
+                logger.error("poll_loop_error count=%d error=%s", consecutive_errors, exc)
+                # Back off on repeated failures to avoid log spam
+                if consecutive_errors > 5:
+                    self._stop.wait(min(30, consecutive_errors * 2))
 
     def _poll_health_state(self) -> None:
         state = bool(self._api_client.health())
@@ -166,3 +183,46 @@ class NotificationPoller:
                 source_id=task_id,
             )
             self._queue.push_record(record)
+
+    def _poll_activity_feed(self) -> None:
+        """Poll /activity for new unread messages, emails, and calendar events."""
+        try:
+            import httpx
+            resp = httpx.get(
+                f"{self._api_client.base_url}/activity",
+                timeout=10,
+                headers=self._api_client._request_headers(),
+            )
+            resp.raise_for_status()
+            items = resp.json().get("items", [])
+        except Exception:
+            return
+
+        _TYPE_ICON = {"SMS": "S", "MAIL": "M", "CALENDAR": "E", "TASK": "#"}
+
+        for item in items:
+            item_type = item.get("type", "SMS")
+            source_id = item.get("source_id", "")
+            dedup_key = f"{item_type}:{source_id or item.get('source', '')}"
+            if dedup_key in self._notified_activity_ids:
+                continue
+            if not item.get("unread", False):
+                continue
+
+            self._notified_activity_ids.add(dedup_key)
+            source = item.get("source", "")[:12]
+            preview = item.get("preview", "")[:24]
+
+            record = NotificationRecord(
+                id=f"activity:{dedup_key}:{uuid.uuid4().hex[:6]}",
+                type=item_type if item_type in ("SMS", "MAIL", "CALENDAR", "TASK") else "SMS",
+                app_name=source,
+                message=preview,
+                time_str=str(item.get("time", ""))[:5] or time.strftime("%H:%M"),
+                source_id=source_id,
+            )
+            self._queue.push_record(record)
+
+            if item_type in ("SMS", "MAIL") and self.on_banner:
+                icon = _TYPE_ICON.get(item_type, "N")
+                self.on_banner(source, icon, preview)

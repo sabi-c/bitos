@@ -1,7 +1,9 @@
 """BITOS Device main entry point."""
 import json
 import logging
+import logging.handlers
 import os
+import sys
 import threading
 
 try:
@@ -10,11 +12,46 @@ try:
 except ImportError:
     pass
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
-    datefmt="%H:%M:%S",
-)
+
+def _configure_device_logging():
+    """Structured logging with file rotation for remote Pi debugging."""
+    log_dir = os.environ.get("BITOS_LOG_DIR", "/var/log/bitos")
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+    except PermissionError:
+        # Fall back to local dir if /var/log not writable
+        log_dir = os.path.join(os.path.dirname(__file__), "logs")
+        os.makedirs(log_dir, exist_ok=True)
+
+    fmt = logging.Formatter(
+        "%(asctime)s %(levelname)s %(name)s %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S",
+    )
+
+    console = logging.StreamHandler(sys.stderr)
+    console.setFormatter(fmt)
+
+    file_handler = logging.handlers.RotatingFileHandler(
+        os.path.join(log_dir, "device.log"),
+        maxBytes=2 * 1024 * 1024,  # 2MB — constrained for Pi SD card
+        backupCount=3,
+        encoding="utf-8",
+    )
+    file_handler.setFormatter(fmt)
+
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    root.addHandler(console)
+    root.addHandler(file_handler)
+
+    # Quiet noisy libraries
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("pygame").setLevel(logging.WARNING)
+
+
+_configure_device_logging()
+
 import time
 
 import pygame
@@ -25,7 +62,7 @@ import display.tokens as tokens
 from display.tokens import FPS
 from input.handler import ButtonEvent, create_button_handler
 from notifications import NotificationPoller
-from overlays import NotificationQueue, NotificationToast, QROverlay
+from overlays import AgentOverlay, NotificationQueue, NotificationToast, QROverlay
 from overlays.notification_banner import NotificationBanner
 from bluetooth import AuthManager, get_gatt_server
 from bluetooth.characteristics import DeviceInfoCharacteristic, DeviceStatusCharacteristic, KeyboardInputCharacteristic, WiFiConfigCharacteristic, WiFiStatusCharacteristic
@@ -51,6 +88,7 @@ from screens.panels.captures import CapturesPanel
 from screens.panels.messages import MessagesPanel
 from screens.panels.mail import MailPanel
 from screens.panels.notifications import NotificationsPanel
+from screens.panels.activity import ActivityPanel
 from screens.panels.agent_tasks import AgentTasksPanel
 from screens.panels.files_browser import FilesBrowserPanel
 from screens.panels.markdown_viewer import MarkdownViewerPanel
@@ -225,6 +263,18 @@ def main():
         idle_mgr.wake()
         if power_overlay is not None:
             power_overlay.handle_input(btn_event.name)
+            return
+        # Agent overlay intercepts all gestures while active
+        if agent_overlay is not None:
+            if btn_event == ButtonEvent.TRIPLE_PRESS:
+                # Triple-press again dismisses the overlay
+                toggle_agent_overlay()
+                return
+            agent_overlay.handle_action(btn_event.name)
+            return
+        # Triple-press from any screen opens the agent overlay
+        if btn_event == ButtonEvent.TRIPLE_PRESS:
+            toggle_agent_overlay()
             return
         screen_mgr.handle_action(btn_event.name)
 
@@ -476,12 +526,18 @@ def main():
             "FOCUS": open_focus,
             "MAIL": open_mail,
             "MSGS": open_messages,
-            "MUSIC": lambda: None,  # not yet implemented
+            "COMMS": open_messages,  # default to messages view
+            "CONTACTS": lambda: None,  # not yet implemented
             "FILES": open_files_browser,
-            "HISTORY": open_captures,
+            "NOTIFICATIONS": open_activity,  # notifications use activity panel
             "AGENT": open_agent_tasks,
+            "ACTIVITY": open_activity,
         }
-        right_panels = create_right_panels(panel_openers=panel_openers, repository=repository)
+        right_panels = create_right_panels(
+            panel_openers=panel_openers,
+            repository=repository,
+            status_state=status_state,
+        )
 
         # Fetch greeting for chat preview
         def _fetch_greeting():
@@ -518,6 +574,103 @@ def main():
                 logger.warning("greeting_fetch_failed: %s", exc)
 
         threading.Thread(target=_fetch_greeting, daemon=True).start()
+
+        # ── Fetch live data for Activity, Comms, and Tasks previews ──
+        _home_data_alive = threading.Event()
+        _home_data_alive.set()
+
+        def _fetch_activity_loop():
+            """Poll activity counts every 30s while home screen is active."""
+            while _home_data_alive.is_set():
+                try:
+                    items = client.get_activity()
+                    msgs = sum(1 for i in items if i.get("type") == "message" and not i.get("read"))
+                    mail = sum(1 for i in items if i.get("type") == "email" and not i.get("read"))
+                    tasks = sum(1 for i in items if i.get("type") == "task" and not i.get("read"))
+                    activity_panel = right_panels.get("ACTIVITY")
+                    if activity_panel and hasattr(activity_panel, "set_counts"):
+                        activity_panel.set_counts(msgs=msgs, mail=mail, tasks=tasks)
+                except Exception as exc:
+                    logger.warning("activity_preview_fetch_failed: %s", exc)
+                # Sleep in small increments so we can exit promptly
+                for _ in range(30):
+                    if not _home_data_alive.is_set():
+                        return
+                    time.sleep(1)
+
+        def _fetch_comms():
+            """Fetch latest message and email snippets for comms preview."""
+            try:
+                latest_msg = None
+                latest_mail = None
+
+                # Latest message from conversations
+                conversations = client.get_conversations()
+                if conversations:
+                    top = conversations[0]
+                    sender = str(top.get("sender", top.get("name", "")))[:12]
+                    body = str(top.get("last_message", top.get("snippet", "")))[:20]
+                    if sender or body:
+                        latest_msg = f"{sender}: {body}" if sender else body
+
+                # Latest email from mail inbox
+                threads = client.get_mail_inbox()
+                if threads:
+                    top = threads[0]
+                    sender = str(top.get("from", top.get("sender", "")))[:12]
+                    body = str(top.get("subject", top.get("snippet", "")))[:20]
+                    if sender or body:
+                        latest_mail = f"{sender}: {body}" if sender else body
+
+                comms_panel = right_panels.get("COMMS")
+                if comms_panel and hasattr(comms_panel, "set_latest"):
+                    comms_panel.set_latest(msg=latest_msg, mail=latest_mail)
+            except Exception as exc:
+                logger.warning("comms_preview_fetch_failed: %s", exc)
+
+        def _fetch_tasks_preview():
+            """Fetch today's tasks for the tasks preview panel."""
+            try:
+                raw_tasks = client.get_tasks()
+                tasks = [
+                    {"title": str(t.get("title", "")), "done": bool(t.get("done", False))}
+                    for t in raw_tasks
+                ]
+                tasks_panel = right_panels.get("TASKS")
+                if tasks_panel and hasattr(tasks_panel, "set_tasks"):
+                    tasks_panel.set_tasks(tasks)
+            except Exception as exc:
+                logger.warning("tasks_preview_fetch_failed: %s", exc)
+
+        def _fetch_context():
+            """Fetch live context (weather, headlines, events, counts) for home ticker."""
+            try:
+                data = client.get_context()
+                if not data:
+                    return
+                home_panel = right_panels.get("HOME")
+                if home_panel is None:
+                    return
+                if data.get("weather"):
+                    home_panel.set_weather(data["weather"])
+                if data.get("headlines"):
+                    home_panel.set_headlines(data["headlines"])
+                if data.get("next_event"):
+                    home_panel.set_next_event(data["next_event"])
+                if data.get("tasks_today") is not None:
+                    home_panel.set_task_count(data["tasks_today"])
+                if data.get("unread_msgs") is not None or data.get("unread_mail") is not None:
+                    home_panel.set_unread(
+                        data.get("unread_msgs", 0),
+                        data.get("unread_mail", 0),
+                    )
+            except Exception as exc:
+                logger.warning("context_fetch_failed: %s", exc)
+
+        threading.Thread(target=_fetch_activity_loop, daemon=True, name="home_activity").start()
+        threading.Thread(target=_fetch_comms, daemon=True, name="home_comms").start()
+        threading.Thread(target=_fetch_tasks_preview, daemon=True, name="home_tasks").start()
+        threading.Thread(target=_fetch_context, daemon=True, name="home_context").start()
 
         # Set resume info on chat preview
         latest_chat = repository.get_latest_chat_session()
@@ -639,6 +792,9 @@ def main():
     def open_tasks():
         screen_mgr.push(TasksPanel(client=client, repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
 
+    def open_activity():
+        screen_mgr.push(ActivityPanel(client=client, repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
+
     def open_agent_tasks():
         screen_mgr.push(AgentTasksPanel(client=client, repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
 
@@ -669,7 +825,7 @@ def main():
 
     def open_messages():
         raw_pct = battery_monitor.get_status().get("pct")
-        battery_pct = int(raw_pct) if raw_pct is not None else 84
+        battery_pct = int(raw_pct) if raw_pct is not None else 0
         screen_mgr.push(
             MessagesPanel(
                 client=client,
@@ -683,7 +839,7 @@ def main():
 
     def open_mail():
         raw_pct = battery_monitor.get_status().get("pct")
-        battery_pct = int(raw_pct) if raw_pct is not None else 84
+        battery_pct = int(raw_pct) if raw_pct is not None else 0
         screen_mgr.push(
             MailPanel(
                 client=client,
@@ -719,6 +875,7 @@ def main():
                 ui_settings=ui_settings,
                 client=client,
                 on_open_integration_detail=open_integration_detail,
+                auth_manager=auth_manager,
             )
         )
 
@@ -801,6 +958,7 @@ def main():
         screen_mgr.push(boot)
 
     power_overlay: PowerOverlay | None = None
+    agent_overlay: AgentOverlay | None = None
 
     def close_power_overlay():
         nonlocal power_overlay
@@ -824,6 +982,24 @@ def main():
             on_reboot=lambda: run_power_action("reboot"),
             on_cancel=close_power_overlay,
         )
+
+    def toggle_agent_overlay():
+        nonlocal agent_overlay
+        if agent_overlay is not None:
+            # Already showing — dismiss it
+            agent_overlay._dismiss()
+            agent_overlay = None
+            return
+        agent_overlay = AgentOverlay(
+            audio_pipeline=audio_pipeline,
+            client=client,
+            led=led,
+            on_dismiss=lambda: _clear_agent_overlay(),
+        )
+
+    def _clear_agent_overlay():
+        nonlocal agent_overlay
+        agent_overlay = None
 
     screen_mgr.attach_device_status_characteristic(device_status_char)
 
@@ -887,6 +1063,13 @@ def main():
         surface = driver.get_surface()
         screen_mgr.update(dt)
         screen_mgr.render(surface)
+        # Agent overlay renders on top of everything except power overlay
+        if agent_overlay is not None:
+            dt_ms = int(max(0.0, dt) * 1000)
+            if not agent_overlay.tick(dt_ms):
+                agent_overlay = None
+            else:
+                agent_overlay.render(surface)
         if power_overlay is not None:
             power_overlay.render(surface, tokens)
         corner_mask.apply(surface)
@@ -914,4 +1097,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as fatal:
+        _handle_main_loop_crash(fatal)
+        logging.critical("BITOS device crashed — see /tmp/bitos_crash.json")
+        sys.exit(1)

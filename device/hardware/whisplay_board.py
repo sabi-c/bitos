@@ -1,4 +1,8 @@
-import sys, os
+import logging
+import sys
+import os
+
+logger = logging.getLogger(__name__)
 
 _instance = None
 
@@ -19,7 +23,8 @@ def get_board():
             pass
         _instance = WhisPlayBoard()
         _instance.set_backlight(100)
+        logger.info("whisplay_board_init_ok")
     except Exception as e:
-        print(f"whisplay_board_init_failed: {e}")
+        logger.warning("whisplay_board_init_failed: %s", e)
         _instance = None
     return _instance

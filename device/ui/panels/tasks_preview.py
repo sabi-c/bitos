@@ -18,8 +18,8 @@ TASK_LINE_H = 18
 MAX_TASKS = 3
 TASKS_PAD_X = 6
 TASKS_PAD_Y = 2
-TASKS_FONT_SIZE = 8
-HEADER_FONT_SIZE = 10
+TASKS_FONT_SIZE = 9
+HEADER_FONT_SIZE = 11
 
 # Checkbox characters
 CHECK_DONE = "\u25a0"   # ■
@@ -80,7 +80,8 @@ class TasksPreviewPanel(PreviewPanel):
             y += TASK_LINE_H
 
         # Separator
-        sep_y = TASKS_HEADER_H + MAX_TASKS * TASK_LINE_H
+        displayed = self._get_tasks()
+        sep_y = TASKS_HEADER_H + len(displayed) * TASK_LINE_H
         pygame.draw.line(surface, HAIRLINE,
                          (TASKS_PAD_X, sep_y),
                          (w - TASKS_PAD_X, sep_y))

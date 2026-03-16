@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from typing import Generator
 
@@ -23,6 +24,8 @@ from config import (
     NANOCLAW_BASE_URL,
     NANOCLAW_MODEL,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -65,9 +68,22 @@ class AnthropicBridge(LLMBridge):
             kwargs["max_tokens"] = 16000
             kwargs["thinking"] = {"type": "enabled", "budget_tokens": 10000}
 
-        with client.messages.stream(**kwargs) as stream:
-            for text in stream.text_stream:
-                yield text
+        try:
+            with client.messages.stream(**kwargs) as stream:
+                for text in stream.text_stream:
+                    yield text
+        except anthropic.AuthenticationError as exc:
+            logger.error("anthropic_auth_error: %s", exc)
+            raise RuntimeError("Invalid API key") from exc
+        except anthropic.RateLimitError as exc:
+            logger.warning("anthropic_rate_limit: %s", exc)
+            raise RuntimeError("Rate limited — try again in a moment") from exc
+        except anthropic.APIStatusError as exc:
+            logger.error("anthropic_api_error: status=%s error=%s", exc.status_code, exc)
+            raise RuntimeError(f"Anthropic API error ({exc.status_code})") from exc
+        except anthropic.APIConnectionError as exc:
+            logger.error("anthropic_connection_error: %s", exc)
+            raise RuntimeError("Cannot reach Anthropic API") from exc
 
     def stream_with_tools(
         self,
@@ -97,63 +113,76 @@ class AnthropicBridge(LLMBridge):
         messages = [{"role": "user", "content": message}]
         sys = system_prompt or SYSTEM_PROMPT
 
-        for _round in range(5):
-            kwargs: dict = {
-                "model": active_model,
-                "max_tokens": 1024,
-                "messages": messages,
-                "system": sys,
-                "tools": tools,
-            }
-            if extended_thinking:
-                kwargs["max_tokens"] = 16000
-                kwargs["thinking"] = {"type": "enabled", "budget_tokens": 10000}
+        try:
+            for _round in range(5):
+                kwargs: dict = {
+                    "model": active_model,
+                    "max_tokens": 1024,
+                    "messages": messages,
+                    "system": sys,
+                    "tools": tools,
+                }
+                if extended_thinking:
+                    kwargs["max_tokens"] = 16000
+                    kwargs["thinking"] = {"type": "enabled", "budget_tokens": 10000}
 
-            response = client.messages.create(**kwargs)
+                logger.info("tool_round=%d model=%s", _round, active_model)
+                response = client.messages.create(**kwargs)
 
-            # Process response blocks
-            has_tool_use = False
-            tool_results = []
-            assistant_content = []
+                # Process response blocks
+                has_tool_use = False
+                tool_results = []
+                assistant_content = []
 
-            for block in response.content:
-                assistant_content.append(block)
-                if block.type == "text":
-                    yield block.text
-                elif block.type == "tool_use":
-                    has_tool_use = True
+                for block in response.content:
+                    assistant_content.append(block)
+                    if block.type == "text":
+                        yield block.text
+                    elif block.type == "tool_use":
+                        has_tool_use = True
+                        logger.info("tool_call: name=%s input=%s", block.name, json.dumps(block.input)[:200])
 
-                    if block.name == "request_approval":
-                        # Special handling: yield SSE event BEFORE blocking
-                        prompt = block.input.get("prompt", "Confirm?")
-                        options = block.input.get("options", ["Yes", "No"])[:3]
-                        if len(options) < 2:
-                            options = ["Yes", "No"]
-                        request_id, sse_data = create_approval_request(prompt, options)
-                        # Yield the SSE event dict — caller will emit it
-                        yield sse_data
-                        # Now block until device responds
-                        choice = wait_for_approval(request_id, timeout=60.0)
-                        result = json.dumps({"choice": choice, "request_id": request_id})
-                    else:
-                        result = handle_tool_call(
-                            block.name, block.input, device_settings, setting_changes,
-                        )
+                        if block.name == "request_approval":
+                            # Special handling: yield SSE event BEFORE blocking
+                            prompt = block.input.get("prompt", "Confirm?")
+                            options = block.input.get("options", ["Yes", "No"])[:3]
+                            if len(options) < 2:
+                                options = ["Yes", "No"]
+                            request_id, sse_data = create_approval_request(prompt, options)
+                            # Yield the SSE event dict — caller will emit it
+                            yield sse_data
+                            # Now block until device responds
+                            choice = wait_for_approval(request_id, timeout=60.0)
+                            result = json.dumps({"choice": choice, "request_id": request_id})
+                        else:
+                            result = handle_tool_call(
+                                block.name, block.input, device_settings, setting_changes,
+                            )
 
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": result,
-                    })
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": result,
+                        })
 
-            if not has_tool_use:
-                return setting_changes
+                if not has_tool_use:
+                    return setting_changes
 
-            # Continue conversation with tool results
-            messages.append({"role": "assistant", "content": assistant_content})
-            messages.append({"role": "user", "content": tool_results})
+                # Continue conversation with tool results
+                messages.append({"role": "assistant", "content": assistant_content})
+                messages.append({"role": "user", "content": tool_results})
 
-        return setting_changes
+            logger.warning("tool_loop_exhausted: hit 5-round limit")
+            return setting_changes
+        except anthropic.AuthenticationError as exc:
+            logger.error("anthropic_auth_error_tools: %s", exc)
+            raise RuntimeError("Invalid API key") from exc
+        except anthropic.RateLimitError as exc:
+            logger.warning("anthropic_rate_limit_tools: %s", exc)
+            raise RuntimeError("Rate limited — try again in a moment") from exc
+        except anthropic.APIStatusError as exc:
+            logger.error("anthropic_api_error_tools: status=%s error=%s", exc.status_code, exc)
+            raise RuntimeError(f"Anthropic API error ({exc.status_code})") from exc
 
     def complete_text(self, prompt: str, system_prompt: str | None = None, model_override: str | None = None) -> tuple[str, int, int]:
         """Non-streaming completion. Returns (response_text, input_tokens, output_tokens)."""

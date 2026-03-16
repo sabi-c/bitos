@@ -83,14 +83,36 @@
       navigator.serviceWorker.register('/sw.js').catch(() => {});
     }
   </script>
-  <script src="js/ble.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/crypto.js"></script>
+  <script src="js/ble.js"></script>
   <script>
     const companion = new BitosCompanion();
     let pairingActive = false;
 
+    // ── Parse QR pairing params ──
+    const _qrParams = new URLSearchParams(window.location.search);
+    const _qrSession = _qrParams.get('session');
+    const _qrToken = _qrParams.get('token');
+    const _qrExp = parseInt(_qrParams.get('exp') || '0', 10);
+    const _qrVersion = parseInt(_qrParams.get('v') || '1', 10);
+
+    function isQrExpired() {
+      return _qrVersion >= 2 && _qrExp > 0 && Math.floor(Date.now() / 1000) >= _qrExp;
+    }
+
+    // Store pairing credentials on companion so ble.js can include them
+    if (_qrVersion >= 2 && _qrSession && _qrToken) {
+      companion._pairingSession = _qrSession;
+      companion._pairingToken = _qrToken;
+    }
+
     async function connectDevice() {
+      if (isQrExpired()) {
+        document.getElementById('connect-status').innerHTML =
+          '<span class="err">QR expired — scan a new code on the device</span>';
+        return;
+      }
       try {
         document.getElementById('connect-status').textContent = 'Connecting...';
         await companion.connect();
@@ -151,19 +173,25 @@
       try {
         const info = await companion.readDeviceInfo();
         const serial = (info.serial || 'unknown').slice(-6);
-        document.getElementById('info').innerHTML = 'serial: ' + serial + '<br>model: ' + (info.model || 'BITOS') + '<br>protocol: ' + (info.protocol || 'v1');
+        const infoEl = document.getElementById('info');
+        infoEl.textContent = 'serial: ' + serial + ' | model: ' + (info.model || 'BITOS') + ' | protocol: ' + (info.protocol || 'v1');
       } catch (e) {
         document.getElementById('info').textContent = e.message;
       }
     }
 
     async function authPin() {
+      if (isQrExpired()) {
+        document.getElementById('auth').innerHTML =
+          '<span class="err">QR expired — scan a new code on the device</span>';
+        return;
+      }
       try {
         const pin = document.getElementById('pin').value;
         await companion.authenticate(pin);
         const status = await companion.readStatus();
         document.getElementById('auth').innerHTML = '<span class="ok">Authenticated</span>';
-        document.getElementById('paired').innerHTML = 'battery: ' + status.battery + '% &middot; wifi: ' + status.wifi + ' &middot; ai: ' + status.ai;
+        document.getElementById('paired').textContent = 'battery: ' + status.battery + '% · wifi: ' + status.wifi + ' · ai: ' + status.ai;
       } catch (e) {
         document.getElementById('auth').textContent = e.message;
       }
@@ -171,7 +199,14 @@
 
     async function sendKeyboard() {
       const text = document.getElementById('kb-input').value;
-      await companion.sendKeyboardInput(text);
+      if (!text.trim()) return;
+      try {
+        await companion.sendKeyboardInput(text);
+        document.getElementById('kb-input').value = '';
+      } catch (e) {
+        document.getElementById('paired').innerHTML =
+          '<span class="err">' + e.message + '</span>';
+      }
     }
 
     function disconnect() {

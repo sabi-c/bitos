@@ -16,8 +16,8 @@ from device.display.typewriter import TypewriterRenderer
 from device.ui.panels.base import PreviewPanel
 
 
-GREETING_H = 60
-GREETING_FONT_SIZE = 8
+GREETING_H = 70
+GREETING_FONT_SIZE = 11
 GREETING_PAD_X = 6
 GREETING_PAD_Y = 4
 MAX_GREETING_CHARS = 120

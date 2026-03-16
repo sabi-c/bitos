@@ -72,10 +72,10 @@ class BatteryMonitor:
                 return response.split(":", 1)[1].strip()
             return response or None
         except (FileNotFoundError, ConnectionRefusedError, TimeoutError):
-            logger.debug("pisugar-server unavailable for command=%s", command)
+            logger.warning("pisugar-server unavailable for command=%s", command)
             return None
         except Exception as exc:
-            logger.debug("pisugar query failed command=%s error=%s", command, exc)
+            logger.warning("pisugar query failed command=%s error=%s", command, exc)
             return None
 
     def _run(self) -> None:

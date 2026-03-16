@@ -59,7 +59,13 @@ class BitosCompanion {
     // Store for WiFi encryption
     this._bleSecret = bleSecret;
     const hmac = await computeHMAC(bleSecret, challenge.nonce, challenge.timestamp);
-    const payload = JSON.stringify({ response: hmac, nonce: challenge.nonce });
+    const authPayload = { response: hmac, nonce: challenge.nonce };
+    // Include ephemeral pairing credentials if present (v2 QR flow)
+    if (this._pairingSession && this._pairingToken) {
+      authPayload.pairing_session = this._pairingSession;
+      authPayload.pairing_token = this._pairingToken;
+    }
+    const payload = JSON.stringify(authPayload);
     await this.chars.AUTH_RESPONSE.writeValue(
       new TextEncoder().encode(payload));
     const resp = await this.chars.AUTH_RESPONSE.readValue();

@@ -1,79 +1,68 @@
 """Maps sidebar labels to preview panels for composite screen.
 
-Creates ChatPreviewPanel, TasksPreviewPanel, and GenericPreviewPanel
-instances wired to action callbacks from main.py.
+Creates custom preview panels for each sidebar item wired to
+action callbacks from main.py.
+
+Sidebar items: HOME, CHAT, TASKS, ACTIVITY, COMMS, FILES, SETTINGS, FOCUS
 """
 
 from device.ui.panels.chat_preview import ChatPreviewPanel
 from device.ui.panels.tasks_preview import TasksPreviewPanel
+from device.ui.panels.home_preview import HomePreviewPanel
+from device.ui.panels.activity_preview import ActivityPreviewPanel
+from device.ui.panels.comms_preview import CommsPreviewPanel
+from device.ui.panels.settings_preview import SettingsPreviewPanel
 from device.ui.panels.generic_preview import GenericPreviewPanel
 
 
-# Default submenu items for generic panels.
-# Each item needs: label, description, action key.
+# Generic configs for items that don't have custom panels yet.
 _GENERIC_CONFIGS = {
-    "HOME": [
-        {"label": "OVERVIEW", "description": "Home overview", "action": "open"},
-        {"label": "BACK", "description": "Return to sidebar", "action": "back"},
-    ],
-    "SETTINGS": [
-        {"label": "OPEN SETTINGS", "description": "Full settings panel", "action": "open"},
+    "FILES": [
+        {"label": "BROWSE", "description": "Browse files", "action": "open"},
+        {"label": "RECENT", "description": "Recently opened", "action": "recent"},
         {"label": "BACK", "description": "Return to sidebar", "action": "back"},
     ],
     "FOCUS": [
         {"label": "START FOCUS", "description": "Begin focus session", "action": "open"},
+        {"label": "TIMER", "description": "Set focus timer", "action": "timer"},
         {"label": "BACK", "description": "Return to sidebar", "action": "back"},
-    ],
-    "MAIL": [
-        {"label": "VIEW MAIL", "description": "Open mail panel", "action": "open"},
-        {"label": "BACK", "description": "Return to sidebar", "action": "back"},
-    ],
-    "MSGS": [
-        {"label": "VIEW MESSAGES", "description": "Open messages panel", "action": "open"},
-        {"label": "BACK", "description": "Return to sidebar", "action": "back"},
-    ],
-    "MUSIC": [
-        {"label": "NOW PLAYING", "description": "Music controls", "action": "open"},
-        {"label": "BACK", "description": "Return to sidebar", "action": "back"},
-    ],
-    "HISTORY": [
-        {"label": "VIEW HISTORY", "description": "Browse captures", "action": "open"},
-        {"label": "BACK", "description": "Return to sidebar", "action": "back"},
-    ],
-    "AGENT": [
-        {"label": "TASKS", "description": "Agent subtasks", "action": "open"},
-        {"label": "BACK TO MAIN MENU", "description": "Return to sidebar", "action": "back"},
-    ],
-    "FILES": [
-        {"label": "BROWSE", "description": "Browse files", "action": "open"},
-        {"label": "BACK TO MAIN MENU", "description": "Return to sidebar", "action": "back"},
     ],
 }
 
 
-def create_right_panels(panel_openers: dict | None = None, repository=None) -> dict:
+def create_right_panels(panel_openers: dict | None = None, repository=None, status_state=None) -> dict:
     """Create preview panels keyed by sidebar label.
 
     Args:
         panel_openers: dict mapping sidebar labels to opener callables.
             Used to wire submenu actions to screen transitions.
+        repository: device settings repository for panels that need it.
+        status_state: shared status state for settings preview header.
     """
     openers = panel_openers or {}
     panels = {}
 
+    # ── Home: custom preview panel ──
+    def home_action(action_key):
+        if action_key == "back":
+            return
+        mapping = {"chat": "CHAT", "tasks": "TASKS", "activity": "ACTIVITY"}
+        target = mapping.get(action_key)
+        if target:
+            opener = openers.get(target)
+            if opener is not None:
+                opener()
+
+    panels["HOME"] = HomePreviewPanel(on_action=home_action)
+
     # ── Chat: custom preview panel ──
     def chat_action(action_key):
         if action_key == "back":
-            return  # handled by CompositeScreen (returns focus to sidebar)
+            return
         if action_key == "respond":
-            # Reply to greeting — open chat in greeting mode
-            opener = openers.get("CHAT_GREETING")
+            opener = openers.get("CHAT_GREETING") or openers.get("CHAT")
             if opener is not None:
                 opener()
-            else:
-                opener = openers.get("CHAT")
-                if opener is not None:
-                    opener()
             return
         if action_key == "settings":
             opener = openers.get("CHAT_SETTINGS")
@@ -81,29 +70,20 @@ def create_right_panels(panel_openers: dict | None = None, repository=None) -> d
                 opener()
             return
         if action_key == "new_chat":
-            opener = openers.get("CHAT_NEW")
+            opener = openers.get("CHAT_NEW") or openers.get("CHAT")
             if opener is not None:
                 opener()
-            else:
-                opener = openers.get("CHAT")
-                if opener is not None:
-                    opener()
             return
         if action_key == "resume_chat":
-            opener = openers.get("CHAT_RESUME")
+            opener = openers.get("CHAT_RESUME") or openers.get("CHAT")
             if opener is not None:
                 opener()
-            else:
-                opener = openers.get("CHAT")
-                if opener is not None:
-                    opener()
             return
         if action_key == "chat_history":
             opener = openers.get("CHAT_HISTORY")
             if opener is not None:
                 opener()
             return
-        # Fallback: open default chat
         opener = openers.get("CHAT")
         if opener is not None:
             opener()
@@ -113,12 +93,77 @@ def create_right_panels(panel_openers: dict | None = None, repository=None) -> d
     # ── Tasks: custom preview panel ──
     def tasks_action(action_key):
         if action_key == "back":
-            return  # handled by CompositeScreen
+            return
         opener = openers.get("TASKS")
         if opener is not None:
             opener()
 
     panels["TASKS"] = TasksPreviewPanel(on_action=tasks_action)
+
+    # ── Activity: merged agent + notifications ──
+    def activity_action(action_key):
+        if action_key == "back":
+            return
+        if action_key == "notifications":
+            opener = openers.get("NOTIFICATIONS") or openers.get("ACTIVITY")
+            if opener is not None:
+                opener()
+            return
+        if action_key == "agent_tasks":
+            opener = openers.get("AGENT") or openers.get("ACTIVITY")
+            if opener is not None:
+                opener()
+            return
+        opener = openers.get("ACTIVITY")
+        if opener is not None:
+            opener()
+
+    panels["ACTIVITY"] = ActivityPreviewPanel(on_action=activity_action)
+
+    # ── Comms: unified messages + mail ──
+    def comms_action(action_key):
+        if action_key == "back":
+            return
+        if action_key == "messages":
+            opener = openers.get("MSGS") or openers.get("COMMS")
+            if opener is not None:
+                opener()
+            return
+        if action_key == "mail":
+            opener = openers.get("MAIL") or openers.get("COMMS")
+            if opener is not None:
+                opener()
+            return
+        if action_key == "contacts":
+            opener = openers.get("CONTACTS")
+            if opener is not None:
+                opener()
+            return
+        opener = openers.get("COMMS")
+        if opener is not None:
+            opener()
+
+    panels["COMMS"] = CommsPreviewPanel(on_action=comms_action)
+
+    # ── Settings: device info + quick toggles ──
+    def settings_action(action_key):
+        if action_key == "back":
+            return
+        if action_key in ("toggle_voice", "toggle_mode", "toggle_volume"):
+            # Quick toggles open settings directly for now
+            opener = openers.get("SETTINGS")
+            if opener is not None:
+                opener()
+            return
+        opener = openers.get("SETTINGS")
+        if opener is not None:
+            opener()
+
+    panels["SETTINGS"] = SettingsPreviewPanel(
+        on_action=settings_action,
+        status_state=status_state,
+        repository=repository,
+    )
 
     # ── Generic panels for remaining items ──
     for label, items in _GENERIC_CONFIGS.items():
@@ -127,8 +172,8 @@ def create_right_panels(panel_openers: dict | None = None, repository=None) -> d
         def _make_action(lbl, op):
             def action(action_key):
                 if action_key == "back":
-                    return  # handled by CompositeScreen
-                if action_key == "open" and op is not None:
+                    return
+                if op is not None:
                     op()
             return action
 

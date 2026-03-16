@@ -1,0 +1,276 @@
+/* BITOS Companion — Shared Styles */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #000; color: #fff;
+  font-family: monospace; font-size: 14px;
+  display: flex; flex-direction: column;
+  align-items: center;
+  padding: 20px 16px 88px;
+  min-height: 100vh;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1 { font-size: 20px; letter-spacing: .1em; margin-bottom: 4px; }
+.page-title { font-size: 11px; color: #555; letter-spacing: .08em; margin-bottom: 20px; }
+
+/* ── Cards ── */
+.card {
+  border: 2px solid #fff; padding: 16px;
+  width: 100%; max-width: 400px; margin-bottom: 16px;
+}
+.card.subtle { border-color: #333; }
+.card h2 {
+  font-size: 11px; letter-spacing: .08em;
+  margin-bottom: 14px; color: #aaa;
+}
+
+/* ── Connection badge ── */
+.conn-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 10px; letter-spacing: .08em; color: #888;
+  margin-bottom: 16px; padding: 6px 12px;
+  border: 1px solid #333;
+}
+.conn-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #f44;
+}
+.conn-dot.online { background: #4f4; }
+.conn-dot.partial { background: #fa0; }
+
+/* ── Info rows ── */
+.info-row {
+  display: flex; justify-content: space-between;
+  padding: 8px 0; border-bottom: 1px solid #1a1a1a;
+  font-size: 12px;
+}
+.info-row:last-child { border-bottom: none; }
+.info-key { color: #666; }
+.info-val { color: #ccc; text-align: right; }
+
+/* ── Buttons ── */
+button.primary {
+  width: 100%; background: #fff; color: #000;
+  border: none; font-family: monospace; font-size: 14px;
+  font-weight: bold; padding: 12px; cursor: pointer;
+  letter-spacing: .06em;
+}
+button.primary:disabled { background: #333; color: #666; }
+button.secondary {
+  width: 100%; background: #000; color: #fff;
+  border: 2px solid #444; font-family: monospace;
+  font-size: 14px; font-weight: bold; padding: 10px;
+  cursor: pointer; letter-spacing: .06em; margin-top: 8px;
+}
+
+/* ── Status text ── */
+.status {
+  font-size: 11px; letter-spacing: .06em; color: #888;
+  padding: 8px 0; min-height: 20px; white-space: pre-wrap;
+}
+.status.ok { color: #4f4; }
+.status.error { color: #f44; }
+
+/* ── Toast ── */
+.toast {
+  position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+  background: #fff; color: #000; font-family: monospace;
+  font-size: 12px; font-weight: bold; letter-spacing: .06em;
+  padding: 10px 20px; opacity: 0;
+  transition: opacity .3s;
+  pointer-events: none; z-index: 100;
+}
+.toast.show { opacity: 1; }
+
+/* ── Quick action buttons ── */
+.quick-actions {
+  display: flex; gap: 10px; width: 100%; max-width: 400px;
+  margin-bottom: 16px;
+}
+.quick-btn {
+  flex: 1; background: #111; border: 1px solid #333;
+  color: #ccc; font-family: monospace; font-size: 11px;
+  font-weight: bold; letter-spacing: .04em;
+  padding: 14px 8px; cursor: pointer;
+  text-align: center; transition: background .15s, border-color .15s;
+  min-height: 44px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 6px;
+}
+.quick-btn:active { background: #222; border-color: #666; }
+.quick-btn .icon { font-size: 18px; }
+
+/* ── Activity feed ── */
+.feed-item {
+  padding: 12px 0; border-bottom: 1px solid #1a1a1a;
+  cursor: pointer;
+}
+.feed-item:last-child { border-bottom: none; }
+.feed-item:active { background: #111; }
+.feed-source {
+  font-size: 10px; letter-spacing: .06em; color: #666;
+  margin-bottom: 4px; text-transform: uppercase;
+}
+.feed-title {
+  font-size: 13px; color: #ddd; margin-bottom: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.feed-time {
+  font-size: 10px; color: #444;
+}
+
+/* ── Widget row ── */
+.widget-row {
+  display: flex; gap: 10px; width: 100%; max-width: 400px;
+  margin-bottom: 16px;
+}
+.widget {
+  flex: 1; background: #111; border: 1px solid #333;
+  padding: 12px; font-size: 12px;
+}
+.widget-label {
+  font-size: 10px; letter-spacing: .06em; color: #666;
+  margin-bottom: 6px; text-transform: uppercase;
+}
+.widget-value {
+  font-size: 14px; color: #fff; font-weight: bold;
+}
+.widget-sub {
+  font-size: 10px; color: #555; margin-top: 4px;
+}
+
+/* ── Mode indicator ── */
+.mode-indicator {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 16px; border: 1px solid #333;
+  font-size: 11px; letter-spacing: .06em; color: #aaa;
+  cursor: pointer; margin-bottom: 16px;
+  transition: border-color .15s;
+  width: 100%; max-width: 400px; justify-content: center;
+}
+.mode-indicator:active { border-color: #888; }
+.mode-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #4f4; animation: pulse-dot 2s infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .4; }
+}
+
+/* ── Bottom nav ── */
+.bottom-nav {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: #000; border-top: 1px solid #222;
+  display: flex; justify-content: space-around;
+  padding: 0; z-index: 50;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+.nav-tab {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 10px 0 8px; gap: 4px;
+  background: none; border: none; cursor: pointer;
+  color: #555; font-family: monospace;
+  font-size: 9px; letter-spacing: .06em;
+  text-decoration: none; min-height: 52px;
+  transition: color .15s;
+}
+.nav-tab.active { color: #fff; }
+.nav-tab svg {
+  width: 22px; height: 22px;
+  stroke: currentColor; fill: none;
+  stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round;
+}
+.nav-label { text-transform: uppercase; }
+
+/* ── Chat styles ── */
+.chat-container {
+  width: 100%; max-width: 400px;
+  flex: 1; display: flex; flex-direction: column;
+  min-height: 0;
+}
+.chat-messages {
+  flex: 1; overflow-y: auto;
+  padding-bottom: 8px;
+  -webkit-overflow-scrolling: touch;
+}
+.chat-bubble {
+  max-width: 85%; padding: 10px 14px;
+  margin-bottom: 8px; font-size: 13px;
+  line-height: 1.5; word-wrap: break-word;
+}
+.chat-bubble.user {
+  background: #fff; color: #000;
+  margin-left: auto; text-align: right;
+}
+.chat-bubble.agent {
+  background: #1a1a1a; color: #ddd;
+  border: 1px solid #333;
+}
+.chat-bubble .bubble-time {
+  font-size: 9px; color: #888; margin-top: 4px;
+  display: block;
+}
+.chat-bubble.user .bubble-time { color: #666; }
+
+.chat-input-bar {
+  display: flex; gap: 8px; padding: 12px 0 4px;
+  border-top: 1px solid #222;
+  width: 100%; max-width: 400px;
+}
+.chat-input-bar input {
+  flex: 1; background: #111; border: 1px solid #333;
+  color: #fff; font-family: monospace; font-size: 14px;
+  padding: 12px; outline: none; min-height: 44px;
+}
+.chat-input-bar input:focus { border-color: #fff; }
+.chat-input-bar button {
+  background: #fff; color: #000; border: none;
+  font-family: monospace; font-size: 14px; font-weight: bold;
+  padding: 0 16px; cursor: pointer; letter-spacing: .04em;
+  min-width: 44px; min-height: 44px;
+}
+.chat-input-bar button:disabled { background: #333; color: #666; }
+
+/* ── Session list ── */
+.session-item {
+  padding: 12px 0; border-bottom: 1px solid #1a1a1a;
+  cursor: pointer;
+}
+.session-item:active { background: #111; }
+.session-title {
+  font-size: 13px; color: #ccc;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.session-time { font-size: 10px; color: #555; margin-top: 2px; }
+
+/* ── Loading ── */
+.loading {
+  text-align: center; color: #555;
+  font-size: 11px; letter-spacing: .06em;
+  padding: 20px;
+}
+.loading::after {
+  content: '';
+  display: inline-block; width: 12px; height: 12px;
+  border: 2px solid #333; border-top-color: #888;
+  border-radius: 50%; margin-left: 8px;
+  animation: spin .6s linear infinite;
+  vertical-align: middle;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Scrollable content area ── */
+.scroll-area {
+  width: 100%; max-width: 400px;
+  flex: 1; overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── Empty state ── */
+.empty-state {
+  text-align: center; padding: 40px 16px;
+  color: #444; font-size: 12px; letter-spacing: .04em;
+}

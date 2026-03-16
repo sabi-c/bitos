@@ -1,4 +1,4 @@
-"""TTS helpers with runtime fallback chain: piper -> openai -> espeak -> silent."""
+"""TTS helpers with runtime fallback chain: speechify -> chatterbox -> piper -> openai -> espeak -> silent."""
 
 from __future__ import annotations
 
@@ -47,18 +47,21 @@ class TextToSpeech:
             pass
 
         has_speechify = bool(os.environ.get("SPEECHIFY_API_KEY"))
+        has_chatterbox = self._check_chatterbox()
         has_openai_key = bool(os.environ.get("OPENAI_API_KEY"))
         has_piper = shutil.which("piper") and os.path.exists(
             os.getenv("PIPER_MODEL", "/home/pi/bitos/models/tts/en_US-lessac-medium.onnx")
         )
         has_espeak = shutil.which("espeak") or shutil.which("espeak-ng")
-        logger.info("tts_detect: preferred=%s speechify=%s piper=%s openai=%s espeak=%s",
-                     preferred, has_speechify, bool(has_piper), has_openai_key, bool(has_espeak))
+        logger.info("tts_detect: preferred=%s speechify=%s chatterbox=%s piper=%s openai=%s espeak=%s",
+                     preferred, has_speechify, has_chatterbox, bool(has_piper), has_openai_key, bool(has_espeak))
 
         # If user picked a specific engine and it's available, use it
         if preferred and preferred != "auto":
             if preferred == "speechify" and has_speechify:
                 return "speechify"
+            if preferred == "chatterbox" and has_chatterbox:
+                return "chatterbox"
             if preferred == "piper" and has_piper:
                 return "piper"
             if preferred == "openai" and has_openai_key:
@@ -70,6 +73,8 @@ class TextToSpeech:
         # Auto: best available
         if has_speechify:
             return "speechify"
+        if has_chatterbox:
+            return "chatterbox"
         if has_piper:
             return "piper"
         if has_openai_key:
@@ -91,6 +96,8 @@ class TextToSpeech:
         try:
             if self.engine == "speechify":
                 self._run_speechify(text, out)
+            elif self.engine == "chatterbox":
+                self._run_chatterbox(text, out)
             elif self.engine == "piper":
                 self._run_piper(text, out)
             elif self.engine == "openai":
@@ -128,6 +135,38 @@ class TextToSpeech:
                 if fallback == "espeak" and (shutil.which("espeak") or shutil.which("espeak-ng")):
                     self._run_espeak(text, output_file)
                     return
+
+    @staticmethod
+    def _check_chatterbox() -> bool:
+        """Return True if chatterbox-tts is importable."""
+        try:
+            import chatterbox.tts  # noqa: F401
+            return True
+        except Exception:
+            return False
+
+    def _run_chatterbox(self, text: str, output_file: Path) -> None:
+        """Synthesize speech with Chatterbox Turbo (local 350M model)."""
+        import torch
+        from chatterbox.tts import ChatterboxTTS
+
+        # Lazy-load model once, cache on instance
+        if not hasattr(self, "_chatterbox_model"):
+            if torch.backends.mps.is_available():
+                device = "mps"
+            elif torch.cuda.is_available():
+                device = "cuda"
+            else:
+                device = "cpu"
+            logger.info("chatterbox_load: device=%s", device)
+            self._chatterbox_model = ChatterboxTTS.from_pretrained(device=device)
+
+        model = self._chatterbox_model
+        wav_tensor = model.generate(text)
+
+        # wav_tensor is a torch tensor [1, samples] at model.sr sample rate
+        import torchaudio
+        torchaudio.save(str(output_file), wav_tensor, model.sr)
 
     def _run_piper(self, text: str, output_file: Path) -> None:
         model = os.getenv("PIPER_MODEL", "/home/pi/bitos/models/tts/en_US-lessac-medium.onnx")

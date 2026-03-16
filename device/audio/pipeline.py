@@ -42,8 +42,10 @@ class MockAudioPipeline(AudioPipeline):
     """Desktop-safe mock pipeline for local development and tests."""
 
     def __init__(self):
+        import threading
         self._last_typed_text = ""
         self._speaking = False
+        self._stop_event = threading.Event()
 
     def record(self, max_seconds: int = 60) -> str | None:
         fd, out = tempfile.mkstemp(prefix="bitos_mock_rec_", suffix=".txt")
@@ -64,8 +66,13 @@ class MockAudioPipeline(AudioPipeline):
 
     def speak(self, text: str) -> None:
         self._speaking = True
+        self._stop_event.clear()
         try:
             logger.info("mock_speak text_len=%s", len(text))
+            # Simulate TTS duration (~50ms per word) so stop/skip can be tested
+            word_count = len(text.split())
+            duration = min(word_count * 0.05, 5.0)  # cap at 5s
+            self._stop_event.wait(timeout=duration)
         finally:
             self._speaking = False
 
@@ -74,6 +81,7 @@ class MockAudioPipeline(AudioPipeline):
 
     def stop_speaking(self) -> None:
         self._speaking = False
+        self._stop_event.set()
 
     def is_available(self) -> bool:
         return True
@@ -101,6 +109,8 @@ class WM8960Pipeline(AudioPipeline):
         self._rec_proc: subprocess.Popen | None = None
         self._speak_proc: subprocess.Popen | None = None
         self._rec_path: str | None = None
+        self._player: "AudioPlayer | None" = None
+        self._speaking_flag = False
 
     def record(self, max_seconds: int = 60) -> str | None:
         """Record until button released or max_seconds.
@@ -206,10 +216,17 @@ class WM8960Pipeline(AudioPipeline):
         from audio.tts import TextToSpeech
 
         logger.info("wm8960_speak: text_len=%d starting TTS pipeline", len(text))
-        tts = TextToSpeech(AudioPlayer())
-        logger.info("wm8960_speak: engine=%s volume=%.0f%%", tts.engine, tts.player._volume * 100)
-        ok = tts.speak(text)
-        logger.info("wm8960_speak: result=%s", "ok" if ok else "failed")
+        player = AudioPlayer()
+        self._player = player  # keep reference so stop_speaking() can reach it
+        self._speaking_flag = True
+        try:
+            tts = TextToSpeech(player)
+            logger.info("wm8960_speak: engine=%s volume=%.0f%%", tts.engine, tts.player._volume * 100)
+            ok = tts.speak(text)
+            logger.info("wm8960_speak: result=%s", "ok" if ok else "failed")
+        finally:
+            self._speaking_flag = False
+            self._player = None
 
     def _play_audio(self, path: str, timeout: int) -> None:
         self._speak_proc = subprocess.Popen(
@@ -236,9 +253,18 @@ class WM8960Pipeline(AudioPipeline):
             self._speak_proc = None
 
     def is_speaking(self) -> bool:
+        if self._speaking_flag:
+            return True
+        if self._player and self._player.is_playing():
+            return True
         return self._speak_proc is not None and self._speak_proc.poll() is None
 
     def stop_speaking(self) -> None:
+        self._speaking_flag = False
+        # Stop the shared player (used by speak())
+        if self._player:
+            self._player.stop()
+        # Stop legacy _speak_proc (used by _play_audio)
         if self._speak_proc and self._speak_proc.poll() is None:
             self._speak_proc.terminate()
             try:

@@ -8,10 +8,12 @@ import pygame
 
 
 _PRIORITY = {
-    "CLAUDE": 4,
-    "TASK": 3,
-    "SMS": 2,
-    "MAIL": 1,
+    "CLAUDE": 5,
+    "TASK": 4,
+    "SMS": 3,
+    "MAIL": 2,
+    "CALENDAR": 2,
+    "SYSTEM": 1,
 }
 
 _TYPE_ICON = {
@@ -19,13 +21,15 @@ _TYPE_ICON = {
     "TASK": "#",
     "SMS": "S",
     "MAIL": "M",
+    "CALENDAR": "E",
+    "SYSTEM": "!",
 }
 
 
 @dataclass
 class NotificationRecord:
     id: str
-    type: Literal["CLAUDE", "TASK", "SMS", "MAIL"]
+    type: Literal["CLAUDE", "TASK", "SMS", "MAIL", "CALENDAR", "SYSTEM"]
     app_name: str
     message: str
     time_str: str

@@ -7,8 +7,8 @@ class StatusState:
     def __init__(self):
         self._lock = threading.Lock()
         self.wifi_symbol = "▣"
-        self.battery_pct = 84
-        self.battery_text = "🔋84%"
+        self.battery_pct = None
+        self.battery_text = "??%"
         self.charging = False
         self.ai_online = True
         self.imessage_status = "unknown"

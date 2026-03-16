@@ -4,34 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>BITOS Settings</title>
+  <link rel="stylesheet" href="css/shared.css">
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      background: #000; color: #fff;
-      font-family: monospace; font-size: 14px;
-      display: flex; flex-direction: column;
-      align-items: center; padding: 24px 16px 80px;
-      min-height: 100vh;
-      -webkit-tap-highlight-color: transparent;
-    }
-    h1 { font-size: 20px; letter-spacing: .1em; margin-bottom: 8px; }
-    .sub { color: #555; font-size: 11px; margin-bottom: 24px; }
+    /* Settings-specific overrides */
+    body { padding: 20px 16px 88px; }
 
-    /* Connection badge */
-    .conn-badge {
-      display: inline-flex; align-items: center; gap: 6px;
-      font-size: 10px; letter-spacing: .08em; color: #888;
-      margin-bottom: 20px; padding: 6px 12px;
-      border: 1px solid #333;
-    }
-    .conn-dot {
-      width: 6px; height: 6px; border-radius: 50%;
-      background: #f44;
-    }
-    .conn-dot.http { background: #fa0; }
-    .conn-dot.ble { background: #4f4; }
-
-    /* Tab bar */
+    /* Tab bar (settings sub-tabs) */
     .tabs {
       display: flex; width: 100%; max-width: 400px;
       border-bottom: 2px solid #333; margin-bottom: 20px;
@@ -52,21 +30,11 @@
     .pane { display: none; width: 100%; max-width: 400px; }
     .pane.active { display: block; }
 
-    /* Cards */
-    .card {
-      border: 2px solid #fff; padding: 16px;
-      width: 100%; margin-bottom: 16px;
-    }
-    .card h2 {
-      font-size: 11px; letter-spacing: .08em;
-      margin-bottom: 14px; color: #aaa;
-    }
-
     /* Setting rows */
     .setting-row {
       display: flex; align-items: center; justify-content: space-between;
       padding: 12px 0; border-bottom: 1px solid #1a1a1a;
-      min-height: 44px; /* touch target */
+      min-height: 44px;
     }
     .setting-row:last-child { border-bottom: none; }
     .setting-label {
@@ -129,31 +97,6 @@
       cursor: pointer;
     }
 
-    /* Info rows (read-only) */
-    .info-row {
-      display: flex; justify-content: space-between;
-      padding: 8px 0; border-bottom: 1px solid #1a1a1a;
-      font-size: 12px;
-    }
-    .info-row:last-child { border-bottom: none; }
-    .info-key { color: #666; }
-    .info-val { color: #ccc; text-align: right; }
-
-    /* Buttons */
-    button.primary {
-      width: 100%; background: #fff; color: #000;
-      border: none; font-family: monospace; font-size: 14px;
-      font-weight: bold; padding: 12px; cursor: pointer;
-      letter-spacing: .06em;
-    }
-    button.primary:disabled { background: #333; color: #666; }
-    button.secondary {
-      width: 100%; background: #000; color: #fff;
-      border: 2px solid #444; font-family: monospace;
-      font-size: 14px; font-weight: bold; padding: 10px;
-      cursor: pointer; letter-spacing: .06em; margin-top: 8px;
-    }
-
     /* Integration inputs */
     input[type="text"], input[type="password"] {
       width: 100%; background: #111; border: 2px solid #444;
@@ -162,31 +105,129 @@
     }
     input:focus { border-color: #fff; }
 
-    .status {
-      font-size: 11px; letter-spacing: .06em; color: #888;
-      padding: 8px 0; min-height: 20px; white-space: pre-wrap;
-    }
-    .status.ok { color: #4f4; }
-    .status.error { color: #f44; }
-
-    /* Save toast */
-    .toast {
-      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-      background: #fff; color: #000; font-family: monospace;
-      font-size: 12px; font-weight: bold; letter-spacing: .06em;
-      padding: 10px 20px; opacity: 0;
-      transition: opacity .3s;
-      pointer-events: none; z-index: 100;
-    }
-    .toast.show { opacity: 1; }
-
     /* Responsive picker wrap for many options */
     .picker-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+    /* Connection dot variants for BLE/HTTP */
+    .conn-dot.http { background: #fa0; }
+    .conn-dot.ble { background: #4f4; }
+
+    /* ── Integration setup cards ── */
+    .setup-card {
+      border: 1px solid #333; padding: 16px; margin-bottom: 16px;
+      transition: border-color .2s;
+    }
+    .setup-card.connected { border-color: #4f4; }
+    .setup-card.error { border-color: #f44; }
+
+    .setup-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 12px;
+    }
+    .setup-header h3 {
+      font-size: 12px; letter-spacing: .06em; color: #ddd; margin: 0;
+    }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #555; flex-shrink: 0;
+      transition: background .3s;
+    }
+    .status-dot.online { background: #4f4; }
+    .status-dot.mock { background: #fa0; }
+    .status-dot.offline { background: #f44; }
+    .status-dot.disabled { background: #555; }
+
+    .setup-status {
+      font-size: 10px; letter-spacing: .06em; color: #666;
+      margin-bottom: 10px; min-height: 14px;
+    }
+    .setup-status.ok { color: #4f4; }
+    .setup-status.warn { color: #fa0; }
+    .setup-status.err { color: #f44; }
+
+    .setup-steps {
+      padding: 0; margin: 0 0 12px; list-style: none;
+    }
+    .setup-steps li {
+      font-size: 11px; color: #888; padding: 4px 0;
+      padding-left: 16px; position: relative;
+      line-height: 1.5;
+    }
+    .setup-steps li::before {
+      content: attr(data-step);
+      position: absolute; left: 0; color: #555;
+      font-weight: bold;
+    }
+    .setup-steps li.done { color: #4f4; }
+    .setup-steps li.done::before { content: '\2713'; color: #4f4; }
+
+    .setup-fields { margin-bottom: 10px; }
+
+    .test-btn {
+      width: 100%; background: #111; color: #aaa;
+      border: 1px solid #444; font-family: monospace;
+      font-size: 12px; font-weight: bold; padding: 10px;
+      cursor: pointer; letter-spacing: .06em;
+      min-height: 44px; transition: all .15s;
+    }
+    .test-btn:active { border-color: #888; color: #fff; }
+    .test-btn:disabled { color: #444; cursor: default; }
+    .test-btn.testing { color: #fa0; border-color: #fa0; }
+    .test-btn.pass { color: #4f4; border-color: #4f4; }
+    .test-btn.fail { color: #f44; border-color: #f44; }
+
+    /* ── Agent control panel ── */
+    .mode-card {
+      padding: 10px 0; border-bottom: 1px solid #1a1a1a;
+      cursor: pointer; min-height: 44px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .mode-card:last-child { border-bottom: none; }
+    .mode-card:active { background: #111; }
+    .mode-radio {
+      width: 16px; height: 16px; border-radius: 50%;
+      border: 2px solid #444; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .mode-radio.active { border-color: #fff; }
+    .mode-radio.active::after {
+      content: ''; width: 8px; height: 8px;
+      border-radius: 50%; background: #fff;
+    }
+    .mode-info { flex: 1; min-width: 0; }
+    .mode-name {
+      font-size: 12px; font-weight: bold; color: #ccc;
+      letter-spacing: .04em; text-transform: uppercase;
+    }
+    .mode-desc {
+      font-size: 10px; color: #666; margin-top: 2px;
+      line-height: 1.4;
+    }
+
+    .prompt-preview {
+      background: #0a0a0a; border: 1px solid #222;
+      padding: 12px; font-size: 10px; color: #666;
+      line-height: 1.6; max-height: 200px; overflow-y: auto;
+      white-space: pre-wrap; word-wrap: break-word;
+      margin-top: 8px; display: none;
+    }
+    .prompt-preview.visible { display: block; }
+
+    .tts-test-row {
+      display: flex; gap: 8px; align-items: center;
+      margin-top: 8px;
+    }
+    .tts-test-btn {
+      background: #222; color: #aaa; border: 1px solid #444;
+      font-family: monospace; font-size: 10px; padding: 6px 12px;
+      cursor: pointer; min-height: 36px; white-space: nowrap;
+    }
+    .tts-test-btn:active { border-color: #888; color: #fff; }
   </style>
 </head>
 <body>
   <h1>&#9678; BITOS</h1>
-  <div class="sub">SETTINGS</div>
+  <div class="page-title">SETTINGS</div>
 
   <div class="conn-badge">
     <div class="conn-dot" id="conn-dot"></div>
@@ -196,7 +237,7 @@
   <div class="tabs">
     <button class="tab active" data-pane="device" onclick="switchTab('device')">DEVICE</button>
     <button class="tab" data-pane="voice" onclick="switchTab('voice')">VOICE</button>
-    <button class="tab" data-pane="ai" onclick="switchTab('ai')">AI</button>
+    <button class="tab" data-pane="agent" onclick="switchTab('agent')">AGENT</button>
     <button class="tab" data-pane="display" onclick="switchTab('display')">DISPLAY</button>
     <button class="tab" data-pane="integrations" onclick="switchTab('integrations')">CONNECT</button>
   </div>
@@ -243,6 +284,14 @@
       <h2>BLE CONNECTION</h2>
       <div class="status" id="ble-conn-status">Not connected</div>
       <button class="secondary" id="btn-ble-connect" onclick="connectBLE()">CONNECT VIA BLE</button>
+      <div id="ble-unavailable" style="display:none">
+        <div class="status" style="color:#888;font-size:10px;line-height:1.6;padding:8px 0">
+          Web Bluetooth is not available in this browser.<br>
+          Settings work fine over HTTP — BLE is optional.<br>
+          For BLE: use Chrome (desktop) or enable Web Bluetooth<br>
+          in Safari → Settings → Advanced → Feature Flags.
+        </div>
+      </div>
     </div>
   </div>
 
@@ -251,14 +300,31 @@
     <div class="card">
       <h2>VOICE</h2>
       <div id="settings-voice"></div>
+      <div class="tts-test-row">
+        <button class="tts-test-btn" onclick="testTTS()">TEST TTS</button>
+        <span class="status" id="tts-test-status" style="padding:0;font-size:10px"></span>
+      </div>
     </div>
   </div>
 
-  <!-- ── AI pane ── -->
-  <div class="pane" id="pane-ai">
+  <!-- ── Agent pane (replaces old AI pane) ── -->
+  <div class="pane" id="pane-agent">
     <div class="card">
-      <h2>AI</h2>
+      <h2>AI MODEL</h2>
       <div id="settings-ai"></div>
+    </div>
+
+    <div class="card">
+      <h2>AGENT MODE</h2>
+      <div id="agent-modes-list"></div>
+    </div>
+
+    <div class="card">
+      <h2>SYSTEM PROMPT</h2>
+      <button class="secondary" onclick="togglePromptPreview()" style="margin-top:0">
+        SHOW / HIDE PROMPT
+      </button>
+      <div class="prompt-preview" id="prompt-preview"></div>
     </div>
   </div>
 
@@ -272,29 +338,91 @@
 
   <!-- ── Integrations pane ── -->
   <div class="pane" id="pane-integrations">
+    <!-- Overview status card -->
     <div class="card">
-      <h2>INTEGRATION STATUS</h2>
+      <h2>SERVICES</h2>
       <div id="integrations-loading" class="status">Loading...</div>
       <div id="integrations-list" style="display:none"></div>
-      <button class="secondary" onclick="refreshIntegrations()">REFRESH</button>
+      <button class="secondary" onclick="refreshIntegrations()">REFRESH ALL</button>
     </div>
 
-    <div class="card">
-      <h2>iMESSAGE &mdash; BLUEBUBBLES</h2>
-      <div class="status" id="bb-status">&mdash;</div>
-      <input type="text" id="bb-url" placeholder="BlueBubbles URL (e.g. http://mac.local:1234)">
-      <input type="password" id="bb-password" placeholder="BlueBubbles password">
-      <button class="primary" onclick="saveBlueBubbles()">SAVE &amp; TEST</button>
-      <div class="status" id="bb-save-status"></div>
+    <!-- Anthropic AI setup -->
+    <div class="setup-card" id="setup-anthropic">
+      <div class="setup-header">
+        <h3>ANTHROPIC AI</h3>
+        <div class="status-dot" id="dot-ai"></div>
+      </div>
+      <div class="setup-status" id="ai-status">Checking...</div>
+      <ol class="setup-steps">
+        <li data-step="1">Get an API key from console.anthropic.com</li>
+        <li data-step="2">Paste your key below (starts with sk-ant-)</li>
+        <li data-step="3">Click Test to verify</li>
+      </ol>
+      <div class="setup-fields">
+        <input type="password" id="ai-key" placeholder="sk-ant-api03-...">
+      </div>
+      <button class="test-btn" id="ai-test-btn" onclick="saveAnthropicKey()">SAVE & TEST CONNECTION</button>
     </div>
 
-    <div class="card">
-      <h2>TASKS &mdash; VIKUNJA</h2>
-      <div class="status" id="vk-status">&mdash;</div>
-      <input type="text" id="vk-url" placeholder="Vikunja URL (e.g. http://mac.local:3456/api/v1)">
-      <input type="password" id="vk-token" placeholder="Vikunja API token">
-      <button class="primary" onclick="saveVikunja()">SAVE &amp; TEST</button>
-      <div class="status" id="vk-save-status"></div>
+    <!-- BlueBubbles / iMessage setup -->
+    <div class="setup-card" id="setup-imessage">
+      <div class="setup-header">
+        <h3>iMESSAGE / BLUEBUBBLES</h3>
+        <div class="status-dot" id="dot-imessage"></div>
+      </div>
+      <div class="setup-status" id="bb-status">Checking...</div>
+      <ol class="setup-steps">
+        <li data-step="1">Install BlueBubbles on your Mac (bluebubbles.app)</li>
+        <li data-step="2">Enable the API server in BlueBubbles settings</li>
+        <li data-step="3">Enter the server URL and password below</li>
+        <li data-step="4">Click Test to verify the connection</li>
+      </ol>
+      <div class="setup-fields">
+        <input type="text" id="bb-url" placeholder="BlueBubbles URL (e.g. http://mac.local:1234)">
+        <input type="password" id="bb-password" placeholder="BlueBubbles password">
+      </div>
+      <button class="test-btn" id="bb-test-btn" onclick="saveBlueBubbles()">SAVE & TEST CONNECTION</button>
+    </div>
+
+    <!-- Gmail setup -->
+    <div class="setup-card" id="setup-gmail">
+      <div class="setup-header">
+        <h3>GMAIL</h3>
+        <div class="status-dot" id="dot-gmail"></div>
+      </div>
+      <div class="setup-status" id="gmail-status">Checking...</div>
+      <ol class="setup-steps">
+        <li data-step="1">Gmail uses server-side OAuth credentials</li>
+        <li data-step="2">Configure OAuth on the server (see server docs)</li>
+        <li data-step="3">Toggle the switch below to enable/disable</li>
+      </ol>
+      <div class="setting-row" style="border:none;padding:8px 0">
+        <span class="setting-label">Gmail enabled</span>
+        <div class="setting-control">
+          <button class="toggle" id="gmail-toggle" onclick="toggleGmail()"></button>
+        </div>
+      </div>
+      <button class="test-btn" id="gmail-test-btn" onclick="testGmailConnection()">TEST CONNECTION</button>
+    </div>
+
+    <!-- Vikunja / Tasks setup -->
+    <div class="setup-card" id="setup-vikunja">
+      <div class="setup-header">
+        <h3>TASKS / VIKUNJA</h3>
+        <div class="status-dot" id="dot-vikunja"></div>
+      </div>
+      <div class="setup-status" id="vk-status">Checking...</div>
+      <ol class="setup-steps">
+        <li data-step="1">Set up a Vikunja instance (vikunja.io)</li>
+        <li data-step="2">Create a personal API token in Vikunja settings</li>
+        <li data-step="3">Enter the API URL and token below</li>
+        <li data-step="4">Click Test to verify the connection</li>
+      </ol>
+      <div class="setup-fields">
+        <input type="text" id="vk-url" placeholder="Vikunja URL (e.g. http://mac.local:3456/api/v1)">
+        <input type="password" id="vk-token" placeholder="Vikunja API token">
+      </div>
+      <button class="test-btn" id="vk-test-btn" onclick="saveVikunja()">SAVE & TEST CONNECTION</button>
     </div>
   </div>
 
@@ -305,22 +433,28 @@
       navigator.serviceWorker.register('/sw.js').catch(() => {});
     }
   </script>
-  <script src="js/ble.js"></script>
+  <script src="js/nav.js"></script>
   <script src="js/auth.js"></script>
+  <script src="js/crypto.js"></script>
+  <script src="js/ble.js"></script>
   <script src="js/settings.js"></script>
   <script>
-    // ── Server URL ─────────────────────────────────────────
-    const params = new URLSearchParams(location.search);
-    const SERVER = params.get('server')
-      || sessionStorage.getItem('bitos_server')
-      || 'http://bitos:8000';
-    if (params.get('server')) {
-      sessionStorage.setItem('bitos_server', params.get('server'));
-    }
+    // ── Server URL (from shared nav.js) ─────────────────────
+    const SERVER = getServerUrl();
 
     // ── Settings manager ───────────────────────────────────
     const mgr = new BitosSettings(SERVER);
     let companion = null;
+
+    // ── Agent mode descriptions ─────────────────────────────
+    const MODE_DESCRIPTIONS = {
+      producer: 'Operations partner — tasks, deadlines, vendor coordination',
+      hacker: 'Technical co-pilot — code, architecture, Pi constraints',
+      clown: 'Creative partner — physical performance, bit development',
+      monk: 'Reflection companion — depth, presence, clarity',
+      storyteller: 'Narrative partner — story structure, pitch framing',
+      director: 'Strategic thinker — big picture, opportunity evaluation',
+    };
 
     // ── Tab switching ──────────────────────────────────────
     function switchTab(name) {
@@ -328,16 +462,6 @@
         t.classList.toggle('active', t.dataset.pane === name));
       document.querySelectorAll('.pane').forEach(p =>
         p.classList.toggle('active', p.id === 'pane-' + name));
-    }
-
-    // ── Toast notification ─────────────────────────────────
-    let _toastTimer = null;
-    function showToast(msg) {
-      const t = document.getElementById('toast');
-      t.textContent = msg;
-      t.classList.add('show');
-      clearTimeout(_toastTimer);
-      _toastTimer = setTimeout(() => t.classList.remove('show'), 1800);
     }
 
     // ── Render setting controls ────────────────────────────
@@ -413,7 +537,8 @@
               valSpan.textContent = range.value;
             });
             range.addEventListener('change', () => {
-              mgr.setSetting(s.key, parseInt(range.value));
+              const val = s.step && s.step % 1 !== 0 ? parseFloat(range.value) : parseInt(range.value);
+              mgr.setSetting(s.key, val);
               showToast('SAVED');
             });
             wrap.appendChild(range);
@@ -424,6 +549,119 @@
           row.appendChild(ctrl);
           container.appendChild(row);
         }
+      }
+    }
+
+    // ── Render agent mode selector ──────────────────────────
+    function renderAgentModes() {
+      const container = document.getElementById('agent-modes-list');
+      container.innerHTML = '';
+      const modes = ['producer', 'hacker', 'clown', 'monk', 'storyteller', 'director'];
+      const current = mgr.settings.agent_mode || 'producer';
+
+      for (const mode of modes) {
+        const div = document.createElement('div');
+        div.className = 'mode-card';
+        div.onclick = () => selectAgentMode(mode);
+
+        const radio = document.createElement('div');
+        radio.className = 'mode-radio' + (mode === current ? ' active' : '');
+        radio.id = 'radio-' + mode;
+
+        const info = document.createElement('div');
+        info.className = 'mode-info';
+
+        const name = document.createElement('div');
+        name.className = 'mode-name';
+        name.textContent = mode;
+
+        const desc = document.createElement('div');
+        desc.className = 'mode-desc';
+        desc.textContent = MODE_DESCRIPTIONS[mode] || '';
+
+        info.appendChild(name);
+        info.appendChild(desc);
+        div.appendChild(radio);
+        div.appendChild(info);
+        container.appendChild(div);
+      }
+    }
+
+    async function selectAgentMode(mode) {
+      document.querySelectorAll('.mode-radio').forEach(r =>
+        r.classList.toggle('active', r.id === 'radio-' + mode));
+      mgr.setSetting('agent_mode', mode);
+      showToast(mode.toUpperCase() + ' MODE');
+    }
+
+    // ── TTS test ────────────────────────────────────────────
+    async function testTTS() {
+      const statusEl = document.getElementById('tts-test-status');
+      statusEl.textContent = 'Testing...';
+      statusEl.className = 'status';
+      try {
+        const engine = mgr.settings.tts_engine || 'auto';
+        const r = await fetch(`${SERVER}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: 'Say "TTS test successful" in exactly those words.',
+            voice_enabled: true,
+            voice_mode: 'on',
+          }),
+          signal: AbortSignal.timeout(15000),
+        });
+        if (r.ok) {
+          statusEl.textContent = 'Sent test phrase';
+          statusEl.className = 'status ok';
+        } else {
+          throw new Error('Server returned ' + r.status);
+        }
+      } catch (e) {
+        statusEl.textContent = e.message || 'Failed';
+        statusEl.className = 'status error';
+      }
+    }
+
+    // ── System prompt preview ───────────────────────────────
+    async function togglePromptPreview() {
+      const el = document.getElementById('prompt-preview');
+      if (el.classList.contains('visible')) {
+        el.classList.remove('visible');
+        return;
+      }
+      el.textContent = 'Loading...';
+      el.classList.add('visible');
+      try {
+        // Fetch current agent mode and build a prompt preview via health + settings
+        const mode = mgr.settings.agent_mode || 'producer';
+        const model = mgr.settings.ai_model || 'default';
+        const r = await fetch(`${SERVER}/health`, { signal: AbortSignal.timeout(3000) });
+        const health = r.ok ? await r.json() : {};
+
+        // Build a summary of what the prompt looks like
+        const lines = [
+          '// ACTIVE CONFIGURATION',
+          `Mode: ${mode.toUpperCase()}`,
+          `Model: ${model} (${health.model || 'unknown'})`,
+          `Provider: ${health.provider || 'unknown'}`,
+          `Extended thinking: ${mgr.settings.extended_thinking ? 'ON' : 'OFF'}`,
+          `Web search: ${mgr.settings.web_search !== false ? 'ON' : 'OFF'}`,
+          `Memory: ${mgr.settings.memory !== false ? 'ON' : 'OFF'}`,
+          '',
+          '// MODE DESCRIPTION',
+          MODE_DESCRIPTIONS[mode] || 'No description',
+          '',
+          '// BASE CONTEXT',
+          'You are BITOS — a pocket AI assistant running on a physical device.',
+          'Keep responses under 3 sentences unless detail is requested.',
+          'Tools: get_device_settings, update_device_setting, request_approval,',
+          '  send_imessage, read_imessages, send_email, read_emails,',
+          '  get_contacts, get_calendar_events',
+        ];
+        el.textContent = lines.join('\n');
+      } catch (e) {
+        el.textContent = 'Failed to load: ' + (e.message || 'offline');
       }
     }
 
@@ -475,6 +713,11 @@
           if (valSpan) valSpan.textContent = val;
         }
       });
+
+      // Sync agent mode radios
+      const currentMode = settings.agent_mode || 'producer';
+      document.querySelectorAll('.mode-radio').forEach(r =>
+        r.classList.toggle('active', r.id === 'radio-' + currentMode));
     }
 
     // Apply defaults for settings not yet loaded from server
@@ -523,11 +766,14 @@
       }
     }
 
-    // ── Firmware update (preserved from original) ──────────
+    // ── Firmware update ──────────────────────────────────────
     async function checkVersion() {
       document.getElementById('version-info').textContent = 'Checking...';
       try {
-        const r = await fetch(`${SERVER}/device/version`);
+        const r = await fetch(`${SERVER}/device/version`, {
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!r.ok) throw new Error(`Server returned ${r.status}`);
         const d = await r.json();
         document.getElementById('version-info').textContent =
           `Version: ${d.version} (${d.commit})`;
@@ -541,12 +787,15 @@
           document.getElementById('up-to-date').style.display = 'block';
         }
       } catch (e) {
-        document.getElementById('version-info').textContent = 'Cannot reach device';
+        document.getElementById('version-info').textContent =
+          'Cannot reach device — ' + (e.message || 'offline');
       }
     }
 
     async function startUpdate(target) {
-      document.getElementById('update-status').textContent = 'Updating... (30-60 seconds)';
+      const statusEl = document.getElementById('update-status');
+      statusEl.textContent = 'Updating... (30-60 seconds)';
+      statusEl.className = 'status';
       const btn = document.getElementById('update-button');
       btn.disabled = true;
       try {
@@ -554,34 +803,78 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ target, confirmed: true }),
+          signal: AbortSignal.timeout(120000),
         });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          throw new Error(err.detail || `Server returned ${r.status}`);
+        }
         const d = await r.json();
         if (d.ok) {
-          document.getElementById('update-status').textContent =
-            'Updated to ' + d.new_commit;
+          statusEl.textContent = 'Updated to ' + d.new_commit;
+          statusEl.className = 'status ok';
           setTimeout(checkVersion, 5000);
         } else {
-          document.getElementById('update-status').textContent =
-            'Update failed — check logs';
+          statusEl.textContent = 'Update failed — check logs';
+          statusEl.className = 'status error';
         }
       } catch (e) {
-        document.getElementById('update-status').textContent =
-          'Connection lost during update (normal — wait 30s)';
-        setTimeout(checkVersion, 30000);
+        if (e.name === 'AbortError' || e.name === 'TimeoutError') {
+          statusEl.textContent = 'Connection lost during update (normal — wait 30s)';
+          setTimeout(checkVersion, 30000);
+        } else {
+          statusEl.textContent = 'Update failed — ' + (e.message || 'unknown error');
+          statusEl.className = 'status error';
+        }
       } finally {
         btn.disabled = false;
       }
     }
 
-    // ── Integrations (preserved from original) ─────────────
+    // ── Integration status helpers ──────────────────────────
+    function integrationLabel(status) {
+      if (status === 'online') return { text: 'CONNECTED', color: '#4f4', cls: 'ok' };
+      if (status === 'mock') return { text: 'MOCK', color: '#fa0', cls: 'warn' };
+      if (status === 'offline') return { text: 'NOT CONFIGURED', color: '#f44', cls: 'err' };
+      if (status === 'disabled') return { text: 'DISABLED', color: '#666', cls: '' };
+      if (status === 'error') return { text: 'ERROR', color: '#f44', cls: 'err' };
+      return { text: (status || 'UNKNOWN').toUpperCase(), color: '#888', cls: '' };
+    }
+
+    function setDotStatus(dotId, status) {
+      const dot = document.getElementById(dotId);
+      if (!dot) return;
+      dot.className = 'status-dot';
+      if (status === 'online') dot.classList.add('online');
+      else if (status === 'mock') dot.classList.add('mock');
+      else if (status === 'offline' || status === 'error') dot.classList.add('offline');
+      else dot.classList.add('disabled');
+    }
+
+    function setSetupCardStatus(cardId, status) {
+      const card = document.getElementById(cardId);
+      if (!card) return;
+      card.className = 'setup-card';
+      if (status === 'online') card.classList.add('connected');
+      else if (status === 'error' || status === 'offline') card.classList.add('error');
+    }
+
+    // ── Refresh integrations ────────────────────────────────
     async function refreshIntegrations() {
+      const loadingEl = document.getElementById('integrations-loading');
+      loadingEl.style.display = 'block';
+      loadingEl.textContent = 'Loading...';
+      loadingEl.className = 'status';
       try {
-        const r = await fetch(`${SERVER}/status/integrations`);
+        const r = await fetch(`${SERVER}/status/integrations`, {
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!r.ok) throw new Error(`Server returned ${r.status}`);
         const data = await r.json();
         renderIntegrations(data);
       } catch (e) {
-        document.getElementById('integrations-loading').textContent =
-          'Cannot reach device server';
+        loadingEl.textContent = 'Cannot reach server — ' + e.message;
+        loadingEl.className = 'status error';
       }
     }
 
@@ -590,68 +883,246 @@
       list.innerHTML = '';
       document.getElementById('integrations-loading').style.display = 'none';
       list.style.display = 'block';
-      for (const [name, info] of Object.entries(data)) {
-        const badge = info.status === 'online' ? '+'
-          : info.status === 'mock' ? 'o'
-          : info.status === 'config' ? '*' : 'x';
-        const color = info.status === 'online' ? '#4f4'
-          : info.status === 'mock' ? '#aaa' : '#f44';
-        list.innerHTML += `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #222">` +
-          `<span style="font-size:12px">${name.toUpperCase()}</span>` +
-          `<span style="color:${color};font-size:12px">${badge} ${info.status.toUpperCase()}</span></div>`;
+
+      const entries = [
+        { key: 'ai', label: 'AI (ANTHROPIC)', dot: 'dot-ai', card: 'setup-anthropic', statusEl: 'ai-status' },
+        { key: 'imessage', label: 'iMESSAGE', dot: 'dot-imessage', card: 'setup-imessage', statusEl: 'bb-status' },
+        { key: 'gmail', label: 'GMAIL', dot: 'dot-gmail', card: 'setup-gmail', statusEl: 'gmail-status' },
+        { key: 'vikunja', label: 'VIKUNJA', dot: 'dot-vikunja', card: 'setup-vikunja', statusEl: 'vk-status' },
+      ];
+
+      for (const entry of entries) {
+        const info = data[entry.key];
+        if (!info) continue;
+        const lbl = integrationLabel(info.status);
+        const detail = info.unread != null ? ` (${info.unread} unread)` :
+                       info.task_count != null ? ` (${info.task_count} tasks)` :
+                       info.model ? ` (${info.model})` : '';
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #222';
+        const nameSpan = document.createElement('span');
+        nameSpan.style.fontSize = '12px';
+        nameSpan.textContent = entry.label;
+        const statusSpan = document.createElement('span');
+        statusSpan.style.cssText = `color:${lbl.color};font-size:11px;text-align:right`;
+        statusSpan.textContent = lbl.text + detail;
+        row.appendChild(nameSpan);
+        row.appendChild(statusSpan);
+        list.appendChild(row);
+
+        // Update dots and card borders
+        setDotStatus(entry.dot, info.status);
+        setSetupCardStatus(entry.card, info.status);
+
+        // Update per-card status text
+        const statusEl = document.getElementById(entry.statusEl);
+        if (statusEl) {
+          statusEl.textContent = lbl.text + detail;
+          statusEl.className = 'setup-status ' + lbl.cls;
+        }
+
+        // Update setup steps checkmarks
+        if (info.status === 'online') {
+          const card = document.getElementById(entry.card);
+          if (card) {
+            card.querySelectorAll('.setup-steps li').forEach(li => li.classList.add('done'));
+          }
+        }
       }
-      document.getElementById('bb-status').textContent =
-        (data.imessage?.status || 'unknown').toUpperCase();
-      document.getElementById('vk-status').textContent =
-        (data.vikunja?.status || 'unknown').toUpperCase();
+
+      // Also handle bluebubbles key mapping to imessage
+      if (data.bluebubbles && !data.imessage) {
+        setDotStatus('dot-imessage', data.bluebubbles.status);
+        setSetupCardStatus('setup-imessage', data.bluebubbles.status);
+        const bbStatusEl = document.getElementById('bb-status');
+        if (bbStatusEl) {
+          const lbl = integrationLabel(data.bluebubbles.status);
+          bbStatusEl.textContent = lbl.text;
+          bbStatusEl.className = 'setup-status ' + lbl.cls;
+        }
+      }
+
+      // Sync Gmail toggle
+      const gmailStatus = data.gmail?.status || 'offline';
+      const gmailOn = gmailStatus === 'online' || gmailStatus === 'mock';
+      document.getElementById('gmail-toggle').classList.toggle('on', gmailOn);
+    }
+
+    // ── Integration save/test functions ─────────────────────
+
+    function setTestBtn(btnId, state, text) {
+      const btn = document.getElementById(btnId);
+      if (!btn) return;
+      btn.className = 'test-btn';
+      if (state) btn.classList.add(state);
+      if (text) btn.textContent = text;
+      btn.disabled = state === 'testing';
+    }
+
+    async function saveAnthropicKey() {
+      const key = document.getElementById('ai-key').value.trim();
+      if (!key) {
+        document.getElementById('ai-status').textContent = 'API key required';
+        document.getElementById('ai-status').className = 'setup-status err';
+        return;
+      }
+      if (!key.startsWith('sk-ant-')) {
+        document.getElementById('ai-status').textContent = 'Key should start with sk-ant-';
+        document.getElementById('ai-status').className = 'setup-status err';
+        return;
+      }
+      setTestBtn('ai-test-btn', 'testing', 'TESTING...');
+      try {
+        const r = await fetch(`${SERVER}/settings/integrations`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ integration: 'anthropic', config: { api_key: key } }),
+          signal: AbortSignal.timeout(10000),
+        });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          throw new Error(err.detail || `Server returned ${r.status}`);
+        }
+        const d = await r.json();
+        if (d.ok) {
+          setTestBtn('ai-test-btn', 'pass', 'CONNECTED');
+          document.getElementById('ai-key').value = '';
+          refreshIntegrations();
+        } else {
+          setTestBtn('ai-test-btn', 'fail', 'FAILED — ' + (d.error || 'Unknown'));
+        }
+      } catch (e) {
+        setTestBtn('ai-test-btn', 'fail', 'ERROR — ' + (e.message || 'Unreachable'));
+      }
+      setTimeout(() => setTestBtn('ai-test-btn', '', 'SAVE & TEST CONNECTION'), 3000);
     }
 
     async function saveBlueBubbles() {
-      const url = document.getElementById('bb-url').value;
+      const url = document.getElementById('bb-url').value.trim();
       const pw = document.getElementById('bb-password').value;
-      document.getElementById('bb-save-status').textContent = 'Testing connection...';
+      if (!url) {
+        document.getElementById('bb-status').textContent = 'URL required';
+        document.getElementById('bb-status').className = 'setup-status err';
+        return;
+      }
+      setTestBtn('bb-test-btn', 'testing', 'TESTING...');
       try {
         const r = await fetch(`${SERVER}/settings/integrations`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ integration: 'imessage', config: { url, password: pw } }),
+          signal: AbortSignal.timeout(10000),
         });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          throw new Error(err.detail || `Server returned ${r.status}`);
+        }
         const d = await r.json();
-        const el = document.getElementById('bb-save-status');
-        el.textContent = d.ok ? 'Connected!' : (d.error || 'Failed');
-        el.className = 'status ' + (d.ok ? 'ok' : 'error');
-        if (d.ok) refreshIntegrations();
+        if (d.ok) {
+          setTestBtn('bb-test-btn', 'pass', 'CONNECTED');
+          refreshIntegrations();
+        } else {
+          setTestBtn('bb-test-btn', 'fail', 'FAILED — ' + (d.error || 'Unknown'));
+        }
       } catch (e) {
-        const el = document.getElementById('bb-save-status');
-        el.textContent = 'Server unreachable';
-        el.className = 'status error';
+        setTestBtn('bb-test-btn', 'fail', 'ERROR — ' + (e.message || 'Unreachable'));
+      }
+      setTimeout(() => setTestBtn('bb-test-btn', '', 'SAVE & TEST CONNECTION'), 3000);
+    }
+
+    async function toggleGmail() {
+      const btn = document.getElementById('gmail-toggle');
+      const isOn = btn.classList.contains('on');
+      const next = !isOn;
+      btn.classList.toggle('on', next);
+      try {
+        const r = await fetch(`${SERVER}/settings/integrations`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ integration: 'gmail', config: { enabled: next } }),
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!r.ok) {
+          btn.classList.toggle('on', isOn); // revert
+          const err = await r.json().catch(() => ({}));
+          showToast(err.detail || 'Failed');
+        } else {
+          showToast(next ? 'GMAIL ENABLED' : 'GMAIL DISABLED');
+          refreshIntegrations();
+        }
+      } catch (e) {
+        btn.classList.toggle('on', isOn); // revert
+        showToast('Server unreachable');
       }
     }
 
+    async function testGmailConnection() {
+      setTestBtn('gmail-test-btn', 'testing', 'TESTING...');
+      try {
+        const r = await fetch(`${SERVER}/health/deep`, { signal: AbortSignal.timeout(15000) });
+        if (!r.ok) throw new Error('Server returned ' + r.status);
+        const d = await r.json();
+        const gmail = d.checks?.gmail;
+        if (gmail?.ok) {
+          setTestBtn('gmail-test-btn', 'pass', 'CONNECTED' + (gmail.mode === 'mock' ? ' (MOCK)' : ''));
+        } else {
+          setTestBtn('gmail-test-btn', 'fail', 'FAILED — ' + (gmail?.error || 'Check server'));
+        }
+      } catch (e) {
+        setTestBtn('gmail-test-btn', 'fail', 'ERROR — ' + (e.message || 'Unreachable'));
+      }
+      setTimeout(() => setTestBtn('gmail-test-btn', '', 'TEST CONNECTION'), 3000);
+    }
+
     async function saveVikunja() {
-      const url = document.getElementById('vk-url').value;
-      const token = document.getElementById('vk-token').value;
-      document.getElementById('vk-save-status').textContent = 'Testing connection...';
+      const url = document.getElementById('vk-url').value.trim();
+      const token = document.getElementById('vk-token').value.trim();
+      if (!url) {
+        document.getElementById('vk-status').textContent = 'URL required';
+        document.getElementById('vk-status').className = 'setup-status err';
+        return;
+      }
+      if (!token) {
+        document.getElementById('vk-status').textContent = 'API token required';
+        document.getElementById('vk-status').className = 'setup-status err';
+        return;
+      }
+      setTestBtn('vk-test-btn', 'testing', 'TESTING...');
       try {
         const r = await fetch(`${SERVER}/settings/integrations`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ integration: 'vikunja', config: { url, token } }),
+          signal: AbortSignal.timeout(10000),
         });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          throw new Error(err.detail || `Server returned ${r.status}`);
+        }
         const d = await r.json();
-        const el = document.getElementById('vk-save-status');
-        el.textContent = d.ok ? 'Connected!' : (d.error || 'Failed');
-        el.className = 'status ' + (d.ok ? 'ok' : 'error');
-        if (d.ok) refreshIntegrations();
+        if (d.ok) {
+          setTestBtn('vk-test-btn', 'pass', 'CONNECTED');
+          refreshIntegrations();
+        } else {
+          setTestBtn('vk-test-btn', 'fail', 'FAILED — ' + (d.error || 'Unknown'));
+        }
       } catch (e) {
-        const el = document.getElementById('vk-save-status');
-        el.textContent = 'Server unreachable';
-        el.className = 'status error';
+        setTestBtn('vk-test-btn', 'fail', 'ERROR — ' + (e.message || 'Unreachable'));
       }
+      setTimeout(() => setTestBtn('vk-test-btn', '', 'SAVE & TEST CONNECTION'), 3000);
+    }
+
+    // ── BLE availability check ─────────────────────────────
+    if (!navigator.bluetooth) {
+      document.getElementById('btn-ble-connect').style.display = 'none';
+      document.getElementById('ble-unavailable').style.display = 'block';
+      document.getElementById('ble-conn-status').textContent = 'HTTP only (BLE not available)';
+      document.getElementById('ble-conn-status').style.color = '#888';
     }
 
     // ── Initialize ─────────────────────────────────────────
     renderSettingGroups();
+    renderAgentModes();
     applyDefaults();
     syncControls(mgr.settings, mgr.deviceStatus);
 
@@ -662,6 +1133,16 @@
     mgr.startAutoRefresh(5000);
     checkVersion();
     refreshIntegrations();
+
+    // Pause polling when hidden
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        mgr.stopAutoRefresh();
+      } else {
+        mgr.startAutoRefresh(5000);
+        refreshIntegrations();
+      }
+    });
   </script>
 </body>
 </html>

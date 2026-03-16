@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <title>BITOS Tasks</title>
+  <link rel="stylesheet" href="css/shared.css">
+  <style>
+    /* Task list */
+    .task-list {
+      width: 100%; max-width: 400px;
+    }
+    .task-item {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 14px 0; border-bottom: 1px solid #1a1a1a;
+      min-height: 44px;
+    }
+    .task-item:last-child { border-bottom: none; }
+    .task-item.done { opacity: 0.4; }
+
+    .task-check {
+      width: 22px; height: 22px; flex-shrink: 0;
+      border: 2px solid #444; border-radius: 4px;
+      background: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all .2s; margin-top: 1px;
+      color: transparent; font-size: 14px;
+    }
+    .task-check:active { border-color: #888; }
+    .task-check.checked {
+      border-color: #4f4; background: #4f4;
+      color: #000;
+    }
+
+    .task-content { flex: 1; min-width: 0; }
+    .task-title {
+      font-size: 13px; color: #ddd; line-height: 1.4;
+      word-wrap: break-word;
+    }
+    .task-item.done .task-title {
+      text-decoration: line-through; color: #666;
+    }
+    .task-meta {
+      display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap;
+    }
+    .task-project {
+      font-size: 9px; letter-spacing: .04em;
+      padding: 2px 6px; border: 1px solid #333;
+      color: #888; text-transform: uppercase;
+    }
+    .task-due {
+      font-size: 10px; color: #666;
+    }
+    .task-due.overdue { color: #f44; }
+    .task-due.today { color: #fa0; }
+
+    /* Task count header */
+    .task-count {
+      font-size: 11px; color: #555; letter-spacing: .06em;
+      margin-bottom: 12px; width: 100%; max-width: 400px;
+    }
+
+    /* Add task bar */
+    .add-task-bar {
+      width: 100%; max-width: 400px; margin-bottom: 16px;
+      display: flex; gap: 8px;
+    }
+    .add-task-bar input {
+      flex: 1; background: #111; border: 1px solid #333;
+      color: #fff; font-family: monospace; font-size: 13px;
+      padding: 10px; outline: none; min-height: 44px;
+    }
+    .add-task-bar input:focus { border-color: #fff; }
+    .add-task-bar button {
+      background: #fff; color: #000; border: none;
+      font-family: monospace; font-size: 16px; font-weight: bold;
+      padding: 0 14px; cursor: pointer;
+      min-width: 44px; min-height: 44px;
+    }
+    .add-task-bar button:disabled { background: #333; color: #666; }
+
+    /* Filter tabs */
+    .filter-bar {
+      display: flex; gap: 0; width: 100%; max-width: 400px;
+      border-bottom: 1px solid #333; margin-bottom: 16px;
+      overflow-x: auto; -webkit-overflow-scrolling: touch;
+    }
+    .filter-tab {
+      background: none; color: #555; border: none;
+      font-family: monospace; font-size: 10px; font-weight: bold;
+      letter-spacing: .04em; padding: 10px 12px;
+      cursor: pointer; text-transform: uppercase;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px; white-space: nowrap;
+      min-height: 44px;
+    }
+    .filter-tab.active { color: #fff; border-bottom-color: #fff; }
+
+    /* Completing animation */
+    @keyframes task-complete {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); opacity: 0.4; }
+    }
+    .task-completing {
+      animation: task-complete .4s ease-out;
+    }
+  </style>
+</head>
+<body>
+  <h1>&#9678; BITOS</h1>
+  <div class="page-title">TASKS</div>
+
+  <div class="add-task-bar">
+    <input type="text" id="new-task" placeholder="Add a task..."
+           autocomplete="off" enterkeyhint="done">
+    <button onclick="addTask()" id="add-btn">+</button>
+  </div>
+
+  <div class="filter-bar">
+    <button class="filter-tab active" data-filter="active" onclick="setFilter('active')">ACTIVE</button>
+    <button class="filter-tab" data-filter="all" onclick="setFilter('all')">ALL</button>
+    <button class="filter-tab" data-filter="done" onclick="setFilter('done')">DONE</button>
+  </div>
+
+  <div class="task-count" id="task-count"></div>
+
+  <div class="task-list" id="task-list">
+    <div class="loading">LOADING</div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+  </script>
+  <script src="js/nav.js"></script>
+  <script>
+    const SERVER = getServerUrl();
+    let allTasks = [];
+    let activeFilter = 'active';
+    let refreshTimer = null;
+
+    const taskListEl = document.getElementById('task-list');
+    const newTaskInput = document.getElementById('new-task');
+
+    // Enter to add
+    newTaskInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        addTask();
+      }
+    });
+
+    // ── Filter ──
+    function setFilter(filter) {
+      activeFilter = filter;
+      document.querySelectorAll('.filter-tab').forEach(t =>
+        t.classList.toggle('active', t.dataset.filter === filter));
+      renderTasks();
+    }
+
+    // ── Fetch tasks ──
+    async function fetchTasks() {
+      try {
+        const r = await fetch(`${SERVER}/tasks/today`, { signal: AbortSignal.timeout(5000) });
+        if (!r.ok) throw new Error('Server returned ' + r.status);
+        const data = await r.json();
+        allTasks = data.tasks || [];
+        renderTasks();
+      } catch (e) {
+        if (allTasks.length === 0) {
+          taskListEl.innerHTML = '<div class="empty-state">Cannot reach server — ' + esc(e.message) + '</div>';
+        }
+      }
+    }
+
+    // ── Render ──
+    function renderTasks() {
+      const filtered = activeFilter === 'all' ? allTasks :
+                       activeFilter === 'done' ? allTasks.filter(t => t.done) :
+                       allTasks.filter(t => !t.done);
+
+      const countEl = document.getElementById('task-count');
+      const activeCount = allTasks.filter(t => !t.done).length;
+      const doneCount = allTasks.filter(t => t.done).length;
+      countEl.textContent = activeCount + ' active, ' + doneCount + ' done';
+
+      if (filtered.length === 0) {
+        const msg = activeFilter === 'done' ? 'No completed tasks' :
+                    activeFilter === 'active' ? 'All done! No active tasks.' :
+                    'No tasks yet';
+        taskListEl.innerHTML = '<div class="empty-state">' + msg + '</div>';
+        return;
+      }
+
+      taskListEl.innerHTML = '';
+
+      for (const task of filtered) {
+        const item = document.createElement('div');
+        item.className = 'task-item' + (task.done ? ' done' : '');
+        item.dataset.id = task.id;
+
+        // Checkbox
+        const check = document.createElement('button');
+        check.className = 'task-check' + (task.done ? ' checked' : '');
+        check.textContent = task.done ? '\u2713' : '';
+        check.onclick = (e) => {
+          e.stopPropagation();
+          toggleTask(task.id, !task.done, item);
+        };
+
+        // Content
+        const content = document.createElement('div');
+        content.className = 'task-content';
+
+        const title = document.createElement('div');
+        title.className = 'task-title';
+        title.textContent = task.title || 'Untitled';
+
+        content.appendChild(title);
+
+        // Meta row
+        const meta = document.createElement('div');
+        meta.className = 'task-meta';
+
+        if (task.project) {
+          const proj = document.createElement('span');
+          proj.className = 'task-project';
+          proj.textContent = typeof task.project === 'object' ?
+            (task.project.title || task.project.name || 'INBOX') :
+            String(task.project);
+          meta.appendChild(proj);
+        }
+
+        if (task.due_date || task.due) {
+          const due = document.createElement('span');
+          const dueDate = task.due_date || task.due;
+          due.className = 'task-due';
+          const dueStr = formatDueDate(dueDate);
+          due.textContent = dueStr.text;
+          if (dueStr.cls) due.classList.add(dueStr.cls);
+          meta.appendChild(due);
+        }
+
+        if (task.priority && task.priority > 0) {
+          const pri = document.createElement('span');
+          pri.className = 'task-due';
+          pri.textContent = ['', 'LOW', 'MED', 'HIGH', 'URGENT'][Math.min(task.priority, 4)] || '';
+          if (task.priority >= 3) pri.style.color = '#f44';
+          else if (task.priority >= 2) pri.style.color = '#fa0';
+          meta.appendChild(pri);
+        }
+
+        if (meta.children.length > 0) content.appendChild(meta);
+
+        item.appendChild(check);
+        item.appendChild(content);
+        taskListEl.appendChild(item);
+      }
+    }
+
+    function formatDueDate(dateStr) {
+      if (!dateStr) return { text: '', cls: '' };
+      try {
+        const d = new Date(dateStr);
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const due = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        const diff = Math.floor((due - today) / 86400000);
+
+        if (diff < 0) return { text: 'Overdue', cls: 'overdue' };
+        if (diff === 0) return { text: 'Today', cls: 'today' };
+        if (diff === 1) return { text: 'Tomorrow', cls: '' };
+        if (diff <= 7) return { text: d.toLocaleDateString([], { weekday: 'short' }), cls: '' };
+        return { text: d.toLocaleDateString([], { month: 'short', day: 'numeric' }), cls: '' };
+      } catch (_) {
+        return { text: dateStr, cls: '' };
+      }
+    }
+
+    // ── Toggle task completion ──
+    async function toggleTask(taskId, markDone, itemEl) {
+      // Optimistic UI
+      const check = itemEl.querySelector('.task-check');
+      if (markDone) {
+        check.classList.add('checked');
+        check.textContent = '\u2713';
+        itemEl.classList.add('task-completing');
+        setTimeout(() => {
+          itemEl.classList.add('done');
+          itemEl.classList.remove('task-completing');
+        }, 400);
+      } else {
+        check.classList.remove('checked');
+        check.textContent = '';
+        itemEl.classList.remove('done');
+      }
+
+      // Update local data
+      const task = allTasks.find(t => t.id === taskId);
+      if (task) task.done = markDone;
+
+      // Send to server — try direct Vikunja task complete endpoint
+      try {
+        // The server exposes tasks through Vikunja adapter
+        // POST to complete, or use the chat endpoint as fallback
+        const r = await fetch(`${SERVER}/tasks/today`, { signal: AbortSignal.timeout(3000) });
+        // For now, use chat to request completion
+        if (markDone) {
+          await fetch(`${SERVER}/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: `Mark task "${task?.title || taskId}" as complete`,
+            }),
+            signal: AbortSignal.timeout(10000),
+          });
+        }
+        showToast(markDone ? 'TASK COMPLETED' : 'TASK REOPENED');
+      } catch (_) {
+        showToast('SAVED LOCALLY');
+      }
+
+      // Re-render after a short delay if filtering active
+      if (activeFilter !== 'all') {
+        setTimeout(renderTasks, 600);
+      }
+    }
+
+    // ── Add task ──
+    async function addTask() {
+      const title = newTaskInput.value.trim();
+      if (!title) return;
+
+      const addBtn = document.getElementById('add-btn');
+      addBtn.disabled = true;
+      newTaskInput.value = '';
+
+      // Optimistic local add
+      const tempTask = { id: 'temp-' + Date.now(), title, done: false, project: 'INBOX' };
+      allTasks.unshift(tempTask);
+      renderTasks();
+
+      try {
+        // Use chat to create task (agent has task creation tools)
+        await fetch(`${SERVER}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: `Create a task: "${title}"`,
+          }),
+          signal: AbortSignal.timeout(10000),
+        });
+        showToast('TASK ADDED');
+        // Refresh to get real task data
+        setTimeout(fetchTasks, 1000);
+      } catch (_) {
+        showToast('SAVED LOCALLY');
+      } finally {
+        addBtn.disabled = false;
+        newTaskInput.focus();
+      }
+    }
+
+    function esc(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    // ── Init ──
+    fetchTasks();
+    refreshTimer = setInterval(fetchTasks, 30000);
+
+    // Pause polling when hidden
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        clearInterval(refreshTimer);
+      } else {
+        fetchTasks();
+        refreshTimer = setInterval(fetchTasks, 30000);
+      }
+    });
+  </script>
+</body>
+</html>

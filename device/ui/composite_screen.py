@@ -42,11 +42,17 @@ from device.ui.components.action_bar import ActionBar
 from device.screens.base import BaseScreen
 
 BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
 
 HINT_BAR_H = 20  # Upgraded action bar height (was 12)
 CONTENT_TOP = SAFE_INSET + STATUS_BAR_H  # 36
 CONTENT_BOTTOM = PHYSICAL_H - SAFE_INSET - HINT_BAR_H  # 244
 RIGHT_PANEL_H = CONTENT_BOTTOM - CONTENT_TOP  # 208
+
+# ── Transition constants ──────────────────────────────────────
+SLIDE_OFFSET_PX = 10        # Starting offset for slide-in (pixels)
+SLIDE_DURATION_S = 0.20     # 200ms — ~3 frames at 15 FPS
+FLASH_DURATION_S = 0.15     # 150ms sidebar highlight flash
 
 
 class _Focus(Enum):
@@ -75,9 +81,18 @@ class CompositeScreen(BaseScreen):
         self._status_bar = StatusBar()
         self._action_bar = ActionBar()
         self._focus = _Focus.SIDEBAR
+        self._update_action_bar_hint()
 
         # Subsurface for right panel rendering (156x208)
         self._right_surface = pygame.Surface((CONTENT_W, RIGHT_PANEL_H))
+
+        # ── Transition state ──────────────────────────────────────
+        # Panel slide: "enter" = slide-left into submenu, "exit" = slide-right back
+        self._slide_active = False
+        self._slide_progress = 1.0   # 0.0 → 1.0 (done)
+        self._slide_direction = "enter"  # "enter" or "exit"
+        # Sidebar flash: countdown timer for highlight flash on scroll
+        self._flash_timer = 0.0
 
     @property
     def focus(self) -> str:
@@ -87,10 +102,46 @@ class CompositeScreen(BaseScreen):
     # ── Lifecycle ────────────────────────────────────────────────
 
     def update(self, dt: float) -> None:
+        # Advance panel slide transition
+        if self._slide_active:
+            self._slide_progress += dt / SLIDE_DURATION_S
+            if self._slide_progress >= 1.0:
+                self._slide_progress = 1.0
+                self._slide_active = False
+
+        # Advance sidebar flash
+        if self._flash_timer > 0.0:
+            self._flash_timer = max(0.0, self._flash_timer - dt)
+
         label = self._sidebar.items[self._sidebar.selected_index]
         panel = self._right_panels.get(label)
         if panel is not None and hasattr(panel, "update"):
             panel.update(dt)
+
+    # ── Transitions ───────────────────────────────────────────────
+
+    def _start_slide(self, direction: str) -> None:
+        """Kick off a slide transition. direction: 'enter' or 'exit'."""
+        self._slide_active = True
+        self._slide_progress = 0.0
+        self._slide_direction = direction
+
+    def _snap_slide(self) -> None:
+        """Instantly finish any in-progress slide (interruptibility)."""
+        self._slide_active = False
+        self._slide_progress = 1.0
+
+    def _slide_offset_x(self) -> int:
+        """Compute horizontal pixel offset for current slide transition."""
+        if not self._slide_active:
+            return 0
+        # Ease-out quadratic: fast start, gentle settle
+        remaining = (1.0 - self._slide_progress) ** 2
+        offset = int(SLIDE_OFFSET_PX * remaining)
+        if self._slide_direction == "exit":
+            return -offset  # slide out to the right
+        # Entering submenu: content slides in from right
+        return offset
 
     # ── Rendering ────────────────────────────────────────────────
 
@@ -103,13 +154,25 @@ class CompositeScreen(BaseScreen):
         # Sidebar on left (84px wide, from y=36 to y=244)
         self._sidebar.render(surface, x=0, y=CONTENT_TOP, height=RIGHT_PANEL_H)
 
+        # Sidebar flash overlay: brief white highlight fading on newly selected item
+        if self._flash_timer > 0.0:
+            from device.ui.components.sidebar import ITEM_H
+            flash_alpha = int(80 * (self._flash_timer / FLASH_DURATION_S))
+            flash_y = CONTENT_TOP + self._sidebar.selected_index * ITEM_H
+            flash_surf = pygame.Surface((SIDEBAR_W - 2, ITEM_H))
+            flash_surf.fill(WHITE)
+            flash_surf.set_alpha(flash_alpha)
+            surface.blit(flash_surf, (0, flash_y))
+
         # Right panel (156x208, positioned at x=84, y=36)
+        # Apply slide offset during transitions
         label = self._sidebar.items[self._sidebar.selected_index]
         panel = self._right_panels.get(label)
         if panel is not None:
             self._right_surface.fill(BLACK)
             panel.render(self._right_surface)
-            surface.blit(self._right_surface, (SIDEBAR_W, CONTENT_TOP))
+            offset_x = self._slide_offset_x()
+            surface.blit(self._right_surface, (SIDEBAR_W + offset_x, CONTENT_TOP))
 
         # Action bar at bottom (full width, 20px)
         self._action_bar.render(surface, y=CONTENT_BOTTOM, width=PHYSICAL_W)
@@ -135,16 +198,23 @@ class CompositeScreen(BaseScreen):
         n = len(self._sidebar.items)
         if action == "SHORT_PRESS":
             self._sidebar.selected_index = (self._sidebar.selected_index + 1) % n
+            self._flash_timer = FLASH_DURATION_S
         elif action == "TRIPLE_PRESS":
             self._sidebar.selected_index = (self._sidebar.selected_index - 1) % n
+            self._flash_timer = FLASH_DURATION_S
         elif action == "DOUBLE_PRESS":
             # Enter submenu mode if panel exists
             panel = self._active_panel()
             if panel is not None and hasattr(panel, "handle_action"):
                 self._focus = _Focus.SUBMENU
-                # Reset submenu selection when entering
+                self._update_action_bar_hint()
+                self._snap_slide()       # cancel any in-progress slide
+                self._start_slide("enter")
+                # Reset submenu selection and scroll when entering
                 if hasattr(panel, "selected_index"):
                     panel.selected_index = 0
+                if hasattr(panel, "_scroll_offset"):
+                    panel._scroll_offset = 0
             else:
                 # Fallback: call opener directly (legacy behavior)
                 label = self._sidebar.items[self._sidebar.selected_index]
@@ -153,10 +223,20 @@ class CompositeScreen(BaseScreen):
                     opener()
         # LONG_PRESS is no-op at root level
 
+    def _exit_submenu(self) -> None:
+        """Return to sidebar mode and clear submenu highlight."""
+        panel = self._active_panel()
+        if panel is not None and hasattr(panel, "selected_index"):
+            panel.selected_index = -1
+        self._focus = _Focus.SIDEBAR
+        self._update_action_bar_hint()
+        self._snap_slide()           # cancel any in-progress slide
+        self._start_slide("exit")
+
     def _handle_submenu_action(self, action: str) -> None:
         if action == "LONG_PRESS":
             # Back to sidebar
-            self._focus = _Focus.SIDEBAR
+            self._exit_submenu()
             return
 
         panel = self._active_panel()
@@ -165,7 +245,7 @@ class CompositeScreen(BaseScreen):
             if action == "DOUBLE_PRESS" and hasattr(panel, "items") and hasattr(panel, "selected_index"):
                 item = panel.items[panel.selected_index]
                 if item.get("action") == "back":
-                    self._focus = _Focus.SIDEBAR
+                    self._exit_submenu()
                     return
             panel.handle_action(action)
 
@@ -181,6 +261,26 @@ class CompositeScreen(BaseScreen):
             self.handle_action("DOUBLE_PRESS")
         elif event.key == pygame.K_ESCAPE:
             self.handle_action("LONG_PRESS")
+
+    # ── Action bar hints ────────────────────────────────────────
+
+    _SIDEBAR_ACTIONS = [
+        ("tap", "NAV"),
+        ("double", "SELECT"),
+    ]
+
+    _SUBMENU_ACTIONS = [
+        ("tap", "NAV"),
+        ("double", "GO"),
+        ("hold", "BACK"),
+    ]
+
+    def _update_action_bar_hint(self) -> None:
+        """Set action bar icons+labels based on current focus mode."""
+        if self._focus == _Focus.SUBMENU:
+            self._action_bar.set_actions(self._SUBMENU_ACTIONS)
+        else:
+            self._action_bar.set_actions(self._SIDEBAR_ACTIONS)
 
     # ── Hints / breadcrumb ───────────────────────────────────────
 

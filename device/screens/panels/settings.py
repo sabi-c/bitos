@@ -47,6 +47,7 @@ class SettingsPanel(BaseScreen):
         ui_settings: dict | None = None,
         client=None,
         on_open_integration_detail=None,
+        auth_manager=None,
     ):
         self._repo = repository
         self._on_back = on_back
@@ -66,9 +67,11 @@ class SettingsPanel(BaseScreen):
         self._on_dismiss_overlay = on_dismiss_overlay
 
         self._client = client
+        self._auth_manager = auth_manager
         self._on_open_integration_detail = on_open_integration_detail
         self._integration_status = {}
         self._blink_phase = False
+        self._scroll_offset = 0
 
 
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
@@ -106,6 +109,7 @@ class SettingsPanel(BaseScreen):
         ])
 
     def on_enter(self):
+        self._scroll_offset = 0
         self._web_search = bool(self._repo.get_setting("web_search", default=True))
         self._memory = bool(self._repo.get_setting("memory", default=True))
         self._ai_model = str(self._repo.get_setting("ai_model", default="claude-sonnet-4-6"))
@@ -169,9 +173,27 @@ class SettingsPanel(BaseScreen):
             "back": "HOME",
         }
 
-        # ── Rows: 26px minimum, inverted focus ──
-        y = STATUS_BAR_H
-        for idx, item in enumerate(self._nav.items):
+        # ── Scrollable rows: compute viewport ──
+        hint_h = 14  # reserve space for hint bar at bottom
+        viewport_top = STATUS_BAR_H
+        viewport_bottom = PHYSICAL_H - hint_h
+        viewport_h = viewport_bottom - viewport_top
+        max_visible = viewport_h // ROW_H_MIN
+
+        # Scroll offset: keep focused item visible
+        total = len(self._nav.items)
+        focus = self._nav.focus_index
+        # Clamp scroll so focused item is in view
+        if focus < self._scroll_offset:
+            self._scroll_offset = focus
+        elif focus >= self._scroll_offset + max_visible:
+            self._scroll_offset = focus - max_visible + 1
+        # Safety clamp
+        self._scroll_offset = max(0, min(self._scroll_offset, total - max_visible))
+
+        y = viewport_top
+        for idx in range(self._scroll_offset, min(self._scroll_offset + max_visible, total)):
+            item = self._nav.items[idx]
             focused = idx == self._nav.focus_index
             if item.key == "integrations_header":
                 row = self._font_body.render(item.label, False, DIM2)
@@ -194,6 +216,14 @@ class SettingsPanel(BaseScreen):
             if not focused:
                 pygame.draw.line(surface, HAIRLINE, (0, y + ROW_H_MIN - 1), (PHYSICAL_W, y + ROW_H_MIN - 1))
             y += ROW_H_MIN
+
+        # ── Scroll indicators ──
+        if self._scroll_offset > 0:
+            arrow_up = self._font_hint.render("^", False, DIM3)
+            surface.blit(arrow_up, (PHYSICAL_W - 12, viewport_top + 2))
+        if self._scroll_offset + max_visible < total:
+            arrow_dn = self._font_hint.render("v", False, DIM3)
+            surface.blit(arrow_dn, (PHYSICAL_W - 12, viewport_bottom - 12))
 
         # ── Key hint bar: 4px font, spec format ──
         hint = self._font_hint.render("SHORT:NEXT \u00b7 DBL:OPEN/TOGGLE \u00b7 LONG:BACK", False, DIM3)
@@ -259,8 +289,11 @@ class SettingsPanel(BaseScreen):
         ble_addr = self._get_ble_address()
         if not self._on_push_overlay:
             return
+        url, session_id, token, expires = build_pair_url(ble_addr)
+        if self._auth_manager:
+            self._auth_manager.pairing.start(session_id, token, expires)
         qr = QROverlay(
-            url=build_pair_url(ble_addr),
+            url=url,
             title="PAIR COMPANION APP",
             subtitle="SCAN WITH YOUR PHONE",
             on_dismiss=lambda: self._on_dismiss_overlay(qr) if self._on_dismiss_overlay else None,

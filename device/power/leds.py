@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import threading
 import time
 from typing import Optional
@@ -66,6 +67,22 @@ class LEDController:
     def ble_active(self) -> None:
         self._start_animation("pulse_blue")
 
+    def recording(self) -> None:
+        """Slow breathing red pulse (3s cycle). Indicates mic is active."""
+        self._start_animation("breathing_red")
+
+    def sending(self) -> None:
+        """Fast cyan pulse (0.5s cycle). Indicates data being sent to server."""
+        self._start_animation("pulse_cyan")
+
+    def responding(self) -> None:
+        """Gentle warm white wave (1s cycle, sinusoidal). Agent generating response."""
+        self._start_animation("wave_warm_white")
+
+    def success(self) -> None:
+        """Brief green flash (0.3s on, fade out). One-shot, then returns to idle."""
+        self._start_animation("flash_green")
+
     def battery_warning(self, pct: int) -> None:
         if pct <= 5:
             self.critical_battery()
@@ -89,26 +106,72 @@ class LEDController:
         self._thread.start()
 
     def _animate(self, name: str) -> None:
-        step = 0
+        TICK = 0.02  # 50 Hz update rate for smooth sinusoidal curves
+        t0 = time.monotonic()
+
         while True:
             with self._lock:
                 if not self._running:
                     break
 
+            elapsed = time.monotonic() - t0
+
             if name == "pulse_white":
-                brightness = int(abs(30 * ((step % 40) / 20.0 - 1)))
+                # Original triangle wave, ~2s cycle
+                phase = (elapsed % 2.0) / 2.0
+                brightness = int(30 * abs(phase * 2.0 - 1.0))
                 self._set_rgb(brightness, brightness, brightness)
-                time.sleep(0.05)
+
             elif name == "blink_red":
-                on = (step % 10) < 5
+                on = (elapsed % 1.0) < 0.5
                 self._set_rgb(120 if on else 0, 0, 0)
-                time.sleep(0.1)
+
             elif name == "pulse_blue":
-                brightness = int(abs(60 * ((step % 40) / 20.0 - 1)))
+                phase = (elapsed % 2.0) / 2.0
+                brightness = int(60 * abs(phase * 2.0 - 1.0))
                 self._set_rgb(0, 0, brightness)
-                time.sleep(0.05)
+
+            elif name == "breathing_red":
+                # Slow breathing red: 3s cycle (1.5s inhale, 1.5s exhale)
+                # sin gives smooth 0→1→0 over one full cycle
+                phase = (elapsed % 3.0) / 3.0
+                intensity = (math.sin(phase * 2.0 * math.pi - math.pi / 2.0) + 1.0) / 2.0
+                r = int(10 + 90 * intensity)  # range 10..100
+                self._set_rgb(r, 0, 0)
+
+            elif name == "pulse_cyan":
+                # Fast cyan pulse: 0.5s cycle
+                phase = (elapsed % 0.5) / 0.5
+                intensity = (math.sin(phase * 2.0 * math.pi - math.pi / 2.0) + 1.0) / 2.0
+                val = int(15 + 80 * intensity)  # range 15..95
+                self._set_rgb(0, val, val)
+
+            elif name == "wave_warm_white":
+                # Gentle warm white wave: 1s sinusoidal cycle
+                phase = (elapsed % 1.0) / 1.0
+                intensity = (math.sin(phase * 2.0 * math.pi - math.pi / 2.0) + 1.0) / 2.0
+                # Warm white = slightly yellow-tinted
+                r = int(20 + 50 * intensity)
+                g = int(18 + 45 * intensity)
+                b = int(12 + 30 * intensity)
+                self._set_rgb(r, g, b)
+
+            elif name == "flash_green":
+                # One-shot: 0.3s bright green, then 0.5s fade, then idle
+                if elapsed < 0.3:
+                    self._set_rgb(0, 120, 0)
+                elif elapsed < 0.8:
+                    fade = 1.0 - (elapsed - 0.3) / 0.5
+                    self._set_rgb(0, int(120 * fade), 0)
+                else:
+                    # Transition to idle and stop
+                    self._set_rgb(30, 30, 30)
+                    with self._lock:
+                        self._running = False
+                        self._state = "idle"
+                    break
+
             else:
                 self._set_rgb(0, 0, 0)
-                time.sleep(0.2)
 
-            step += 1
+            time.sleep(TICK)

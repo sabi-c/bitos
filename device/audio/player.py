@@ -62,6 +62,7 @@ class AudioPlayer:
     def __init__(self, volume: float = 1.0):
         self._volume = max(0.0, min(1.0, volume))
         self._proc: subprocess.Popen | None = None
+        self._stopped = False  # flag for immediate cancellation
 
     def set_volume(self, volume: float) -> None:
         self._volume = max(0.0, min(1.0, volume))
@@ -84,6 +85,7 @@ class AudioPlayer:
             logger.error("audio_file_missing path=%s", path)
             return False
 
+        self._stopped = False
         if _USE_APLAY:
             return self._play_aplay(str(audio))
         return self._play_pygame(str(audio))
@@ -131,6 +133,10 @@ class AudioPlayer:
             pygame.mixer.music.load(path)
             pygame.mixer.music.play()
             while pygame.mixer.music.get_busy():
+                if self._stopped:
+                    pygame.mixer.music.stop()
+                    logger.info("pygame_play_stopped: path=%s", path)
+                    return False
                 pygame.time.wait(50)
             logger.info("pygame_play_done: path=%s", path)
             return True
@@ -139,12 +145,36 @@ class AudioPlayer:
             return False
 
     def stop(self) -> None:
+        self._stopped = True
         if self._proc and self._proc.poll() is None:
             self._proc.terminate()
             try:
                 self._proc.wait(timeout=2)
             except subprocess.TimeoutExpired:
                 self._proc.kill()
+        # Also stop pygame mixer if active
+        if not _USE_APLAY:
+            try:
+                import pygame
+                if pygame.mixer.get_init() and pygame.mixer.music.get_busy():
+                    pygame.mixer.music.stop()
+            except Exception:
+                pass
+
+    def is_playing(self) -> bool:
+        """Return True if audio is currently playing."""
+        if self._stopped:
+            return False
+        if self._proc and self._proc.poll() is None:
+            return True
+        if not _USE_APLAY:
+            try:
+                import pygame
+                if pygame.mixer.get_init() and pygame.mixer.music.get_busy():
+                    return True
+            except Exception:
+                pass
+        return False
 
     def release(self) -> None:
         self.stop()

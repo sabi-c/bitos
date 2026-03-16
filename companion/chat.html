@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <title>BITOS Chat</title>
+  <link rel="stylesheet" href="css/shared.css">
+  <style>
+    body { padding-bottom: 140px; }
+    .chat-header {
+      display: flex; align-items: center; justify-content: space-between;
+      width: 100%; max-width: 400px; margin-bottom: 12px;
+    }
+    .chat-header h2 {
+      font-size: 11px; letter-spacing: .08em; color: #aaa;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      max-width: 200px;
+    }
+    .chat-header-actions { display: flex; gap: 6px; }
+    .chat-header button {
+      background: none; border: 1px solid #333; color: #888;
+      font-family: monospace; font-size: 10px; padding: 6px 10px;
+      cursor: pointer; letter-spacing: .04em; min-height: 36px;
+    }
+    .chat-header button:active { border-color: #888; color: #fff; }
+    .chat-input-bar {
+      position: fixed; bottom: calc(52px + env(safe-area-inset-bottom, 0px));
+      left: 0; right: 0;
+      display: flex; gap: 8px; padding: 10px 16px;
+      background: #000; border-top: 1px solid #222;
+      justify-content: center;
+    }
+    .chat-input-bar input {
+      max-width: 320px;
+    }
+
+    /* Sessions list overlay */
+    .sessions-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.97); z-index: 60;
+      overflow-y: auto; padding: 20px 16px 100px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .sessions-overlay.visible { display: block; }
+    .sessions-header {
+      display: flex; justify-content: space-between; align-items: center;
+      max-width: 400px; margin: 0 auto 16px;
+    }
+    .sessions-header h2 {
+      font-size: 14px; letter-spacing: .08em; color: #fff;
+    }
+    .sessions-header-actions { display: flex; gap: 8px; }
+    .sessions-header button {
+      background: none; border: 1px solid #555; color: #aaa;
+      font-family: monospace; font-size: 11px; padding: 8px 12px;
+      cursor: pointer; min-height: 44px;
+    }
+    .sessions-list {
+      max-width: 400px; margin: 0 auto;
+    }
+
+    /* Search bar in sessions */
+    .sessions-search {
+      width: 100%; max-width: 400px; margin: 0 auto 12px;
+      display: flex; gap: 8px;
+    }
+    .sessions-search input {
+      flex: 1; background: #111; border: 1px solid #333;
+      color: #fff; font-family: monospace; font-size: 12px;
+      padding: 10px; outline: none; min-height: 44px;
+    }
+    .sessions-search input:focus { border-color: #fff; }
+
+    /* Enhanced session items */
+    .session-item {
+      padding: 14px 0; border-bottom: 1px solid #1a1a1a;
+      cursor: pointer; position: relative;
+    }
+    .session-item:active { background: #111; }
+    .session-item-header {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      margin-bottom: 4px;
+    }
+    .session-title {
+      font-size: 13px; color: #ccc;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      flex: 1; min-width: 0; margin-right: 8px;
+    }
+    .session-time { font-size: 10px; color: #555; flex-shrink: 0; }
+    .session-preview {
+      font-size: 11px; color: #555; margin-top: 2px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      max-width: 100%;
+    }
+    .session-meta {
+      display: flex; gap: 10px; margin-top: 4px;
+    }
+    .session-badge {
+      font-size: 9px; letter-spacing: .04em; color: #444;
+      text-transform: uppercase;
+    }
+
+    .session-delete {
+      background: none; border: 1px solid #333; color: #666;
+      font-family: monospace; font-size: 9px; padding: 4px 8px;
+      cursor: pointer; position: absolute; right: 0; top: 14px;
+      display: none; min-height: 28px;
+    }
+    .session-item:hover .session-delete,
+    .session-item:active .session-delete { display: block; }
+
+    /* Delete confirmation */
+    .delete-confirm {
+      background: #1a0000; border: 1px solid #f44;
+      padding: 12px; margin-top: 8px; display: none;
+    }
+    .delete-confirm.visible { display: block; }
+    .delete-confirm p {
+      font-size: 11px; color: #f88; margin-bottom: 8px;
+    }
+    .delete-confirm-actions {
+      display: flex; gap: 8px;
+    }
+    .delete-confirm button {
+      flex: 1; font-family: monospace; font-size: 11px;
+      padding: 8px; cursor: pointer; min-height: 36px;
+      border: none;
+    }
+    .delete-confirm .btn-cancel {
+      background: #222; color: #aaa;
+    }
+    .delete-confirm .btn-delete {
+      background: #f44; color: #000; font-weight: bold;
+    }
+
+    /* Streaming cursor */
+    .streaming::after {
+      content: '\2588'; animation: blink .8s step-end infinite;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+  </style>
+</head>
+<body>
+  <h1>&#9678; BITOS</h1>
+  <div class="page-title">CHAT</div>
+
+  <div class="chat-header">
+    <h2 id="chat-title">NEW CONVERSATION</h2>
+    <div class="chat-header-actions">
+      <button onclick="startNewSession()">NEW</button>
+      <button onclick="showSessions()">HISTORY</button>
+    </div>
+  </div>
+
+  <div class="chat-container">
+    <div class="chat-messages" id="messages">
+      <div class="empty-state" id="empty-msg">
+        Send a message to start chatting with BITOS.
+      </div>
+    </div>
+  </div>
+
+  <div class="chat-input-bar">
+    <input type="text" id="chat-input" placeholder="Message..."
+           autocomplete="off" enterkeyhint="send">
+    <button id="send-btn" onclick="sendMessage()">&#9654;</button>
+  </div>
+
+  <!-- Sessions overlay -->
+  <div class="sessions-overlay" id="sessions-overlay">
+    <div class="sessions-header">
+      <h2>CONVERSATIONS</h2>
+      <div class="sessions-header-actions">
+        <button onclick="hideSessions()">CLOSE</button>
+      </div>
+    </div>
+
+    <div class="sessions-search">
+      <input type="text" id="session-search" placeholder="Search conversations..."
+             oninput="filterSessions()" autocomplete="off">
+    </div>
+
+    <div class="sessions-list" id="sessions-list">
+      <div class="loading">LOADING</div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+  </script>
+  <script src="js/nav.js"></script>
+  <script>
+    const SERVER = getServerUrl();
+    let currentSessionId = null;
+    let isStreaming = false;
+    let allSessions = [];
+    let deleteTarget = null;
+
+    const messagesEl = document.getElementById('messages');
+    const inputEl = document.getElementById('chat-input');
+    const sendBtn = document.getElementById('send-btn');
+    const emptyMsg = document.getElementById('empty-msg');
+
+    // Enter to send
+    inputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    // ── Send message via SSE streaming ──
+    async function sendMessage() {
+      const text = inputEl.value.trim();
+      if (!text || isStreaming) return;
+
+      emptyMsg.style.display = 'none';
+      isStreaming = true;
+      sendBtn.disabled = true;
+      inputEl.value = '';
+
+      // Add user bubble
+      appendBubble('user', text);
+
+      // Create agent bubble for streaming
+      const agentBubble = appendBubble('agent', '');
+      agentBubble.classList.add('streaming');
+
+      let chatTimeout;
+      try {
+        const body = { message: text };
+        if (currentSessionId) body.session_id = currentSessionId;
+
+        const chatAbort = new AbortController();
+        chatTimeout = setTimeout(() => chatAbort.abort(), 120000);
+        const response = await fetch(`${SERVER}/chat`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream',
+          },
+          body: JSON.stringify(body),
+          signal: chatAbort.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Server returned ${response.status}`);
+        }
+
+        const contentType = response.headers.get('content-type') || '';
+
+        if (contentType.includes('text/event-stream')) {
+          // SSE streaming
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let fullText = '';
+          let buffer = '';
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop(); // keep incomplete line
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const data = line.slice(6);
+                if (data === '[DONE]') continue;
+                try {
+                  const parsed = JSON.parse(data);
+                  if (parsed.text || parsed.content || parsed.delta) {
+                    fullText += parsed.text || parsed.content || parsed.delta || '';
+                    updateBubbleText(agentBubble, fullText);
+                  }
+                  if (parsed.session_id && !currentSessionId) {
+                    currentSessionId = parsed.session_id;
+                  }
+                } catch (_) {
+                  // Plain text data
+                  fullText += data;
+                  updateBubbleText(agentBubble, fullText);
+                }
+              }
+            }
+          }
+
+          if (!fullText) {
+            updateBubbleText(agentBubble, '(No response)');
+          }
+        } else {
+          // JSON response fallback
+          const data = await response.json();
+          const reply = data.response || data.text || data.message || data.content || '(No response)';
+          updateBubbleText(agentBubble, reply);
+          if (data.session_id) currentSessionId = data.session_id;
+        }
+      } catch (e) {
+        const msg = e.name === 'AbortError' ? 'Request timed out' : e.message;
+        updateBubbleText(agentBubble, 'Error: ' + msg);
+        agentBubble.style.borderColor = '#f44';
+      } finally {
+        clearTimeout(chatTimeout);
+        agentBubble.classList.remove('streaming');
+        isStreaming = false;
+        sendBtn.disabled = false;
+        inputEl.focus();
+      }
+    }
+
+    // ── Bubble helpers ──
+    function appendBubble(role, text) {
+      const div = document.createElement('div');
+      div.className = 'chat-bubble ' + role;
+      const content = document.createElement('span');
+      content.className = 'bubble-content';
+      content.textContent = text;
+      div.appendChild(content);
+      const time = document.createElement('span');
+      time.className = 'bubble-time';
+      time.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      div.appendChild(time);
+      messagesEl.appendChild(div);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      return div;
+    }
+
+    function updateBubbleText(bubble, text) {
+      const content = bubble.querySelector('.bubble-content');
+      if (content) content.textContent = text;
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    // ── Session history ──
+    function showSessions() {
+      document.getElementById('sessions-overlay').classList.add('visible');
+      document.getElementById('session-search').value = '';
+      fetchSessions();
+    }
+
+    function hideSessions() {
+      document.getElementById('sessions-overlay').classList.remove('visible');
+    }
+
+    async function fetchSessions() {
+      const list = document.getElementById('sessions-list');
+      list.innerHTML = '<div class="loading">LOADING</div>';
+      try {
+        const r = await fetch(`${SERVER}/chat/sessions`, { signal: AbortSignal.timeout(5000) });
+        if (!r.ok) throw new Error();
+        const sessions = await r.json();
+        allSessions = Array.isArray(sessions) ? sessions : (sessions.sessions || []);
+        renderSessions(allSessions);
+      } catch (_) {
+        list.innerHTML = '<div class="empty-state">Cannot reach server</div>';
+      }
+    }
+
+    function renderSessions(sessions) {
+      const list = document.getElementById('sessions-list');
+
+      if (sessions.length === 0) {
+        list.innerHTML = '<div class="empty-state">No conversations found</div>';
+        return;
+      }
+
+      list.innerHTML = '';
+
+      // New conversation option
+      const newItem = document.createElement('div');
+      newItem.className = 'session-item';
+      newItem.innerHTML =
+        '<div class="session-title" style="color:#fff;font-weight:bold">+ NEW CONVERSATION</div>';
+      newItem.onclick = () => { startNewSession(); hideSessions(); };
+      list.appendChild(newItem);
+
+      for (const s of sessions) {
+        const div = document.createElement('div');
+        div.className = 'session-item';
+
+        const sessionId = s.id || s.session_id;
+        const title = s.title || s.summary || 'Untitled';
+        const preview = s.last_message || s.first_message || s.preview || '';
+        const time = s.updated_at || s.created_at || s.time || '';
+        const msgCount = s.message_count || s.count || null;
+        const mode = s.agent_mode || s.mode || null;
+
+        // Header with title and time
+        const header = document.createElement('div');
+        header.className = 'session-item-header';
+
+        const titleEl = document.createElement('div');
+        titleEl.className = 'session-title';
+        titleEl.textContent = title;
+
+        const timeEl = document.createElement('div');
+        timeEl.className = 'session-time';
+        timeEl.textContent = timeAgo(time);
+
+        header.appendChild(titleEl);
+        header.appendChild(timeEl);
+        div.appendChild(header);
+
+        // Preview snippet
+        if (preview) {
+          const previewEl = document.createElement('div');
+          previewEl.className = 'session-preview';
+          previewEl.textContent = preview;
+          div.appendChild(previewEl);
+        }
+
+        // Meta: message count + mode
+        const meta = document.createElement('div');
+        meta.className = 'session-meta';
+        if (msgCount) {
+          const countBadge = document.createElement('span');
+          countBadge.className = 'session-badge';
+          countBadge.textContent = msgCount + ' messages';
+          meta.appendChild(countBadge);
+        }
+        if (mode) {
+          const modeBadge = document.createElement('span');
+          modeBadge.className = 'session-badge';
+          modeBadge.textContent = mode + ' mode';
+          meta.appendChild(modeBadge);
+        }
+        if (meta.children.length > 0) div.appendChild(meta);
+
+        // Delete button
+        const delBtn = document.createElement('button');
+        delBtn.className = 'session-delete';
+        delBtn.textContent = 'DELETE';
+        delBtn.onclick = (e) => {
+          e.stopPropagation();
+          showDeleteConfirm(sessionId, title, div);
+        };
+        div.appendChild(delBtn);
+
+        // Click to load
+        div.onclick = () => { loadSession(sessionId); hideSessions(); };
+        list.appendChild(div);
+      }
+    }
+
+    function filterSessions() {
+      const query = document.getElementById('session-search').value.toLowerCase().trim();
+      if (!query) {
+        renderSessions(allSessions);
+        return;
+      }
+      const filtered = allSessions.filter(s => {
+        const title = (s.title || s.summary || '').toLowerCase();
+        const preview = (s.last_message || s.first_message || '').toLowerCase();
+        const mode = (s.agent_mode || s.mode || '').toLowerCase();
+        return title.includes(query) || preview.includes(query) || mode.includes(query);
+      });
+      renderSessions(filtered);
+    }
+
+    function showDeleteConfirm(sessionId, title, parentDiv) {
+      // Remove any existing confirm dialogs
+      document.querySelectorAll('.delete-confirm.visible').forEach(d => d.remove());
+
+      const confirm = document.createElement('div');
+      confirm.className = 'delete-confirm visible';
+
+      const p = document.createElement('p');
+      p.textContent = 'Delete "' + (title.length > 30 ? title.slice(0, 30) + '...' : title) + '"?';
+      confirm.appendChild(p);
+
+      const actions = document.createElement('div');
+      actions.className = 'delete-confirm-actions';
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.className = 'btn-cancel';
+      cancelBtn.textContent = 'CANCEL';
+      cancelBtn.onclick = (e) => {
+        e.stopPropagation();
+        confirm.remove();
+      };
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'btn-delete';
+      deleteBtn.textContent = 'DELETE';
+      deleteBtn.onclick = (e) => {
+        e.stopPropagation();
+        deleteSession(sessionId, parentDiv);
+      };
+
+      actions.appendChild(cancelBtn);
+      actions.appendChild(deleteBtn);
+      confirm.appendChild(actions);
+
+      parentDiv.appendChild(confirm);
+      parentDiv.onclick = null; // Disable load while confirm is open
+    }
+
+    async function deleteSession(sessionId, parentDiv) {
+      try {
+        const r = await fetch(`${SERVER}/chat/sessions/${sessionId}`, {
+          method: 'DELETE',
+          signal: AbortSignal.timeout(5000),
+        });
+        if (r.ok || r.status === 404) {
+          parentDiv.style.opacity = '0.3';
+          setTimeout(() => {
+            parentDiv.remove();
+            allSessions = allSessions.filter(s => (s.id || s.session_id) !== sessionId);
+            if (currentSessionId === sessionId) {
+              startNewSession();
+            }
+          }, 300);
+          showToast('DELETED');
+        } else {
+          showToast('DELETE FAILED');
+        }
+      } catch (_) {
+        showToast('SERVER UNREACHABLE');
+      }
+    }
+
+    async function loadSession(sessionId) {
+      currentSessionId = sessionId;
+      messagesEl.innerHTML = '<div class="loading">LOADING</div>';
+      emptyMsg.style.display = 'none';
+
+      try {
+        const r = await fetch(`${SERVER}/chat/sessions/${sessionId}`, {
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!r.ok) throw new Error();
+        const data = await r.json();
+        const messages = data.messages || data.history || [];
+
+        messagesEl.innerHTML = '';
+
+        if (messages.length === 0) {
+          messagesEl.innerHTML = '<div class="empty-state">Empty conversation</div>';
+          return;
+        }
+
+        for (const msg of messages) {
+          const role = (msg.role === 'user' || msg.role === 'human') ? 'user' : 'agent';
+          const text = msg.content || msg.text || msg.message || '';
+          const bubble = appendBubble(role, text);
+          const timeSpan = bubble.querySelector('.bubble-time');
+          if (timeSpan && (msg.timestamp || msg.created_at)) {
+            timeSpan.textContent = formatTime(msg.timestamp || msg.created_at);
+          }
+        }
+
+        document.getElementById('chat-title').textContent =
+          (data.title || 'CONVERSATION').toUpperCase();
+      } catch (_) {
+        messagesEl.innerHTML = '<div class="empty-state">Failed to load conversation</div>';
+      }
+    }
+
+    function startNewSession() {
+      currentSessionId = null;
+      messagesEl.innerHTML = '';
+      emptyMsg.style.display = '';
+      messagesEl.appendChild(emptyMsg);
+      document.getElementById('chat-title').textContent = 'NEW CONVERSATION';
+    }
+
+    function esc(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    // Focus input on load
+    inputEl.focus();
+  </script>
+</body>
+</html>

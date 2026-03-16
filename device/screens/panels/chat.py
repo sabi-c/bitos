@@ -140,6 +140,7 @@ class ChatPanel(BaseScreen):
         self._action_template_index = 0
         self._voice_step = ""       # on-screen pipeline step callout
         self._voice_error = ""      # error detail shown on screen
+        self._confirm_tap_until: float = 0.0  # tap-to-record confirmation window
         self._health = ServiceHealth()
         self._health_checked = False
         self._speaking_overlay = SpeakingOverlay()
@@ -249,6 +250,12 @@ class ChatPanel(BaseScreen):
     def update(self, dt: float):
         self._cursor_anim.update(dt)
         self._speaking_overlay.tick(int(dt * 1000))
+        # Clear "TAP AGAIN TO RECORD" hint after confirmation window expires
+        if self._confirm_tap_until and time.time() >= self._confirm_tap_until:
+            self._confirm_tap_until = 0.0
+            with self._messages_lock:
+                if self._status_detail == "TAP AGAIN TO RECORD":
+                    self._status_detail = ""
         # Check if hold has crossed the quick-talk threshold (600ms)
         if self._hold_timer is not None and self._mode == ChatMode.IDLE:
             if time.time() - self._hold_timer >= 0.6:
@@ -323,19 +330,32 @@ class ChatPanel(BaseScreen):
         if handler:
             handler(action)
 
+    # Duration of the "tap again to record" confirmation window
+    _CONFIRM_TAP_S = 1.5
+
     def _handle_idle(self, action: str):
         if action == "SHORT_PRESS":
-            # Tap → field recording (toggle on)
             if self._hold_timer is not None:
                 # Hold timer active — this tap came from a short hold, ignore
                 self._hold_timer = None
                 return
-            self._quick_talk = False
-            self._start_recording()
+            now = time.time()
+            if now < self._confirm_tap_until:
+                # Second tap within confirmation window → start recording
+                self._confirm_tap_until = 0.0
+                self._quick_talk = False
+                self._start_recording()
+            else:
+                # First tap → show confirmation hint, wait for second tap
+                self._confirm_tap_until = now + self._CONFIRM_TAP_S
+                with self._messages_lock:
+                    self._status_detail = "TAP AGAIN TO RECORD"
         elif action == "DOUBLE_PRESS":
+            self._confirm_tap_until = 0.0
             self._mode = ChatMode.ACTIONS
             self._action_template_index = 0
         elif action == "TRIPLE_PRESS":
+            self._confirm_tap_until = 0.0
             if len(self._pages) > 1:
                 # Mark current page as revealed
                 if self._current_page < len(self._page_revealed):
@@ -486,6 +506,8 @@ class ChatPanel(BaseScreen):
     def _get_action_bar_content(self) -> list[tuple[str, str]]:
         """Return action bar items for the current mode."""
         if self._mode == ChatMode.IDLE:
+            if self._confirm_tap_until and time.time() < self._confirm_tap_until:
+                return [("tap", "confirm rec"), ("hold", "talk")]
             items = [("tap", "rec"), ("hold", "talk"), ("double", "act")]
             if len(self._pages) > 1:
                 items.append(("triple", "next"))
@@ -791,7 +813,7 @@ class ChatPanel(BaseScreen):
         self._voice_stop_event.clear()
         self._recording_start_time = time.time()
         if self._led:
-            self._led.listening()
+            self._led.recording()
         with self._messages_lock:
             self._status = self.STATUS_CONNECTED
             self._status_detail = "recording..."
@@ -882,8 +904,19 @@ class ChatPanel(BaseScreen):
                     self._led.error()
                 return
 
+            # ── Step 4b: Energy check — skip STT if recording is mostly silence ──
+            if not self._audio_has_energy(audio_path):
+                logger.info("audio_silence_detected: skipping STT")
+                self._set_voice_step("ERROR", "silence — tap closer")
+                self._mode = ChatMode.IDLE
+                if self._led:
+                    self._led.off()
+                return
+
             # ── Step 5: Transcribe (stay in RECORDING mode so user sees status) ──
             self._set_voice_step("TRANSCRIBING")
+            if self._led:
+                self._led.sending()
             logger.info("voice_step=TRANSCRIBING engine=%s",
                         getattr(self._audio_pipeline, '_stt_engine', '?'))
 
@@ -916,6 +949,8 @@ class ChatPanel(BaseScreen):
 
         # ── Step 6: Send to backend ──
         self._set_voice_step("SENDING")
+        if self._led:
+            self._led.sending()
         self._input_text = text
         self._send_message()
 
@@ -932,6 +967,47 @@ class ChatPanel(BaseScreen):
             logger.info("recording_saved dest=%s", dest)
         except Exception as exc:
             logger.warning("recording_save_failed: %s", exc)
+
+    # Minimum RMS energy threshold for speech detection (16-bit PCM).
+    # Typical silence sits around 50-200 RMS; speech usually exceeds 500.
+    _MIN_AUDIO_RMS = 300
+
+    @classmethod
+    def _audio_has_energy(cls, audio_path: str) -> bool:
+        """Return True if the WAV file contains enough energy to be speech."""
+        import struct
+        import wave
+
+        try:
+            with wave.open(audio_path, "rb") as wf:
+                n_frames = wf.getnframes()
+                if n_frames == 0:
+                    return False
+                sampwidth = wf.getsampwidth()
+                channels = wf.getnchannels()
+                raw = wf.readframes(n_frames)
+
+            if sampwidth != 2:
+                # Can't easily check non-16-bit; assume it has energy
+                return True
+
+            samples = struct.unpack(f"<{len(raw) // 2}h", raw)
+            # If stereo, take every other sample (left channel) for speed
+            if channels > 1:
+                samples = samples[::channels]
+
+            if not samples:
+                return False
+
+            # RMS energy
+            sum_sq = sum(s * s for s in samples)
+            rms = (sum_sq / len(samples)) ** 0.5
+            logger.info("audio_energy_check: rms=%.1f threshold=%d frames=%d",
+                        rms, cls._MIN_AUDIO_RMS, n_frames)
+            return rms >= cls._MIN_AUDIO_RMS
+        except Exception as exc:
+            logger.warning("audio_energy_check_failed: %s — assuming has energy", exc)
+            return True  # on error, don't block the pipeline
 
     def _send_message(self):
         text = self._input_text.strip()
@@ -970,7 +1046,7 @@ class ChatPanel(BaseScreen):
         self._last_error_retryable = False
 
         if self._led:
-            self._led.thinking()
+            self._led.responding()
         thread = threading.Thread(target=self._stream_response, args=(text,), daemon=True)
         thread.start()
 
@@ -1064,8 +1140,10 @@ class ChatPanel(BaseScreen):
             self._is_streaming = False
             if self._mode in (ChatMode.STREAMING, ChatMode.SPEAKING):
                 self._mode = ChatMode.IDLE
-            if self._led and self._status == self.STATUS_CONNECTED:
-                self._led.off()
+            if self._led:
+                if self._status == self.STATUS_CONNECTED:
+                    self._led.success()
+                # error cases already set led.error() via _mark_failed
 
     def _speak_text(self, text: str) -> None:
         """Play TTS for text. Queues if already speaking; only one utterance at a time."""

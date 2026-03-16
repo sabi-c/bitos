@@ -154,6 +154,66 @@ class ButtonHandlerTests(unittest.TestCase):
 
         self.assertEqual(fired, ["short"])
 
+    def test_immediate_short_fires_on_release(self):
+        """In immediate-short mode SHORT_PRESS fires on release, no timeout."""
+        self.handler.set_immediate_short(True)
+        times = iter([1.0, 1.1])
+        with patch("input.handler.time.time", side_effect=lambda: next(times)):
+            self.handler.handle_pygame_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_SPACE))
+            self.handler.handle_pygame_event(pygame.event.Event(pygame.KEYUP, key=pygame.K_SPACE))
+
+        # Fired immediately on release — no update() needed
+        self.assertEqual(self.fired, ["short"])
+        # No pending click state
+        self.assertIsNone(self.handler._click_deadline)
+        self.assertEqual(self.handler._click_count, 0)
+
+    def test_immediate_short_still_detects_long_press(self):
+        """LONG_PRESS still works in immediate-short mode."""
+        self.handler.set_immediate_short(True)
+        times = iter([10.0, 10.8])
+        with patch("input.handler.time.time", side_effect=lambda: next(times)):
+            self.handler.handle_pygame_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_SPACE))
+            self.handler.handle_pygame_event(pygame.event.Event(pygame.KEYUP, key=pygame.K_SPACE))
+
+        self.assertEqual(self.fired, ["long"])
+
+    def test_immediate_short_bypasses_multi_click(self):
+        """Two quick taps in immediate mode fire two SHORT_PRESS, not DOUBLE."""
+        self.handler.set_immediate_short(True)
+        times = iter([1.0, 1.05, 1.10, 1.15, 2.0])
+        with patch("input.handler.time.time", side_effect=lambda: next(times)):
+            self.handler.handle_pygame_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_SPACE))
+            self.handler.handle_pygame_event(pygame.event.Event(pygame.KEYUP, key=pygame.K_SPACE))
+            self.handler.handle_pygame_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_SPACE))
+            self.handler.handle_pygame_event(pygame.event.Event(pygame.KEYUP, key=pygame.K_SPACE))
+            self.handler.update()  # should NOT emit anything extra
+
+        self.assertEqual(self.fired, ["short", "short"])
+
+    def test_set_immediate_short_flushes_pending_clicks(self):
+        """Enabling immediate-short clears any pending multi-click state."""
+        self.handler._click_count = 2
+        self.handler._click_deadline = 999.0
+        self.handler.set_immediate_short(True)
+        self.assertEqual(self.handler._click_count, 0)
+        self.assertIsNone(self.handler._click_deadline)
+
+    def test_disable_immediate_short_restores_multi_click(self):
+        """Disabling immediate-short re-enables multi-click detection."""
+        self.handler.set_immediate_short(True)
+        self.handler.set_immediate_short(False)
+
+        times = iter([1.0, 1.05, 1.10, 1.15, 2.0])
+        with patch("input.handler.time.time", side_effect=lambda: next(times)):
+            self.handler.handle_pygame_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_SPACE))
+            self.handler.handle_pygame_event(pygame.event.Event(pygame.KEYUP, key=pygame.K_SPACE))
+            self.handler.handle_pygame_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_SPACE))
+            self.handler.handle_pygame_event(pygame.event.Event(pygame.KEYUP, key=pygame.K_SPACE))
+            self.handler.update()
+
+        self.assertEqual(self.fired, ["double"])
+
     def test_button_state_logs_include_active_screen(self):
         handler = ButtonHandler(active_screen_name_getter=lambda: "lock")
 

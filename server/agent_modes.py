@@ -56,6 +56,12 @@ DEVICE TOOLS: You have tools to read and change device settings (volume, voice m
 TTS engine, AI model, etc.). Use get_device_settings to check current state before
 making changes. Use update_device_setting to change settings when the user asks.
 Only change settings when explicitly requested — don't change them proactively.
+
+MESSAGING: You can read and send iMessages, read and send emails, search contacts,
+and check calendar events. For ANY action that sends a message or email, you MUST
+use request_approval first to confirm with the user before sending. Never send
+messages without explicit user approval. Reading messages/emails/calendar is fine
+without approval.
 """.strip()
 
 
@@ -67,6 +73,7 @@ def get_system_prompt(
     memory: bool = True,
     location: dict | None = None,
     response_format_hint: str = "",
+    activity_summary: dict | None = None,
 ) -> str:
     """Build the full system prompt for a selected agent mode with optional live context."""
     base = BASE_CONTEXT.format(date=date.today().strftime("%A, %B %d %Y"))
@@ -106,6 +113,21 @@ def get_system_prompt(
 
     if not memory:
         context_blocks.append("MEMORY IS DISABLED. Do not reference previous conversations or stored context.")
+
+    # Notification awareness — let agent know about unread items
+    if activity_summary:
+        activity_lines = []
+        msg_unread = activity_summary.get("messages_unread", 0)
+        mail_unread = activity_summary.get("emails_unread", 0)
+        events_upcoming = activity_summary.get("events_upcoming", 0)
+        if msg_unread:
+            activity_lines.append(f"- {msg_unread} unread message{'s' if msg_unread != 1 else ''}")
+        if mail_unread:
+            activity_lines.append(f"- {mail_unread} unread email{'s' if mail_unread != 1 else ''}")
+        if events_upcoming:
+            activity_lines.append(f"- {events_upcoming} upcoming calendar event{'s' if events_upcoming != 1 else ''}")
+        if activity_lines:
+            context_blocks.append("NOTIFICATIONS:\n" + "\n".join(activity_lines))
 
     prompt = base + "\n\n" + mode_prompt
     if context_blocks:

@@ -1,14 +1,22 @@
 // BITOS Companion — Service Worker (network-first, cache fallback)
-const CACHE_NAME = 'bitos-companion-v1';
+const CACHE_NAME = 'bitos-companion-v4';
 const ASSETS = [
   '/',
+  '/dashboard.html',
+  '/chat.html',
+  '/tasks.html',
+  '/calendar.html',
+  '/activity.html',
+  '/settings.html',
   '/setup.html',
   '/pair.html',
-  '/settings.html',
   '/test_crypto.html',
+  '/css/shared.css',
+  '/js/nav.js',
   '/js/ble.js',
   '/js/auth.js',
   '/js/crypto.js',
+  '/js/settings.js',
   '/manifest.json',
   '/icon-192.svg',
   '/icon-512.svg',
@@ -33,16 +41,19 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  // Only cache same-origin app shell assets, not API calls
+  const isSameOrigin = event.request.url.startsWith(self.location.origin);
+  const isGET = event.request.method === 'GET';
+
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // Cache successful responses for offline use
-        if (response.ok) {
+        if (response.ok && isSameOrigin && isGET) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         }
         return response;
       })
-      .catch(() => caches.match(event.request))
+      .catch(() => isSameOrigin ? caches.match(event.request) : Response.error())
   );
 });

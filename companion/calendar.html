@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <title>BITOS Calendar</title>
+  <link rel="stylesheet" href="css/shared.css">
+  <style>
+    /* Day sections */
+    .day-section {
+      width: 100%; max-width: 400px; margin-bottom: 20px;
+    }
+    .day-header {
+      font-size: 11px; letter-spacing: .08em; color: #666;
+      text-transform: uppercase; padding-bottom: 8px;
+      border-bottom: 1px solid #222; margin-bottom: 8px;
+    }
+    .day-header.today { color: #fff; }
+
+    .event-item {
+      display: flex; gap: 12px; padding: 12px 0;
+      border-bottom: 1px solid #111; min-height: 44px;
+    }
+    .event-item:last-child { border-bottom: none; }
+
+    .event-time-col {
+      width: 52px; flex-shrink: 0; text-align: right;
+    }
+    .event-start {
+      font-size: 13px; color: #fff; font-weight: bold;
+    }
+    .event-end {
+      font-size: 10px; color: #555;
+    }
+
+    .event-details { flex: 1; min-width: 0; }
+    .event-title {
+      font-size: 13px; color: #ddd; line-height: 1.4;
+      word-wrap: break-word;
+    }
+    .event-location {
+      font-size: 10px; color: #666; margin-top: 2px;
+    }
+    .event-notes {
+      font-size: 10px; color: #444; margin-top: 4px;
+      line-height: 1.4; max-height: 40px; overflow: hidden;
+    }
+
+    .event-dot {
+      width: 4px; flex-shrink: 0; border-radius: 2px;
+      background: #444; margin-top: 4px; align-self: stretch;
+      min-height: 16px;
+    }
+    .event-dot.now { background: #4f4; }
+    .event-dot.past { background: #333; }
+    .event-dot.future { background: #fff; }
+
+    /* Days picker */
+    .days-picker {
+      display: flex; gap: 0; width: 100%; max-width: 400px;
+      border-bottom: 1px solid #333; margin-bottom: 16px;
+      overflow-x: auto; -webkit-overflow-scrolling: touch;
+    }
+    .day-tab {
+      background: none; color: #555; border: none;
+      font-family: monospace; font-size: 10px; font-weight: bold;
+      letter-spacing: .04em; padding: 10px 12px;
+      cursor: pointer; text-transform: uppercase;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px; white-space: nowrap;
+      min-height: 44px; text-align: center;
+    }
+    .day-tab.active { color: #fff; border-bottom-color: #fff; }
+
+    .day-tab-date { font-size: 16px; font-weight: bold; display: block; }
+    .day-tab-day { font-size: 8px; display: block; margin-top: 2px; }
+
+    /* Summary widgets */
+    .cal-summary {
+      width: 100%; max-width: 400px; margin-bottom: 16px;
+    }
+
+    .no-events {
+      text-align: center; padding: 40px 16px;
+      color: #444; font-size: 12px;
+    }
+
+    /* All-day event */
+    .all-day-badge {
+      font-size: 9px; letter-spacing: .04em;
+      padding: 2px 6px; border: 1px solid #333;
+      color: #888; text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+  <h1>&#9678; BITOS</h1>
+  <div class="page-title">CALENDAR</div>
+
+  <!-- Week day picker -->
+  <div class="days-picker" id="days-picker"></div>
+
+  <!-- Events for selected day(s) -->
+  <div id="events-container">
+    <div class="loading">LOADING</div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+  </script>
+  <script src="js/nav.js"></script>
+  <script>
+    const SERVER = getServerUrl();
+    let allEvents = [];
+    let selectedDayOffset = 0; // 0 = today, 1 = tomorrow, etc.
+    let refreshTimer = null;
+
+    const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+
+    // ── Build day picker (today + 6 days) ──
+    function buildDayPicker() {
+      const picker = document.getElementById('days-picker');
+      picker.innerHTML = '';
+      const now = new Date();
+
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(now);
+        d.setDate(d.getDate() + i);
+
+        const btn = document.createElement('button');
+        btn.className = 'day-tab' + (i === selectedDayOffset ? ' active' : '');
+        btn.dataset.offset = i;
+
+        const dateNum = document.createElement('span');
+        dateNum.className = 'day-tab-date';
+        dateNum.textContent = d.getDate();
+
+        const dayName = document.createElement('span');
+        dayName.className = 'day-tab-day';
+        dayName.textContent = i === 0 ? 'TODAY' : DAYS[d.getDay()];
+
+        btn.appendChild(dateNum);
+        btn.appendChild(dayName);
+        btn.onclick = () => {
+          selectedDayOffset = i;
+          document.querySelectorAll('.day-tab').forEach(t =>
+            t.classList.toggle('active', parseInt(t.dataset.offset) === i));
+          renderEvents();
+        };
+        picker.appendChild(btn);
+      }
+    }
+
+    // ── Fetch events (7 days) ──
+    async function fetchEvents() {
+      const container = document.getElementById('events-container');
+
+      // Primary: dedicated calendar endpoint (AppleScript bridge)
+      try {
+        const r = await fetch(`${SERVER}/calendar?days=7`, {
+          signal: AbortSignal.timeout(10000),
+        });
+        if (r.ok) {
+          const d = await r.json();
+          if (d.events && d.events.length > 0) {
+            allEvents = d.events;
+            renderEvents();
+            return;
+          }
+        }
+      } catch (_) {}
+
+      // Fallback: context endpoint (just next event)
+      try {
+        const ctxResp = await fetch(`${SERVER}/context`, {
+          signal: AbortSignal.timeout(8000),
+        });
+        if (ctxResp.ok) {
+          const ctx = await ctxResp.json();
+          if (ctx.next_event) {
+            const ev = ctx.next_event;
+            if (typeof ev === 'string' && ev.trim()) {
+              // Parse "10:30a Meeting Title" format
+              const match = ev.match(/^(\d{1,2}:\d{2}\S*)\s+(.+)$/);
+              if (match) {
+                allEvents = [{ title: match[2], start: match[1], raw: ev }];
+              } else {
+                allEvents = [{ title: ev, raw: ev }];
+              }
+            } else if (typeof ev === 'object') {
+              allEvents = [ev];
+            }
+          }
+        }
+      } catch (_) {}
+
+      renderEvents();
+    }
+
+    // ── Render events for selected day ──
+    function renderEvents() {
+      const container = document.getElementById('events-container');
+
+      if (allEvents.length === 0) {
+        container.innerHTML = `
+          <div class="no-events">
+            <div style="font-size:20px;margin-bottom:8px">&#9673;</div>
+            No calendar events loaded.<br><br>
+            <span style="font-size:10px;color:#333">
+              Calendar reads from macOS Calendar via the server.<br>
+              Make sure the server is running on your Mac.
+            </span>
+          </div>
+        `;
+        return;
+      }
+
+      const now = new Date();
+      const targetDate = new Date(now);
+      targetDate.setDate(targetDate.getDate() + selectedDayOffset);
+      const targetDay = targetDate.toDateString();
+
+      // Filter events for the selected day
+      const dayEvents = allEvents.filter(ev => {
+        if (!ev.start) return selectedDayOffset === 0; // no date = today
+        try {
+          const evDate = new Date(ev.start);
+          return evDate.toDateString() === targetDay;
+        } catch (_) {
+          return selectedDayOffset === 0;
+        }
+      });
+
+      if (dayEvents.length === 0) {
+        const dayLabel = selectedDayOffset === 0 ? 'today' : formatDayLabel(targetDate);
+        container.innerHTML = '<div class="no-events">No events ' + esc(dayLabel) + '</div>';
+        return;
+      }
+
+      // Sort by start time
+      dayEvents.sort((a, b) => {
+        const aTime = parseEventTime(a.start || a.time || '');
+        const bTime = parseEventTime(b.start || b.time || '');
+        return aTime - bTime;
+      });
+
+      container.innerHTML = '';
+
+      const section = document.createElement('div');
+      section.className = 'day-section';
+
+      const header = document.createElement('div');
+      header.className = 'day-header' + (selectedDayOffset === 0 ? ' today' : '');
+      header.textContent = selectedDayOffset === 0 ? 'TODAY — ' + formatFullDate(targetDate) :
+                           formatFullDate(targetDate);
+      section.appendChild(header);
+
+      for (const ev of dayEvents) {
+        const item = document.createElement('div');
+        item.className = 'event-item';
+
+        // Time indicator dot
+        const dot = document.createElement('div');
+        dot.className = 'event-dot';
+        const evTime = parseEventTime(ev.start || ev.time || '');
+        if (selectedDayOffset === 0) {
+          if (evTime < now.getTime()) dot.classList.add('past');
+          else if (evTime - now.getTime() < 3600000) dot.classList.add('now');
+          else dot.classList.add('future');
+        } else {
+          dot.classList.add('future');
+        }
+
+        // Time column
+        const timeCol = document.createElement('div');
+        timeCol.className = 'event-time-col';
+
+        const startTime = document.createElement('div');
+        startTime.className = 'event-start';
+        startTime.textContent = formatEventTime(ev.start || ev.time || '');
+
+        const endTime = document.createElement('div');
+        endTime.className = 'event-end';
+        endTime.textContent = ev.end ? formatEventTime(ev.end) : '';
+
+        timeCol.appendChild(startTime);
+        timeCol.appendChild(endTime);
+
+        // Details
+        const details = document.createElement('div');
+        details.className = 'event-details';
+
+        const title = document.createElement('div');
+        title.className = 'event-title';
+        title.textContent = ev.title || ev.summary || ev.raw || 'Untitled';
+        details.appendChild(title);
+
+        if (ev.location) {
+          const loc = document.createElement('div');
+          loc.className = 'event-location';
+          loc.textContent = ev.location;
+          details.appendChild(loc);
+        }
+
+        if (ev.notes || ev.description) {
+          const notes = document.createElement('div');
+          notes.className = 'event-notes';
+          notes.textContent = ev.notes || ev.description;
+          details.appendChild(notes);
+        }
+
+        item.appendChild(dot);
+        item.appendChild(timeCol);
+        item.appendChild(details);
+        section.appendChild(item);
+      }
+
+      container.appendChild(section);
+    }
+
+    // ── Helpers ──
+    function parseEventTime(timeStr) {
+      if (!timeStr) return 0;
+      try {
+        const d = new Date(timeStr);
+        if (!isNaN(d.getTime())) return d.getTime();
+      } catch (_) {}
+      // Try parsing "10:30 AM" format
+      const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(am|pm|a|p)?/i);
+      if (match) {
+        let h = parseInt(match[1]);
+        const m = parseInt(match[2]);
+        const ampm = (match[3] || '').toLowerCase();
+        if (ampm.startsWith('p') && h < 12) h += 12;
+        if (ampm.startsWith('a') && h === 12) h = 0;
+        const d = new Date();
+        d.setHours(h, m, 0, 0);
+        return d.getTime();
+      }
+      return 0;
+    }
+
+    function formatEventTime(timeStr) {
+      if (!timeStr) return '';
+      try {
+        const d = new Date(timeStr);
+        if (!isNaN(d.getTime())) {
+          return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        }
+      } catch (_) {}
+      // Already formatted like "10:30a"
+      return timeStr;
+    }
+
+    function formatFullDate(d) {
+      return d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+    }
+
+    function formatDayLabel(d) {
+      return d.toLocaleDateString([], { weekday: 'long' });
+    }
+
+    function esc(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    // ── Init ──
+    buildDayPicker();
+    fetchEvents();
+    refreshTimer = setInterval(fetchEvents, 60000);
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        clearInterval(refreshTimer);
+      } else {
+        fetchEvents();
+        refreshTimer = setInterval(fetchEvents, 60000);
+      }
+    });
+  </script>
+</body>
+</html>

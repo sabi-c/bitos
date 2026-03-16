@@ -45,8 +45,25 @@ class BackendClient:
             return "timeout", "Server timeout"
         if isinstance(exc, httpx.HTTPStatusError):
             status = exc.response.status_code if exc.response is not None else 500
+            if status == 401:
+                return "auth", "Auth failed"
+            if status == 429:
+                return "rate_limit", "Rate limited"
+            if status == 502:
+                return "upstream", "AI unavailable"
+            if status == 503:
+                return "upstream", "Server busy"
             return "server", f"Server error {status}"
-        return "network", "Server error 500"
+        return "network", "Network error"
+
+    def post(self, path: str, json: dict | None = None, timeout: float = 5.0) -> httpx.Response:
+        """Generic POST helper for endpoints without dedicated methods."""
+        return httpx.post(
+            f"{self.base_url}{path}",
+            json=json or {},
+            timeout=timeout,
+            headers=self._request_headers(),
+        )
 
     def health(self, timeout: float = 3.0) -> bool:
         """Check if the server is running."""
@@ -384,6 +401,40 @@ class BackendClient:
             return []
 
 
+    def get_activity(self, category: str | None = None) -> list[dict]:
+        """GET /activity — unified activity feed."""
+        try:
+            params = {}
+            if category and category != "ALL":
+                params["type"] = category
+            resp = httpx.get(
+                f"{self.base_url}/activity",
+                params=params,
+                timeout=5,
+                headers=self._request_headers(),
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data if isinstance(data, list) else data.get("items", [])
+        except Exception as exc:
+            logging.warning("activity_fetch_failed error=%s", exc)
+            return []
+
+    def mark_activity_read(self, item_id: str) -> bool:
+        """POST /activity/{id}/read — mark feed item as read."""
+        try:
+            resp = httpx.post(
+                f"{self.base_url}/activity/{item_id}/read",
+                json={},
+                timeout=3,
+                headers=self._request_headers(),
+            )
+            resp.raise_for_status()
+            return True
+        except Exception as exc:
+            logging.warning("activity_mark_read_failed error=%s", exc)
+            return False
+
     def get_device_version(self) -> dict:
         """GET /device/version — check for updates."""
         try:
@@ -448,6 +499,16 @@ class BackendClient:
             return resp.json()
         except Exception as exc:
             logging.warning("file_parse_failed file=%s error=%s", file_id[:24], exc)
+            return {}
+
+    def get_context(self) -> dict:
+        """GET /context — aggregated live context for home screen ticker."""
+        try:
+            resp = httpx.get(f"{self.base_url}/context", timeout=10, headers=self._request_headers())
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as exc:
+            logging.warning("context_fetch_failed error=%s", exc)
             return {}
 
     def get_morning_brief(self) -> dict:

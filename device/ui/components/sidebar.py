@@ -14,12 +14,12 @@ from device.display.tokens import (
 SEP_COLOR = GRAY_0A
 
 SIDEBAR_W = 84
-ITEM_H = 23  # 23*9=207px fits in 208px available height
+ITEM_H = 20  # 20*10=200px fits in 208px available height
 FONT_SIZE = 14  # bumped from 12 for readability
 PAD_X = 7
-PAD_Y = 4  # reduced from 7 to fit 9 items at larger font
+PAD_Y = 3  # reduced to fit 10 items at larger font
 
-ITEMS = ["HOME", "CHAT", "TASKS", "FILES", "AGENT", "SETTINGS", "MAIL", "MSGS", "FOCUS"]
+ITEMS = ["HOME", "CHAT", "TASKS", "ACTIVITY", "COMMS", "FILES", "SETTINGS", "FOCUS"]
 
 
 class Sidebar:

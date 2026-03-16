@@ -1,4 +1,6 @@
 import os
+import secrets
+import time
 
 """BITOS BLE UUIDs and authentication/pairing constants."""
 
@@ -56,5 +58,18 @@ def build_setup_url(ble_address: str) -> str:
     return f"{COMPANION_BASE_URL}/setup.html?ble={ble_address}&v=1"
 
 
-def build_pair_url(ble_address: str) -> str:
-    return f"{COMPANION_BASE_URL}/pair.html?ble={ble_address}&v=1"
+def build_pair_url(ble_address: str) -> tuple[str, str, str, int]:
+    """Build a pairing URL with ephemeral session token.
+
+    Returns (url, session_id, token, expires) so the caller can register
+    the pairing session with AuthManager.
+    """
+    session_id = secrets.token_urlsafe(16)
+    token = secrets.token_urlsafe(24)
+    expires = int(time.time()) + PAIRING_MODE_TIMEOUT_SECONDS
+    url = (
+        f"{COMPANION_BASE_URL}/pair.html"
+        f"?ble={ble_address}&session={session_id}"
+        f"&token={token}&exp={expires}&v=2"
+    )
+    return url, session_id, token, expires

@@ -20,8 +20,8 @@ HAIKU_MODEL = "claude-haiku-4-5-20251001"
 CLASSIFIER_PROMPT = """Classify this user message for a pocket AI assistant. Return JSON only.
 
 Fields:
-- intent: one of [chat, question, command, settings, task, creative, reflection]
-- needs_tools: boolean — true ONLY if the user is asking to change device settings (volume, voice, model, etc.)
+- intent: one of [chat, question, command, settings, task, creative, reflection, messaging]
+- needs_tools: boolean — true if the user needs device control, messaging, email, calendar, or contacts
 - urgency: one of [low, normal, high]
 - response_hint: one of [brief, normal, detailed] — how long the response should be
 - topic: short topic label (2-4 words)
@@ -34,8 +34,10 @@ Rules:
 - "task" = task/todo/project management
 - "creative" = brainstorming, writing, ideation
 - "reflection" = deep thinking, meditation, personal growth
-- needs_tools is true ONLY for settings/command intents that require device control
-- Most messages do NOT need tools — default to false
+- "messaging" = reading/sending messages, emails, checking calendar, looking up contacts
+- needs_tools is true for: settings, command, messaging, task intents
+- needs_tools is false for: chat, question, creative, reflection
+- "send a text to..." or "email..." or "what's on my calendar" = messaging + needs_tools=true
 - brief = 1-2 sentences, normal = 2-4 sentences, detailed = paragraph+
 
 Return ONLY valid JSON, no markdown fences."""

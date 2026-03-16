@@ -30,7 +30,7 @@ class ButtonEvent(Enum):
 
 DEBOUNCE_S = 0.020
 LONG_PRESS_S = 0.400
-CLICK_TIMEOUT_S = 0.300
+CLICK_TIMEOUT_S = 0.200          # was 0.300 — tighter window for snappier single-press
 POWER_PRESS_COUNT = 5
 POWER_WINDOW_S = 1.200
 
@@ -60,6 +60,11 @@ class ButtonHandler:
         self._click_count = 0
         self._click_deadline: float | None = None
 
+        # Immediate-short mode: when True, SHORT_PRESS fires on release
+        # with zero delay (no multi-click window).  Screens that only need
+        # single-tap navigation can set this for instant response.
+        self._immediate_short = False
+
         # Power gesture tracking.
         self._power_press_times: list[float] = []
 
@@ -69,12 +74,30 @@ class ButtonHandler:
     def on(self, event_type: ButtonEvent, callback: Callable):
         self._callbacks[event_type].append(callback)
 
+    def set_immediate_short(self, enabled: bool) -> None:
+        """Toggle immediate-short mode.
+
+        When *enabled*, SHORT_PRESS fires the instant the button is
+        released (zero latency).  Multi-click detection (DOUBLE / TRIPLE)
+        is bypassed — only SHORT_PRESS and LONG_PRESS are emitted.
+
+        Screens that rely only on tap-to-scroll should enable this for
+        snappier navigation.  Screens that need double/triple should
+        disable it (the default).
+        """
+        self._immediate_short = enabled
+        if enabled:
+            # Flush any pending multi-click state so a stale deadline
+            # doesn't fire after mode switch.
+            self._click_count = 0
+            self._click_deadline = None
+
     def _emit(self, event_type: ButtonEvent):
         for cb in self._callbacks[event_type]:
             try:
                 cb()
             except Exception as exc:
-                print(f"[ButtonHandler] Callback error for {event_type.name}: {exc}")
+                logger.error("button_callback_error event=%s error=%s", event_type.name, exc)
 
     def handle_pygame_event(self, event: pygame.event.Event) -> bool:
         if self._keyboard_mode and event.type == pygame.KEYDOWN:
@@ -148,6 +171,14 @@ class ButtonHandler:
             self._emit(ButtonEvent.LONG_PRESS)
             self._click_count = 0
             self._click_deadline = None
+            return
+
+        # Immediate-short mode: fire SHORT_PRESS on release with zero latency.
+        # Skips the multi-click classification window entirely.
+        if self._immediate_short:
+            self._click_count = 0
+            self._click_deadline = None
+            self._emit(ButtonEvent.SHORT_PRESS)
             return
 
         if self._click_deadline is None or now > self._click_deadline:
@@ -241,5 +272,5 @@ def create_button_handler(board=None, active_screen_name_getter: Callable[[], st
         return handler
 
     if button_mode == "gpio":
-        print("button_board_unavailable: falling back to keyboard-only input")
+        logger.warning("button_board_unavailable: falling back to keyboard-only input")
     return handler

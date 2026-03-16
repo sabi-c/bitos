@@ -84,10 +84,12 @@ class QROverlayTests(unittest.TestCase):
             constants.build_setup_url("AA:BB"),
             f"{constants.COMPANION_BASE_URL}/setup.html?ble=AA:BB&v=1",
         )
-        self.assertEqual(
-            constants.build_pair_url("AA:BB"),
-            f"{constants.COMPANION_BASE_URL}/pair.html?ble=AA:BB&v=1",
-        )
+        url, session_id, token, expires = constants.build_pair_url("AA:BB")
+        self.assertIn("/pair.html?ble=AA:BB&session=", url)
+        self.assertIn("&v=2", url)
+        self.assertTrue(len(session_id) > 10)
+        self.assertTrue(len(token) > 20)
+        self.assertGreater(expires, 0)
 
     def test_env_override_companion_url(self):
         os.environ["BITOS_COMPANION_URL"] = "https://example.test"
@@ -96,6 +98,8 @@ class QROverlayTests(unittest.TestCase):
 
         reload(constants)
         self.assertEqual(constants.build_setup_url("AA:BB"), "https://example.test/setup.html?ble=AA:BB&v=1")
+        url, _, _, _ = constants.build_pair_url("AA:BB")
+        self.assertTrue(url.startswith("https://example.test/pair.html?"))
 
 
 if __name__ == "__main__":

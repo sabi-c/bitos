@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <title>BITOS</title>
+  <link rel="stylesheet" href="css/shared.css">
+</head>
+<body>
+  <h1>&#9678; BITOS</h1>
+
+  <!-- Status hero -->
+  <div class="card" id="status-card">
+    <h2>DEVICE STATUS</h2>
+    <div class="info-row">
+      <span class="info-key">Device</span>
+      <span class="info-val" id="s-device">--</span>
+    </div>
+    <div class="info-row">
+      <span class="info-key">Battery</span>
+      <span class="info-val" id="s-battery">--</span>
+    </div>
+    <div class="info-row">
+      <span class="info-key">Wi-Fi</span>
+      <span class="info-val" id="s-wifi">--</span>
+    </div>
+    <div class="info-row">
+      <span class="info-key">Server</span>
+      <span class="info-val" id="s-server">--</span>
+    </div>
+  </div>
+
+  <!-- Agent mode -->
+  <div class="mode-indicator" id="mode-indicator" onclick="cycleMode()">
+    <div class="mode-dot"></div>
+    <span id="mode-label">PRODUCER MODE</span>
+  </div>
+
+  <!-- Quick actions -->
+  <div class="quick-actions">
+    <button class="quick-btn" onclick="location.href='chat.html'">
+      <span class="icon">+</span>
+      NEW CHAT
+    </button>
+    <button class="quick-btn" onclick="quickNote()">
+      <span class="icon">&#9998;</span>
+      QUICK NOTE
+    </button>
+    <button class="quick-btn" onclick="startFocusTimer()">
+      <span class="icon">&#9201;</span>
+      FOCUS
+    </button>
+  </div>
+
+  <!-- Widgets: weather + next event -->
+  <div class="widget-row">
+    <div class="widget" id="w-weather">
+      <div class="widget-label">WEATHER</div>
+      <div class="widget-value" id="w-weather-val">--</div>
+      <div class="widget-sub" id="w-weather-sub">&nbsp;</div>
+    </div>
+    <div class="widget" id="w-event">
+      <div class="widget-label">NEXT EVENT</div>
+      <div class="widget-value" id="w-event-val">--</div>
+      <div class="widget-sub" id="w-event-sub">&nbsp;</div>
+    </div>
+  </div>
+
+  <!-- Activity feed -->
+  <div class="card subtle" id="feed-card">
+    <h2>RECENT ACTIVITY</h2>
+    <div id="feed-list">
+      <div class="loading">LOADING</div>
+    </div>
+    <button class="secondary" onclick="location.href='activity.html'" style="margin-top:8px;font-size:11px">
+      VIEW ALL ACTIVITY
+    </button>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+  </script>
+  <script src="js/nav.js"></script>
+  <script>
+    const SERVER = getServerUrl();
+    const MODES = ['producer', 'hacker', 'clown', 'monk', 'storyteller', 'director'];
+    let currentMode = 'producer';
+    let refreshTimer = null;
+
+    // ── Fetch device status ──
+    async function fetchStatus() {
+      // Device settings (name, agent mode)
+      try {
+        const r = await fetch(`${SERVER}/settings/device`, { signal: AbortSignal.timeout(3000) });
+        if (r.ok) {
+          const d = await r.json();
+          document.getElementById('s-device').textContent = d.device_name || 'BITOS';
+          if (d.agent_mode) {
+            currentMode = d.agent_mode;
+            document.getElementById('mode-label').textContent =
+              currentMode.toUpperCase() + ' MODE';
+          }
+        }
+      } catch (_) {}
+
+      // Battery
+      try {
+        const r = await fetch(`${SERVER}/device/battery`, { signal: AbortSignal.timeout(3000) });
+        if (r.ok) {
+          const d = await r.json();
+          if (d.present) {
+            const chg = d.charging ? ' +' : '';
+            document.getElementById('s-battery').textContent = d.pct + '%' + chg;
+          }
+        }
+      } catch (_) {}
+
+      // Server health
+      try {
+        const r = await fetch(`${SERVER}/health`, { signal: AbortSignal.timeout(3000) });
+        if (r.ok) {
+          const d = await r.json();
+          document.getElementById('s-server').textContent =
+            (d.version || 'online');
+          document.getElementById('s-server').style.color = '#4f4';
+          // wifi from health if available
+          if (d.wifi_ssid) {
+            document.getElementById('s-wifi').textContent = d.wifi_ssid;
+          } else {
+            document.getElementById('s-wifi').textContent = 'Connected';
+          }
+          document.getElementById('s-wifi').style.color = '#4f4';
+        } else {
+          throw new Error();
+        }
+      } catch (_) {
+        document.getElementById('s-server').textContent = 'Offline';
+        document.getElementById('s-server').style.color = '#f44';
+        document.getElementById('s-wifi').textContent = '--';
+        document.getElementById('s-wifi').style.color = '';
+      }
+    }
+
+    // ── Fetch context (weather + events) ──
+    async function fetchContext() {
+      try {
+        const r = await fetch(`${SERVER}/context`, { signal: AbortSignal.timeout(5000) });
+        if (!r.ok) return;
+        const ctx = await r.json();
+
+        // Weather
+        if (ctx.weather) {
+          const w = ctx.weather;
+          document.getElementById('w-weather-val').textContent =
+            (w.temp != null ? Math.round(w.temp) + '\u00B0' : w.summary || '--');
+          document.getElementById('w-weather-sub').textContent =
+            w.condition || w.description || '';
+        }
+
+        // Next event
+        if (ctx.next_event) {
+          const ev = ctx.next_event;
+          document.getElementById('w-event-val').textContent =
+            ev.title || ev.summary || '--';
+          document.getElementById('w-event-sub').textContent =
+            ev.time ? formatTime(ev.time) : (ev.start ? formatTime(ev.start) : '');
+        } else if (ctx.events && ctx.events.length > 0) {
+          const ev = ctx.events[0];
+          document.getElementById('w-event-val').textContent =
+            ev.title || ev.summary || '--';
+          document.getElementById('w-event-sub').textContent =
+            ev.time ? formatTime(ev.time) : (ev.start ? formatTime(ev.start) : '');
+        } else {
+          document.getElementById('w-event-val').textContent = 'None';
+          document.getElementById('w-event-sub').textContent = 'No upcoming events';
+        }
+      } catch (_) {
+        // Silently fail — widgets stay at default
+      }
+    }
+
+    // ── Fetch activity feed ──
+    async function fetchActivity() {
+      const list = document.getElementById('feed-list');
+      try {
+        const r = await fetch(`${SERVER}/activity`, { signal: AbortSignal.timeout(5000) });
+        if (!r.ok) throw new Error();
+        const items = await r.json();
+
+        if (!items || items.length === 0) {
+          list.innerHTML = '<div class="empty-state">No recent activity</div>';
+          return;
+        }
+
+        list.innerHTML = '';
+        const display = Array.isArray(items) ? items.slice(0, 8) : [];
+        for (const item of display) {
+          const div = document.createElement('div');
+          div.className = 'feed-item';
+          div.innerHTML =
+            `<div class="feed-source">${esc(item.source || item.type || 'SYSTEM')}</div>` +
+            `<div class="feed-title">${esc(item.title || item.message || item.text || '')}</div>` +
+            `<div class="feed-time">${timeAgo(item.time || item.timestamp || item.created_at)}</div>`;
+          list.appendChild(div);
+        }
+      } catch (_) {
+        list.innerHTML = '<div class="empty-state">Cannot reach server</div>';
+      }
+    }
+
+    // ── Agent mode cycle ──
+    async function cycleMode() {
+      const idx = MODES.indexOf(currentMode);
+      currentMode = MODES[(idx + 1) % MODES.length];
+      document.getElementById('mode-label').textContent =
+        currentMode.toUpperCase() + ' MODE';
+
+      try {
+        await fetch(`${SERVER}/settings/device`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: 'agent_mode', value: currentMode }),
+          signal: AbortSignal.timeout(3000),
+        });
+        showToast(currentMode.toUpperCase() + ' MODE');
+      } catch (_) {
+        showToast('OFFLINE');
+      }
+    }
+
+    // ── Quick actions ──
+    async function quickNote() {
+      const text = prompt('Quick note:');
+      if (!text || !text.trim()) return;
+      try {
+        await fetch(`${SERVER}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: 'Save this note: ' + text }),
+          signal: AbortSignal.timeout(10000),
+        });
+        showToast('NOTE SAVED');
+      } catch (_) {
+        showToast('FAILED');
+      }
+    }
+
+    function startFocusTimer() {
+      const mins = prompt('Focus timer (minutes):', '25');
+      if (!mins) return;
+      const ms = parseInt(mins) * 60000;
+      if (isNaN(ms) || ms <= 0) return;
+      showToast('FOCUS: ' + mins + ' MIN');
+      // Request notification permission upfront
+      if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+        Notification.requestPermission();
+      }
+      setTimeout(() => {
+        showToast('FOCUS COMPLETE');
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+          new Notification('BITOS', { body: 'Focus timer complete!' });
+        }
+      }, ms);
+    }
+
+    // ── HTML escape ──
+    function esc(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    // ── Init ──
+    fetchStatus();
+    fetchContext();
+    fetchActivity();
+
+    // Auto-refresh every 10s, pause when hidden
+    function startPolling() {
+      refreshTimer = setInterval(() => {
+        fetchStatus(); fetchContext(); fetchActivity();
+      }, 10000);
+    }
+    startPolling();
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) { clearInterval(refreshTimer); }
+      else { fetchStatus(); fetchContext(); fetchActivity(); startPolling(); }
+    });
+  </script>
+</body>
+</html>
