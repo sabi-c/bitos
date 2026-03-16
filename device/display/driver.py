@@ -147,11 +147,29 @@ class ST7789Driver(DisplayDriver):
             raw_rgb = pygame.image.tostring(self._surface, "RGB")
             if self._board.previous_frame == raw_rgb:
                 return
-            payload = self._rgb888_to_rgb565(raw_rgb)
-            self._board.draw_image(0, 0, self.WIDTH, self.HEIGHT, payload)
+            if _HAS_NUMPY and self._board.previous_frame is not None:
+                self._update_dirty_bands(raw_rgb)
+            else:
+                payload = self._rgb888_to_rgb565(raw_rgb)
+                self._board.draw_image(0, 0, self.WIDTH, self.HEIGHT, payload)
             self._board.previous_frame = raw_rgb
         except Exception as exc:
             logger.debug("st7789_update_failed error=%s", exc)
+
+    def _update_dirty_bands(self, raw_rgb: bytes) -> None:
+        """Push only changed rows to reduce SPI transfer and flicker."""
+        row_bytes = self.WIDTH * 3
+        cur = np.frombuffer(raw_rgb, dtype=np.uint8).reshape(self.HEIGHT, row_bytes)
+        prev = np.frombuffer(self._board.previous_frame, dtype=np.uint8).reshape(self.HEIGHT, row_bytes)
+        diff_mask = np.any(cur != prev, axis=1)
+        if not np.any(diff_mask):
+            return
+        changed = np.where(diff_mask)[0]
+        y_start = int(changed[0])
+        y_end = int(changed[-1]) + 1
+        band_rgb = cur[y_start:y_end].tobytes()
+        payload = self._rgb888_to_rgb565(band_rgb)
+        self._board.draw_image(0, y_start, self.WIDTH, y_end - y_start, payload)
 
     def display(self, frame):
         """Compatibility helper for callers that pass PIL images or raw RGB565 bytes."""
