@@ -49,6 +49,13 @@ class ChatModeTests(unittest.TestCase):
         panel.handle_action("LONG_PRESS")
         self.assertTrue(called)
 
+    def test_long_press_during_hold_does_not_exit(self):
+        called = []
+        panel = self._make_panel(on_back=lambda: called.append(True))
+        panel.handle_action("HOLD_START")  # Sets hold timer
+        panel.handle_action("LONG_PRESS")  # Should be ignored (hold in progress)
+        self.assertFalse(called)
+
     def test_double_press_in_idle_opens_actions(self):
         panel = self._make_panel()
         panel.handle_action("DOUBLE_PRESS")

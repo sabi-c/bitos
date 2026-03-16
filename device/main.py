@@ -236,7 +236,15 @@ def main():
     button.on(ButtonEvent.TRIPLE_PRESS, lambda: _on_button(ButtonEvent.TRIPLE_PRESS))
     button.on(ButtonEvent.HOLD_START, lambda: _on_button(ButtonEvent.HOLD_START))
     button.on(ButtonEvent.HOLD_END, lambda: _on_button(ButtonEvent.HOLD_END))
-    button.on(ButtonEvent.POWER_GESTURE, lambda: open_power_overlay())
+    def _on_power_gesture():
+        # Dev bypass: 5-press on lock screen skips PIN
+        current = screen_mgr.current if hasattr(screen_mgr, 'current') else None
+        if isinstance(current, LockScreen):
+            current._unlock()
+            return
+        open_power_overlay()
+
+    button.on(ButtonEvent.POWER_GESTURE, _on_power_gesture)
 
     notification_poller = NotificationPoller(queue=notification_queue, api_client=client, repository=repository)
 

@@ -189,7 +189,9 @@ class ChatPanel(BaseScreen):
             self._hold_timer = time.time()
             return
         if action == "HOLD_END":
-            self._hold_timer = None  # Release doesn't stop recording
+            # Only clear hold timer if recording hasn't started yet
+            if self._mode != ChatMode.RECORDING:
+                self._hold_timer = None
             return
 
         # Dispatch to mode-specific handler
@@ -212,6 +214,10 @@ class ChatPanel(BaseScreen):
             self._mode = ChatMode.ACTIONS
             self._action_template_index = 0
         elif action == "LONG_PRESS":
+            # If hold timer is active, this LONG_PRESS is from the same hold
+            # that will trigger recording — don't go back
+            if self._hold_timer is not None:
+                return
             if self._on_back:
                 self._on_back()
 
