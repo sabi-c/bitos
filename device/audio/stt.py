@@ -1,7 +1,7 @@
 """STT with cloud-first fallback: groq -> openai -> vosk -> google.
 
-Tier 1: Groq Distil-Whisper ($0.02/hr, fastest cloud)
-Tier 2: OpenAI Whisper API ($0.006/min, already integrated)
+Tier 1: Groq Whisper Large v3 Turbo ($0.111/hr, fastest cloud, 216x realtime)
+Tier 2: OpenAI Whisper API ($0.006/min, reliable fallback)
 Tier 3: Vosk (offline, 40MB model, lower accuracy)
 Tier 4: Google SpeechRecognition (free, rate-limited)
 
@@ -75,7 +75,7 @@ class SpeechToText:
         return ""
 
     def _transcribe_groq(self, audio_path: str) -> str:
-        """Groq Distil-Whisper — fastest and cheapest cloud option."""
+        """Groq Whisper — fastest cloud option ($0.111/hr)."""
         import httpx
 
         with open(audio_path, "rb") as f:
@@ -83,7 +83,7 @@ class SpeechToText:
                 "https://api.groq.com/openai/v1/audio/transcriptions",
                 headers={"Authorization": f"Bearer {self._groq_key}"},
                 files={"file": ("audio.wav", f, "audio/wav")},
-                data={"model": "distil-whisper-large-v3-en", "language": "en"},
+                data={"model": "whisper-large-v3-turbo", "language": "en"},
                 timeout=30,
             )
         resp.raise_for_status()

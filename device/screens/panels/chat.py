@@ -444,6 +444,33 @@ class ChatPanel(BaseScreen):
                     self._led.off()
                 return
 
+            # Wait for WAV file to flush after arecord exits
+            import os
+            time.sleep(0.3)
+
+            # Validate the recording file exists and has audio data
+            # WAV header is 44 bytes; anything <= 44 means no audio captured
+            if not os.path.exists(audio_path):
+                logger.error("recording_file_missing path=%s", audio_path)
+                self._mode = ChatMode.IDLE
+                with self._messages_lock:
+                    self._status_detail = "mic error"
+                if self._led:
+                    self._led.error()
+                return
+
+            file_size = os.path.getsize(audio_path)
+            if file_size <= 44:
+                logger.error("recording_empty path=%s size=%d", audio_path, file_size)
+                self._mode = ChatMode.IDLE
+                with self._messages_lock:
+                    self._status_detail = "no audio"
+                if self._led:
+                    self._led.error()
+                return
+
+            logger.info("recording_captured path=%s size=%d", audio_path, file_size)
+
             self._mode = ChatMode.STREAMING
             with self._messages_lock:
                 self._status_detail = "transcribing..."

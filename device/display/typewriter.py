@@ -1,97 +1,91 @@
-"""TypewriterRenderer — progressive word-by-word text reveal.
+"""TypewriterRenderer — character-by-character text reveal.
 
-Reveals response text at a configurable speed with punctuation-aware pauses.
+Reveals text one character at a time with natural typing cadence:
+- Common letters faster, rare letters slower
+- Micro-jitter for organic feel
+- Punctuation pauses at sentence/clause boundaries
+- Speed presets for user preference
+
 Call update(dt) each frame, then get_visible_text() for the current state.
 """
 
 from __future__ import annotations
 
+import random
+
+# Speed presets: base milliseconds per character (lower = faster)
 SPEED_PRESETS: dict[str, float] = {
-    "slow": 2.0,
-    "normal": 3.0,
-    "fast": 6.0,
-    "instant": float("inf"),
+    "slow": 50.0,
+    "normal": 30.0,
+    "fast": 15.0,
+    "instant": 0.0,
 }
 
-PAUSE_PERIOD = 0.4
-PAUSE_COMMA = 0.15
-PAUSE_PARAGRAPH = 0.6
+# Post-character pauses in ms
+_PAUSE_MS = {
+    ".": 280,
+    "!": 300,
+    "?": 300,
+    ",": 120,
+    ":": 150,
+    ";": 140,
+    "\n": 200,
+}
+
+_COMMON = frozenset("etaoinsrhld")
+_RARE = frozenset("zxqjZXQJ")
+
+
+def _char_delay_ms(char: str, base_ms: float) -> float:
+    """Delay in ms after revealing this character."""
+    if char == " ":
+        d = base_ms * 0.6
+    elif char in _COMMON:
+        d = base_ms * 0.8
+    elif char in _RARE:
+        d = base_ms * 1.3
+    else:
+        d = base_ms
+
+    # +-15% jitter for organic feel
+    d *= random.uniform(0.85, 1.15)
+
+    # Add punctuation pause
+    d += _PAUSE_MS.get(char, 0)
+    return d
 
 
 class TypewriterRenderer:
-    """Progressive word-by-word text reveal with punctuation pauses."""
+    """Character-by-character text reveal with natural typing cadence."""
 
     def __init__(self, text: str, speed: str = "normal"):
-        self._words: list[str] = []
-        self._pauses: list[float] = []
-        self._words_per_sec = SPEED_PRESETS.get(speed, SPEED_PRESETS["normal"])
-        self._revealed_count = 0
+        self._text = text or ""
+        self._base_ms = SPEED_PRESETS.get(speed, SPEED_PRESETS["normal"])
+        self._cursor = 0
         self._elapsed = 0.0
         self._next_reveal_at = 0.0
-        self._finished = False
-        self._parse(text)
+        self._finished = not self._text or self._base_ms == 0.0
 
-    def _parse(self, text: str) -> None:
-        if not text:
-            self._finished = True
-            return
-
-        raw_words = text.split(" ")
-        self._words = []
-        self._pauses = []
-
-        for w in raw_words:
-            if not w:
-                continue
-            self._words.append(w)
-            pause = 0.0
-            stripped = w.rstrip()
-            if "\n\n" in w:
-                pause = PAUSE_PARAGRAPH
-            elif stripped.endswith((".", "?", "!")):
-                pause = PAUSE_PERIOD
-            elif stripped.endswith((",", ":", ";")):
-                pause = PAUSE_COMMA
-            self._pauses.append(pause)
+        if self._finished and self._text:
+            self._cursor = len(self._text)
 
     def update(self, dt: float) -> None:
-        if self._finished or not self._words:
-            return
-
-        # Instant speed: reveal everything on first update
-        if self._words_per_sec == float("inf"):
-            self._revealed_count = len(self._words)
-            self._finished = True
+        if self._finished:
             return
 
         self._elapsed += dt
 
-        if self._elapsed <= 0:
-            return
+        while self._cursor < len(self._text) and self._elapsed >= self._next_reveal_at:
+            char = self._text[self._cursor]
+            self._cursor += 1
+            delay_ms = _char_delay_ms(char, self._base_ms)
+            self._next_reveal_at += delay_ms / 1000.0
 
-        # First word reveals on any positive elapsed time
-        if self._revealed_count == 0:
-            self._revealed_count = 1
-            # Schedule next word from current time
-            if len(self._words) > 1:
-                word_interval = 1.0 / self._words_per_sec
-                self._next_reveal_at = self._elapsed + self._pauses[0] + word_interval
-
-        # Subsequent words based on scheduled reveal times
-        while self._revealed_count < len(self._words) and self._elapsed >= self._next_reveal_at:
-            self._revealed_count += 1
-            if self._revealed_count < len(self._words):
-                word_interval = 1.0 / self._words_per_sec
-                extra_pause = self._pauses[self._revealed_count - 1]
-                self._next_reveal_at += word_interval + extra_pause
-
-        if self._revealed_count >= len(self._words):
+        if self._cursor >= len(self._text):
             self._finished = True
 
     def get_visible_text(self) -> str:
-        if not self._words:
-            return ""
-        return " ".join(self._words[:self._revealed_count])
+        return self._text[:self._cursor]
 
     @property
     def finished(self) -> bool:
@@ -99,11 +93,11 @@ class TypewriterRenderer:
 
     def reset(self, text: str, speed: str | None = None) -> None:
         if speed:
-            self._words_per_sec = SPEED_PRESETS.get(speed, SPEED_PRESETS["normal"])
-        self._revealed_count = 0
+            self._base_ms = SPEED_PRESETS.get(speed, SPEED_PRESETS["normal"])
+        self._text = text or ""
+        self._cursor = 0
         self._elapsed = 0.0
         self._next_reveal_at = 0.0
-        self._finished = False
-        self._words = []
-        self._pauses = []
-        self._parse(text)
+        self._finished = not self._text or self._base_ms == 0.0
+        if self._finished and self._text:
+            self._cursor = len(self._text)

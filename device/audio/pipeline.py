@@ -118,7 +118,8 @@ class WM8960Pipeline(AudioPipeline):
                     "-d",
                     str(max_seconds),
                     out,
-                ]
+                ],
+                stderr=subprocess.PIPE,
             )
             self._rec_proc = proc
             return out
@@ -128,9 +129,20 @@ class WM8960Pipeline(AudioPipeline):
 
     def stop_recording(self) -> None:
         if self._rec_proc:
-            self._rec_proc.terminate()
-            self._rec_proc.wait(timeout=2)
-            self._rec_proc = None
+            try:
+                self._rec_proc.terminate()
+                self._rec_proc.wait(timeout=3)
+                # Read any stderr from arecord for diagnostics
+                if self._rec_proc.stderr:
+                    err = self._rec_proc.stderr.read()
+                    if err:
+                        logger.info("arecord_stderr: %s", err.decode(errors="replace").strip())
+            except subprocess.TimeoutExpired:
+                self._rec_proc.kill()
+                self._rec_proc.wait(timeout=1)
+                logger.warning("arecord_killed after timeout")
+            finally:
+                self._rec_proc = None
 
     def transcribe(self, audio_path: str) -> str:
         from audio.stt import SpeechToText
