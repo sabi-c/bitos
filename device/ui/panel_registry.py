@@ -44,6 +44,10 @@ _GENERIC_CONFIGS = {
         {"label": "TASKS", "description": "Agent subtasks", "action": "open"},
         {"label": "BACK TO MAIN MENU", "description": "Return to sidebar", "action": "back"},
     ],
+    "FILES": [
+        {"label": "BROWSE", "description": "Browse files", "action": "open"},
+        {"label": "BACK TO MAIN MENU", "description": "Return to sidebar", "action": "back"},
+    ],
 }
 
 

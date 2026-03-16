@@ -753,6 +753,7 @@ async def get_brief():
         "mail": {"unread": mail_unread, "recent": mail_threads[:3]},
     }
 
+<<<<<<< HEAD
 def _calculate_cost(input_tokens: int, output_tokens: int, model: str = "") -> float:
     """Calculate USD cost based on token usage and model."""
     model_lower = (model or llm_bridge.model).lower()
@@ -858,6 +859,141 @@ async def create_test_subtask():
         conn.commit()
     asyncio.create_task(_run_subtask(task_id, prompt))
     return {"task_id": task_id, "status": "pending", "name": "markdown-parse"}
+
+
+# ── File Viewer Endpoints ──────────────────────────────────────────────
+import base64
+from pathlib import PurePosixPath
+
+BITOS_FILES_DIR = Path(os.environ.get("BITOS_FILES_DIR", str(ROOT_DIR / "files")))
+_ALLOWED_EXTENSIONS = {".md", ".txt"}
+
+
+def _file_id_encode(relative_path: str) -> str:
+    """Base64-encode a relative path for use as a URL-safe file ID."""
+    return base64.urlsafe_b64encode(relative_path.encode()).decode().rstrip("=")
+
+
+def _file_id_decode(file_id: str) -> str:
+    """Decode a base64 file ID back to a relative path."""
+    padded = file_id + "=" * (-len(file_id) % 4)
+    return base64.urlsafe_b64decode(padded.encode()).decode()
+
+
+def _is_safe_path(base: Path, target: Path) -> bool:
+    """Ensure target is within base directory (no traversal)."""
+    try:
+        target.resolve().relative_to(base.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+@app.get("/files")
+async def list_files(path: str = "", limit: int = 20):
+    """List files in the curated file system."""
+    scan_dir = BITOS_FILES_DIR / path
+    if not _is_safe_path(BITOS_FILES_DIR, scan_dir):
+        raise HTTPException(status_code=400, detail="Invalid path")
+    if not scan_dir.is_dir():
+        return {"files": []}
+
+    files = []
+    for entry in sorted(scan_dir.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+        if not entry.is_file():
+            continue
+        if entry.suffix.lower() not in _ALLOWED_EXTENSIONS:
+            continue
+        rel = entry.relative_to(BITOS_FILES_DIR)
+        file_type = "markdown" if entry.suffix.lower() == ".md" else "text"
+        files.append({
+            "id": _file_id_encode(str(rel)),
+            "name": entry.stem,
+            "path": str(rel),
+            "size": entry.stat().st_size,
+            "type": file_type,
+        })
+        if len(files) >= limit:
+            break
+
+    return {"files": files}
+
+
+@app.get("/files/{file_id}")
+async def get_file(file_id: str):
+    """Get file content."""
+    try:
+        rel_path = _file_id_decode(file_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid file ID")
+
+    file_path = BITOS_FILES_DIR / rel_path
+    if not _is_safe_path(BITOS_FILES_DIR, file_path):
+        raise HTTPException(status_code=400, detail="Invalid path")
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    content = file_path.read_text(encoding="utf-8")
+    return {
+        "id": file_id,
+        "name": file_path.stem,
+        "content": content,
+        "size": file_path.stat().st_size,
+    }
+
+
+@app.post("/files/{file_id}/parse")
+async def parse_file(file_id: str):
+    """Parse a file into device-friendly 4-page summary using LLM."""
+    try:
+        rel_path = _file_id_decode(file_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid file ID")
+
+    file_path = BITOS_FILES_DIR / rel_path
+    if not _is_safe_path(BITOS_FILES_DIR, file_path):
+        raise HTTPException(status_code=400, detail="Invalid path")
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    content = file_path.read_text(encoding="utf-8")
+    title = file_path.stem.replace("-", " ").replace("_", " ").title()
+
+    prompt = (
+        f"Summarize the following document into exactly 4 short sections. "
+        f"Each section should be under 200 characters. "
+        f"Return ONLY the 4 sections separated by '---' on its own line. "
+        f"No headers, no numbering.\n\n{content[:3000]}"
+    )
+
+    try:
+        complete_text = getattr(llm_bridge, "complete_text", None)
+        if callable(complete_text):
+            raw = complete_text(prompt)
+        else:
+            raw = "".join(llm_bridge.stream_text(prompt))
+
+        pages = [p.strip() for p in raw.split("---") if p.strip()]
+        # Ensure exactly 4 pages max
+        pages = pages[:4]
+        if not pages:
+            pages = [content[:200]]
+    except Exception as exc:
+        logger.warning("file_parse_llm_failed: %s", exc)
+        # Fallback: split content into chunks
+        chunk_size = 200
+        pages = []
+        for i in range(0, min(len(content), 800), chunk_size):
+            pages.append(content[i:i + chunk_size].strip())
+        pages = [p for p in pages if p][:4]
+        if not pages:
+            pages = [content[:200] or "(empty file)"]
+
+    return {
+        "pages": pages,
+        "page_count": len(pages),
+        "title": title,
+    }
 
 
 @app.post("/shutdown")

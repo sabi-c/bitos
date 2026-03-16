@@ -27,6 +27,8 @@ from display.tokens import (
     SAFE_INSET,
 )
 from display.animator import blink_cursor
+from display.pagination import split_into_pages as _shared_split_into_pages
+from display.pagination import wrap_text as _shared_wrap_text
 from display.typewriter import TypewriterRenderer
 from display.theme import merge_runtime_ui_settings, load_ui_font, ui_line_height
 from client.api import BackendClient, BackendChatError
@@ -367,46 +369,7 @@ class ChatPanel(BaseScreen):
     @staticmethod
     def _split_into_pages(lines: list[str], lines_per_page: int, max_pages: int = 4) -> list[list[str]]:
         """Split wrapped lines into pages, preferring paragraph boundaries."""
-        if not lines or lines_per_page <= 0:
-            return [lines] if lines else [[]]
-
-        total = len(lines)
-        if total <= lines_per_page:
-            return [lines]
-
-        pages: list[list[str]] = []
-        pos = 0
-
-        while pos < total and len(pages) < max_pages:
-            if len(pages) == max_pages - 1:
-                # Last allowed page — take remaining, truncate if needed
-                remaining = lines[pos:]
-                if len(remaining) > lines_per_page:
-                    page = remaining[:lines_per_page]
-                    page[-1] = page[-1].rstrip() + "..."
-                else:
-                    page = remaining
-                pages.append(page)
-                break
-
-            end = min(pos + lines_per_page, total)
-
-            # Look for paragraph break (empty line) within ±2 lines of boundary
-            best_break = None
-            for i in range(max(pos + 1, end - 2), min(end + 3, total)):
-                if i < total and lines[i].strip() == "":
-                    best_break = i + 1  # include the empty line
-                    break
-
-            if best_break and best_break > pos:
-                page = lines[pos:best_break]
-            else:
-                page = lines[pos:end]
-
-            pages.append(page)
-            pos += len(page)
-
-        return pages if pages else [[]]
+        return _shared_split_into_pages(lines, lines_per_page, max_pages)
 
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
@@ -951,23 +914,7 @@ class ChatPanel(BaseScreen):
 
     def _wrap_text(self, text: str, max_width: int) -> list[str]:
         """Simple character-level word wrap."""
-        lines = []
-        current = ""
-        for char in text:
-            if char == "\n":
-                lines.append(current)
-                current = ""
-                continue
-            test = current + char
-            w = self._font.size(test)[0]
-            if w <= max_width:
-                current = test
-            else:
-                lines.append(current)
-                current = char
-        if current:
-            lines.append(current)
-        return lines or [""]
+        return _shared_wrap_text(text, self._font, max_width)
 
     def get_active_compose_target(self) -> str | None:
         return "compose_body"

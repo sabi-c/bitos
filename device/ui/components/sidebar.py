@@ -19,7 +19,7 @@ FONT_SIZE = 14  # bumped from 12 for readability
 PAD_X = 7
 PAD_Y = 4  # reduced from 7 to fit 9 items at larger font
 
-ITEMS = ["HOME", "CHAT", "TASKS", "SETTINGS", "FOCUS", "MAIL", "MSGS", "MUSIC", "HISTORY"]
+ITEMS = ["HOME", "CHAT", "TASKS", "FILES", "AGENT", "SETTINGS", "MAIL", "MSGS", "FOCUS"]
 
 
 class Sidebar:
