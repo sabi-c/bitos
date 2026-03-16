@@ -808,6 +808,12 @@ class ChatPanel(BaseScreen):
         self._input_text = ""
         self._is_streaming = True
         self._scroll_offset = 0
+        # Clear pagination
+        self._pages = []
+        self._current_page = 0
+        self._page_revealed = []
+        self._page_typewriter = None
+        self._context_header = ""
         self._status = self.STATUS_CONNECTED
         self._status_detail = ""
         self._last_failed_message = None

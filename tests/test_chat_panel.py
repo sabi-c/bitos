@@ -305,5 +305,25 @@ class ChatModeTests(unittest.TestCase):
         self.assertLessEqual(len(panel._context_header), 42)
 
 
+    def test_send_message_clears_pages(self):
+        panel = self._make_panel()
+        panel._pages = [["old page"]]
+        panel._page_revealed = [True]
+        panel._current_page = 1
+        panel._context_header = "old header"
+        panel._input_text = "new message"
+        # Prevent stream thread from running and overwriting state
+        import threading
+        orig_thread = threading.Thread
+        threading.Thread = MagicMock(return_value=MagicMock())
+        try:
+            panel._send_message()
+        finally:
+            threading.Thread = orig_thread
+        self.assertEqual(panel._pages, [])
+        self.assertEqual(panel._current_page, 0)
+        self.assertEqual(panel._context_header, "")
+
+
 if __name__ == "__main__":
     unittest.main()
