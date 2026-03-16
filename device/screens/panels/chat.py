@@ -1,6 +1,7 @@
 """BITOS Chat Panel — gesture-driven voice-first chat with mode-based input."""
 import json
 import logging
+import os
 from collections import deque
 from enum import Enum, auto
 import threading
@@ -9,6 +10,8 @@ import time
 import pygame
 
 logger = logging.getLogger(__name__)
+
+from health import ServiceHealth
 
 from screens.base import BaseScreen
 from display.tokens import (
@@ -117,6 +120,8 @@ class ChatPanel(BaseScreen):
         self._action_template_index = 0
         self._voice_step = ""       # on-screen pipeline step callout
         self._voice_error = ""      # error detail shown on screen
+        self._health = ServiceHealth()
+        self._health_checked = False
 
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
         self._font = load_ui_font("body", self._ui_settings)
@@ -433,13 +438,14 @@ class ChatPanel(BaseScreen):
             err_surf = self._font_small.render(error[:28], False, DIM2)
             surface.blit(err_surf, (SAFE_INSET, top_y + self._ACTION_ROW_H + 2))
 
-        # Pipeline progress dots: REC → VAL → STT → SEND
-        stages = ["REC", "VAL", "STT", "SEND"]
+        # Pipeline progress dots: REC → VAL → API → STT → SEND
+        stages = ["REC", "VAL", "API", "STT", "SEND"]
         stage_map = {
             "RECORDING": 0, "STOPPING": 0,
             "VALIDATING": 1,
-            "TRANSCRIBING": 2,
-            "SENDING": 3,
+            "PREFLIGHT": 2,
+            "TRANSCRIBING": 3,
+            "SENDING": 4,
             "ERROR": -1, "CANCELLED": -1,
         }
         current = stage_map.get(step, -1)
@@ -461,6 +467,12 @@ class ChatPanel(BaseScreen):
     def _start_recording(self):
         if self._mode == ChatMode.RECORDING or not self._audio_pipeline:
             return
+
+        # Run health check on first recording attempt
+        if not self._health_checked:
+            self._health_checked = True
+            self._health.check_all_async()
+
         self._mode = ChatMode.RECORDING
         self._recording_cancelled = False
         self._voice_stop_event.clear()
@@ -538,7 +550,26 @@ class ChatPanel(BaseScreen):
             # Save for history
             self._save_recording(audio_path)
 
-            # ── Step 4: Transcribe ──
+            # ── Step 4: Pre-flight check ──
+            groq_health = self._health.get("groq")
+            internet_health = self._health.get("internet")
+            if internet_health and not internet_health["ok"]:
+                self._set_voice_step("ERROR", "no internet")
+                logger.error("voice_preflight: no internet — %s", internet_health["detail"])
+                self._mode = ChatMode.IDLE
+                if self._led:
+                    self._led.error()
+                return
+            if groq_health and not groq_health["ok"]:
+                detail = groq_health.get("detail", "groq fail")
+                self._set_voice_step("ERROR", detail)
+                logger.error("voice_preflight: groq fail — %s", detail)
+                self._mode = ChatMode.IDLE
+                if self._led:
+                    self._led.error()
+                return
+
+            # ── Step 5: Transcribe ──
             self._mode = ChatMode.STREAMING
             self._set_voice_step("TRANSCRIBING")
             logger.info("voice_step=TRANSCRIBING engine=%s",
@@ -715,6 +746,10 @@ class ChatPanel(BaseScreen):
         if self._resumed_until and time.time() < self._resumed_until:
             return "SESSION RESTORED"
         if self._status == self.STATUS_CONNECTED:
+            # Show health summary if checks have run
+            if self._health_checked and self._health.is_complete():
+                if not self._health.all_ok():
+                    return self._health.summary_line()[:24]
             return "connected"
         if self._status == self.STATUS_RETRYING:
             return "retrying"
@@ -724,6 +759,9 @@ class ChatPanel(BaseScreen):
 
     def _status_color(self):
         if self._status == self.STATUS_CONNECTED:
+            # Red-ish if health check failed
+            if self._health_checked and self._health.is_complete() and not self._health.all_ok():
+                return (255, 120, 80)
             return DIM1
         if self._status == self.STATUS_RETRYING:
             return DIM2
