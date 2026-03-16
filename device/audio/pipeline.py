@@ -87,8 +87,12 @@ class WM8960Pipeline(AudioPipeline):
     """
 
     ALSA_DEVICE = os.environ.get("BITOS_AUDIO", "hw:0")
-    SAMPLE_RATE = 48000
-    CHANNELS = 2
+    # STT-optimized: 16kHz mono matches Whisper's native format
+    RECORD_SAMPLE_RATE = 16000
+    RECORD_CHANNELS = 1
+    # Playback stays at 48kHz stereo for WM8960 speaker output
+    PLAYBACK_SAMPLE_RATE = 48000
+    PLAYBACK_CHANNELS = 2
     FORMAT = "S16_LE"
     CHUNK_SECONDS = 0.1
 
@@ -108,9 +112,9 @@ class WM8960Pipeline(AudioPipeline):
                     "-f",
                     self.FORMAT,
                     "-r",
-                    str(self.SAMPLE_RATE),
+                    str(self.RECORD_SAMPLE_RATE),
                     "-c",
-                    str(self.CHANNELS),
+                    str(self.RECORD_CHANNELS),
                     "-d",
                     str(max_seconds),
                     out,
@@ -148,9 +152,9 @@ class WM8960Pipeline(AudioPipeline):
                 "-f",
                 self.FORMAT,
                 "-r",
-                str(self.SAMPLE_RATE),
+                str(self.PLAYBACK_SAMPLE_RATE),
                 "-c",
-                str(self.CHANNELS),
+                str(self.PLAYBACK_CHANNELS),
                 path,
             ],
             stdout=subprocess.DEVNULL,
