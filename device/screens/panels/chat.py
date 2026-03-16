@@ -232,13 +232,6 @@ class ChatPanel(BaseScreen):
         elif action == "DOUBLE_PRESS":
             self._mode = ChatMode.ACTIONS
             self._action_template_index = 0
-        elif action == "LONG_PRESS":
-            # If hold timer is active, this is the same hold that will
-            # trigger quick-talk recording — don't go back
-            if self._hold_timer is not None:
-                return
-            if self._on_back:
-                self._on_back()
 
     def _handle_recording(self, action: str):
         if action == "SHORT_PRESS" and not self._quick_talk:
@@ -249,8 +242,15 @@ class ChatPanel(BaseScreen):
             self._recording_cancelled = True
             self._voice_stop_event.set()
 
+    def _action_items(self) -> list[dict]:
+        """Action menu: templates + navigation items."""
+        return list(self._templates) + [
+            {"label": "BACK", "message": ""},
+            {"label": "BACK TO MAIN MENU", "message": ""},
+        ]
+
     def _handle_actions(self, action: str):
-        items = list(self._templates) + [{"label": "BACK", "message": ""}]
+        items = self._action_items()
         if action == "SHORT_PRESS":
             self._action_template_index = (self._action_template_index + 1) % len(items)
         elif action == "TRIPLE_PRESS":
@@ -259,6 +259,10 @@ class ChatPanel(BaseScreen):
             selected = items[self._action_template_index]
             if selected["label"] == "BACK":
                 self._mode = ChatMode.IDLE
+            elif selected["label"] == "BACK TO MAIN MENU":
+                self._mode = ChatMode.IDLE
+                if self._on_back:
+                    self._on_back()
             else:
                 self._send_template_message(selected)
                 self._mode = ChatMode.IDLE
@@ -412,7 +416,7 @@ class ChatPanel(BaseScreen):
 
     def _render_actions_submenu(self, surface: pygame.Surface, top_y: int):
         """Render the templates sub-menu in the action area."""
-        items = list(self._templates) + [{"label": "BACK", "message": ""}]
+        items = self._action_items()
         # Show 3 rows centered around selected index
         visible_count = 3
         start_idx = max(0, self._action_template_index - 1)

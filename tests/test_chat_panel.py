@@ -43,11 +43,12 @@ class ChatModeTests(unittest.TestCase):
         panel = self._make_panel()
         self.assertEqual(panel._mode, ChatMode.IDLE)
 
-    def test_long_press_in_idle_exits_chat(self):
+    def test_long_press_in_idle_does_not_exit(self):
+        """LONG_PRESS should NOT call on_back anymore."""
         called = []
         panel = self._make_panel(on_back=lambda: called.append(True))
         panel.handle_action("LONG_PRESS")
-        self.assertTrue(called)
+        self.assertFalse(called)
 
     def test_long_press_during_hold_does_not_exit(self):
         called = []
@@ -185,6 +186,16 @@ class ChatModeTests(unittest.TestCase):
         panel._mode = ChatMode.STREAMING
         content = panel._get_action_bar_content()
         self.assertEqual(len(content), 0)
+
+    def test_selecting_back_to_main_menu_calls_on_back(self):
+        called = []
+        panel = self._make_panel(on_back=lambda: called.append(True))
+        panel._mode = ChatMode.ACTIONS
+        # Navigate to BACK TO MAIN MENU (last item in actions)
+        panel._action_template_index = len(panel._action_items()) - 1
+        panel.handle_action("DOUBLE_PRESS")
+        self.assertTrue(called)
+        self.assertEqual(panel._mode, ChatMode.IDLE)
 
 
 if __name__ == "__main__":
