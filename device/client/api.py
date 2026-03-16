@@ -313,3 +313,48 @@ class BackendClient:
         except Exception as exc:
             logging.warning("morning_brief_failed error=%s", exc)
             return {}
+
+    def get_agent_subtasks(self, status: str | None = None) -> list[dict]:
+        """GET /agent/subtasks with optional status filter."""
+        try:
+            params = {"status": status} if status else {}
+            resp = httpx.get(
+                f"{self.base_url}/agent/subtasks",
+                params=params,
+                timeout=5,
+                headers=self._request_headers(),
+            )
+            resp.raise_for_status()
+            return resp.json().get("subtasks", [])
+        except Exception as exc:
+            logging.warning("agent_subtasks_failed error=%s", exc)
+            return []
+
+    def submit_agent_subtask(self, name: str, prompt: str) -> str:
+        """POST /agent/subtasks, returns task_id."""
+        try:
+            resp = httpx.post(
+                f"{self.base_url}/agent/subtasks",
+                json={"name": name, "prompt": prompt},
+                timeout=10,
+                headers=self._request_headers(),
+            )
+            resp.raise_for_status()
+            return resp.json().get("task_id", "")
+        except Exception as exc:
+            logging.warning("agent_subtask_submit_failed error=%s", exc)
+            return ""
+
+    def get_agent_subtask(self, task_id: str) -> dict:
+        """GET /agent/subtasks/{task_id}."""
+        try:
+            resp = httpx.get(
+                f"{self.base_url}/agent/subtasks/{task_id}",
+                timeout=5,
+                headers=self._request_headers(),
+            )
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as exc:
+            logging.warning("agent_subtask_detail_failed task=%s error=%s", task_id[:12], exc)
+            return {}

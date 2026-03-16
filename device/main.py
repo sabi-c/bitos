@@ -51,6 +51,7 @@ from screens.panels.captures import CapturesPanel
 from screens.panels.messages import MessagesPanel
 from screens.panels.mail import MailPanel
 from screens.panels.notifications import NotificationsPanel
+from screens.panels.agent_tasks import AgentTasksPanel
 from screens.panels.settings import SettingsPanel, ModelPickerPanel, AgentModePanel, SleepTimerPanel, AboutPanel, BatteryPanel, DevPanel, FontPickerPanel, TextSpeedPanel
 from screens.panels.change_pin import ChangePinPanel
 from screens.subscreens.integration_detail import IntegrationDetailPanel
@@ -415,6 +416,7 @@ def main():
             "MSGS": open_messages,
             "MUSIC": lambda: None,  # not yet implemented
             "HISTORY": open_captures,
+            "AGENT": open_agent_tasks,
         }
         right_panels = create_right_panels(panel_openers=panel_openers, repository=repository)
 
@@ -505,6 +507,9 @@ def main():
 
     def open_tasks():
         screen_mgr.push(TasksPanel(client=client, repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
+
+    def open_agent_tasks():
+        screen_mgr.push(AgentTasksPanel(client=client, repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
 
     def open_captures():
         screen_mgr.push(CapturesPanel(repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))

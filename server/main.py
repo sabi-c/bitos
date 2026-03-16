@@ -1,9 +1,12 @@
 """BITOS Server backend: health, chat, and UI settings catalog endpoints."""
+import asyncio
 import logging
 import os
+import sqlite3
 import subprocess
 import sys
 import threading
+import uuid
 
 try:
     import psutil
@@ -102,6 +105,11 @@ class IntegrationSettingsRequest(BaseModel):
 class DeviceUpdateRequest(BaseModel):
     target: str = "both"
     confirmed: bool = False
+
+
+class SubtaskRequest(BaseModel):
+    name: str
+    prompt: str
 
 
 def _is_real_anthropic_key(value: str) -> bool:
@@ -310,6 +318,40 @@ app = FastAPI(title="BITOS Server", version=__version__)
 settings_store = UISettingsStore(UI_SETTINGS_FILE)
 llm_bridge = create_llm_bridge()
 _token_warning_logged = False
+
+# ── Agent subtask database ──
+_SUBTASK_DB_PATH = os.environ.get("DATABASE_PATH", str(SERVER_DIR / "data" / "subtasks.db"))
+
+
+def _subtask_db() -> sqlite3.Connection:
+    os.makedirs(os.path.dirname(_SUBTASK_DB_PATH), exist_ok=True)
+    conn = sqlite3.connect(_SUBTASK_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _init_subtask_table():
+    with _subtask_db() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS agent_subtasks (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                prompt TEXT NOT NULL,
+                result TEXT,
+                error TEXT,
+                input_tokens INTEGER DEFAULT 0,
+                output_tokens INTEGER DEFAULT 0,
+                cost_usd REAL DEFAULT 0.0,
+                created_at TEXT DEFAULT (datetime('now')),
+                started_at TEXT,
+                completed_at TEXT
+            )
+        """)
+        conn.commit()
+
+
+_init_subtask_table()
 
 app.add_middleware(
     CORSMiddleware,
@@ -710,6 +752,113 @@ async def get_brief():
         "messages": {"unread": msg_unread},
         "mail": {"unread": mail_unread, "recent": mail_threads[:3]},
     }
+
+def _calculate_cost(input_tokens: int, output_tokens: int, model: str = "") -> float:
+    """Calculate USD cost based on token usage and model."""
+    model_lower = (model or llm_bridge.model).lower()
+    if "haiku" in model_lower:
+        return input_tokens * 0.001 / 1000 + output_tokens * 0.005 / 1000
+    # Default: Sonnet pricing
+    return input_tokens * 0.003 / 1000 + output_tokens * 0.015 / 1000
+
+
+async def _run_subtask(task_id: str, prompt: str):
+    """Background coroutine that executes a subtask via the LLM bridge."""
+    try:
+        with _subtask_db() as conn:
+            conn.execute(
+                "UPDATE agent_subtasks SET status = 'running', started_at = datetime('now') WHERE id = ?",
+                (task_id,),
+            )
+            conn.commit()
+
+        loop = asyncio.get_event_loop()
+        result_text, input_tokens, output_tokens = await loop.run_in_executor(
+            None, lambda: llm_bridge.complete_text(prompt)
+        )
+        cost = _calculate_cost(input_tokens, output_tokens)
+
+        with _subtask_db() as conn:
+            conn.execute(
+                """UPDATE agent_subtasks
+                   SET status = 'complete', result = ?, input_tokens = ?, output_tokens = ?,
+                       cost_usd = ?, completed_at = datetime('now')
+                   WHERE id = ?""",
+                (result_text, input_tokens, output_tokens, cost, task_id),
+            )
+            conn.commit()
+    except Exception as exc:
+        logger.error("subtask_failed task_id=%s error=%s", task_id, exc)
+        with _subtask_db() as conn:
+            conn.execute(
+                "UPDATE agent_subtasks SET status = 'failed', error = ?, completed_at = datetime('now') WHERE id = ?",
+                (str(exc), task_id),
+            )
+            conn.commit()
+
+
+@app.post("/agent/subtasks")
+async def create_subtask(payload: SubtaskRequest):
+    task_id = uuid.uuid4().hex[:12]
+    with _subtask_db() as conn:
+        conn.execute(
+            "INSERT INTO agent_subtasks (id, name, status, prompt) VALUES (?, ?, 'pending', ?)",
+            (task_id, payload.name, payload.prompt),
+        )
+        conn.commit()
+    asyncio.create_task(_run_subtask(task_id, payload.prompt))
+    return {"task_id": task_id, "status": "pending"}
+
+
+@app.get("/agent/subtasks")
+async def list_subtasks(status: str | None = None):
+    with _subtask_db() as conn:
+        if status:
+            rows = conn.execute(
+                "SELECT * FROM agent_subtasks WHERE status = ? ORDER BY created_at DESC", (status,)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM agent_subtasks ORDER BY created_at DESC"
+            ).fetchall()
+    return {"subtasks": [dict(row) for row in rows]}
+
+
+@app.get("/agent/subtasks/{task_id}")
+async def get_subtask(task_id: str):
+    with _subtask_db() as conn:
+        row = conn.execute("SELECT * FROM agent_subtasks WHERE id = ?", (task_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Subtask not found")
+    return dict(row)
+
+
+@app.post("/agent/subtasks/test")
+async def create_test_subtask():
+    """Create a test subtask as proof-of-concept."""
+    sample_text = (
+        "Artificial intelligence has rapidly evolved from a theoretical concept to a practical tool "
+        "that impacts nearly every aspect of modern life. Machine learning models can now understand "
+        "natural language, generate images, write code, and even compose music. The field continues "
+        "to advance at an extraordinary pace, with new breakthroughs announced almost weekly. "
+        "However, this progress also raises important questions about safety, ethics, and the "
+        "future of human work. Researchers and policymakers are working to establish frameworks "
+        "that ensure AI development benefits humanity while minimizing potential risks."
+    )
+    prompt = (
+        "Summarize the following text into 4 short paragraphs of ~60 words each, "
+        f"suitable for a tiny screen:\n\n{sample_text}"
+    )
+    task_id = uuid.uuid4().hex[:12]
+    with _subtask_db() as conn:
+        conn.execute(
+            "INSERT INTO agent_subtasks (id, name, status, prompt) VALUES (?, ?, 'pending', ?)",
+            (task_id, "markdown-parse", prompt),
+        )
+        conn.commit()
+    asyncio.create_task(_run_subtask(task_id, prompt))
+    return {"task_id": task_id, "status": "pending", "name": "markdown-parse"}
+
 
 @app.post("/shutdown")
 async def shutdown():
