@@ -236,6 +236,18 @@ class ChatPanel(BaseScreen):
             with self._messages_lock:
                 self._status_detail = ""
 
+    def _get_action_bar_content(self) -> list[tuple[str, str]]:
+        """Return action bar items for the current mode."""
+        if self._mode == ChatMode.IDLE:
+            return [("hold", "RECORD"), ("double", "ACTIONS"), ("tap", "SCROLL")]
+        elif self._mode == ChatMode.RECORDING:
+            return [("tap", "SEND"), ("hold", "CANCEL")]
+        elif self._mode == ChatMode.ACTIONS:
+            return [("tap", "NEXT"), ("double", "SELECT"), ("hold", "BACK")]
+        elif self._mode == ChatMode.SPEAKING:
+            return [("tap", "STOP")]
+        return []  # STREAMING — render plain text instead
+
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
 
@@ -315,20 +327,37 @@ class ChatPanel(BaseScreen):
             rec_surf = self._font.render(rec_text, False, WHITE)
             surface.blit(rec_surf, (SAFE_INSET, action_top + self._ACTION_ROW_H))
 
-        # ── Hint bar ──
+        # ── Action bar (gesture icons + labels) ──
         hint_y = PHYSICAL_H - SAFE_INSET - hint_h
-        if self._mode == ChatMode.RECORDING:
-            hint_text = "TAP:SEND \u00b7 LONG:CANCEL"
-        elif self._mode == ChatMode.ACTIONS:
-            hint_text = "SHORT:NEXT \u00b7 DBL:SEL \u00b7 LONG:BACK"
-        elif self._mode == ChatMode.SPEAKING:
-            hint_text = "TAP:STOP"
-        elif self._mode == ChatMode.STREAMING:
-            hint_text = "listening..."
+        pygame.draw.line(surface, HAIRLINE, (0, hint_y), (PHYSICAL_W, hint_y))
+        bar_center_y = hint_y + hint_h // 2
+        bar_content = self._get_action_bar_content()
+
+        if bar_content:
+            # Render gesture icons with labels, evenly spaced
+            items = []
+            for icon_type, label in bar_content:
+                label_surf = self._font_small.render(label, False, DIM2)
+                items.append((icon_type, label_surf))
+
+            total_w = sum(8 + 4 + s.get_width() for _, s in items)
+            spacing = (PHYSICAL_W - total_w) // (len(items) + 1)
+            bx = spacing
+            for icon_type, label_surf in items:
+                ic = (bx + 4, bar_center_y)
+                if icon_type == "tap":
+                    pygame.draw.circle(surface, DIM2, ic, 3, 1)
+                elif icon_type == "double":
+                    pygame.draw.circle(surface, DIM2, ic, 3, 1)
+                    pygame.draw.circle(surface, DIM2, ic, 1, 1)
+                elif icon_type == "hold":
+                    pygame.draw.circle(surface, DIM2, ic, 3, 0)
+                surface.blit(label_surf, (bx + 12, bar_center_y - label_surf.get_height() // 2))
+                bx += 12 + label_surf.get_width() + spacing
         else:
-            hint_text = "HOLD:RECORD \u00b7 DBL:ACTIONS \u00b7 LONG:BACK"
-        hint = self._font_hint.render(hint_text, False, DIM3)
-        surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, hint_y))
+            # Plain text mode (STREAMING)
+            stream_text = self._font_small.render("listening...", False, DIM3)
+            surface.blit(stream_text, ((PHYSICAL_W - stream_text.get_width()) // 2, bar_center_y - stream_text.get_height() // 2))
 
     def _render_actions_submenu(self, surface: pygame.Surface, top_y: int):
         """Render the templates sub-menu in the action area."""

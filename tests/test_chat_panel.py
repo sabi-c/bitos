@@ -119,6 +119,30 @@ class ChatModeTests(unittest.TestCase):
         panel.handle_action("HOLD_END")
         self.assertIsNone(panel._hold_timer)
 
+    def test_idle_action_bar_has_record(self):
+        panel = self._make_panel()
+        content = panel._get_action_bar_content()
+        self.assertEqual(len(content), 3)
+        icons = [c[0] for c in content]
+        self.assertIn("hold", icons)
+        labels = [c[1] for c in content]
+        self.assertIn("RECORD", labels)
+
+    def test_recording_action_bar_has_send_cancel(self):
+        panel = self._make_panel()
+        panel._mode = ChatMode.RECORDING
+        content = panel._get_action_bar_content()
+        self.assertEqual(len(content), 2)
+        labels = [c[1] for c in content]
+        self.assertIn("SEND", labels)
+        self.assertIn("CANCEL", labels)
+
+    def test_streaming_action_bar_empty(self):
+        panel = self._make_panel()
+        panel._mode = ChatMode.STREAMING
+        content = panel._get_action_bar_content()
+        self.assertEqual(len(content), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
