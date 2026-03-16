@@ -7,9 +7,59 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
+import uuid
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# ── Pending approval requests (blocking tool calls) ─────────────────────
+# Maps request_id -> {"event": threading.Event, "choice": str | None}
+_pending_approvals: dict[str, dict] = {}
+_approvals_lock = threading.Lock()
+
+
+def create_approval_request(prompt: str, options: list[str]) -> tuple[str, dict]:
+    """Create a pending approval and return (request_id, sse_event_data)."""
+    request_id = f"req_{uuid.uuid4().hex[:8]}"
+    event = threading.Event()
+    with _approvals_lock:
+        _pending_approvals[request_id] = {"event": event, "choice": None}
+
+    sse_data = {
+        "approval_request": {
+            "id": request_id,
+            "prompt": prompt,
+            "options": options[:3],
+        }
+    }
+    return request_id, sse_data
+
+
+def wait_for_approval(request_id: str, timeout: float = 60.0) -> str:
+    """Block until the device responds or timeout. Returns chosen option or 'cancelled'."""
+    with _approvals_lock:
+        entry = _pending_approvals.get(request_id)
+    if not entry:
+        return "cancelled"
+
+    entry["event"].wait(timeout=timeout)
+
+    with _approvals_lock:
+        entry = _pending_approvals.pop(request_id, {})
+
+    return entry.get("choice") or "cancelled"
+
+
+def resolve_approval(request_id: str, choice: str) -> bool:
+    """Called by the /chat/approval endpoint when the device submits a choice."""
+    with _approvals_lock:
+        entry = _pending_approvals.get(request_id)
+    if not entry:
+        return False
+    entry["choice"] = choice
+    entry["event"].set()
+    return True
 
 # ── Tool Definitions (Anthropic tool_use format) ─────────────────────────
 
@@ -50,6 +100,34 @@ DEVICE_TOOLS = [
                 },
             },
             "required": ["key", "value"],
+        },
+    },
+    {
+        "name": "request_approval",
+        "description": (
+            "Ask the user to choose between options on their device. "
+            "Use this for high-impact actions that need explicit confirmation, "
+            "like sending a message, making a purchase, or changing important settings. "
+            "The device shows a popup with your prompt and the options. "
+            "The user selects one or cancels. Max 3 options. "
+            "Returns the user's choice or 'cancelled' if they dismissed it."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type": "string",
+                    "description": "Short question to show the user (1-2 lines).",
+                },
+                "options": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "2-3 options for the user to choose from.",
+                    "maxItems": 3,
+                    "minItems": 2,
+                },
+            },
+            "required": ["prompt", "options"],
         },
     },
 ]
@@ -108,6 +186,7 @@ def handle_tool_call(
     tool_input: dict,
     device_settings: dict,
     setting_changes: list[dict],
+    approval_events: list[dict] | None = None,
 ) -> str:
     """Execute an agent tool call and return the result as a string.
 
@@ -116,6 +195,7 @@ def handle_tool_call(
         tool_input: Input parameters from the LLM.
         device_settings: Current device settings snapshot (from ChatRequest).
         setting_changes: Mutable list — appended with any changes to push to device.
+        approval_events: Mutable list — appended with SSE events to emit for approvals.
 
     Returns:
         JSON string result for the tool_result message.
@@ -133,5 +213,23 @@ def handle_tool_call(
         setting_changes.append({"key": key, "value": coerced})
         logger.info("agent_setting_change: %s=%s", key, coerced)
         return json.dumps({"success": True, "key": key, "value": coerced})
+
+    if tool_name == "request_approval":
+        prompt = tool_input.get("prompt", "Confirm?")
+        options = tool_input.get("options", ["Yes", "No"])[:3]
+        if len(options) < 2:
+            options = ["Yes", "No"]
+
+        request_id, sse_data = create_approval_request(prompt, options)
+        # Queue the SSE event so the streaming generator can emit it
+        if approval_events is not None:
+            approval_events.append(sse_data)
+
+        # Block until user responds (or 60s timeout)
+        logger.info("approval_waiting: id=%s prompt=%s", request_id, prompt)
+        choice = wait_for_approval(request_id, timeout=60.0)
+        logger.info("approval_resolved: id=%s choice=%s", request_id, choice)
+
+        return json.dumps({"choice": choice, "request_id": request_id})
 
     return json.dumps({"error": f"Unknown tool: {tool_name}"})

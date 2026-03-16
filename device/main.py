@@ -276,6 +276,41 @@ def main():
     # Expose to poller so it can trigger banners for high-priority notifications
     notification_poller.on_banner = show_proactive_notification
 
+    # ── Agent approval overlay wiring ──
+    from overlays.approval_overlay import ApprovalOverlay
+
+    def show_approval_overlay(request_id: str, prompt: str, options: list[str]):
+        """Show an approval overlay when the agent requests permission."""
+        idle_mgr.wake()
+
+        def on_choice(req_id: str, chosen: str):
+            logger.info("[Approval] choice: id=%s option=%s", req_id, chosen)
+            # Submit choice back to server in background thread
+            import threading
+            threading.Thread(
+                target=lambda: client.submit_approval(req_id, chosen),
+                daemon=True,
+            ).start()
+
+        def on_cancel(req_id: str):
+            logger.info("[Approval] cancelled: id=%s", req_id)
+            import threading
+            threading.Thread(
+                target=lambda: client.submit_approval(req_id, "cancelled"),
+                daemon=True,
+            ).start()
+
+        overlay = ApprovalOverlay(
+            request_id=request_id,
+            prompt=prompt,
+            options=options,
+            on_choice=on_choice,
+            on_cancel=on_cancel,
+        )
+        screen_mgr.show_banner(overlay)
+
+    client.on_approval_request = show_approval_overlay
+
     # SD-002: BLE auth bootstrap binds device identity + shared secret before any protected characteristic writes.
     auth_manager = AuthManager(
         # SD-005: PIN hash and BLE secret are sourced from env-backed device secrets.

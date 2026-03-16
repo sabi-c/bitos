@@ -78,16 +78,17 @@ class AnthropicBridge(LLMBridge):
         system_prompt: str | None = None,
         model_override: str | None = None,
         extended_thinking: bool = False,
-    ) -> Generator[str, None, list[dict]]:
-        """Stream with tool_use support. Yields text chunks, returns setting changes.
+    ) -> Generator[str | dict, None, list[dict]]:
+        """Stream with tool_use support. Yields text chunks or SSE event dicts, returns setting changes.
 
         When the model calls a tool, we resolve it and continue the conversation.
         Max 5 tool rounds to prevent infinite loops.
+        Yields dicts for special SSE events (approval_request) that the caller must emit.
         """
         if not self._api_key:
             raise RuntimeError("ANTHROPIC_API_KEY not configured")
 
-        from agent_tools import handle_tool_call
+        from agent_tools import handle_tool_call, create_approval_request, wait_for_approval
 
         active_model = model_override or self.model
         client = anthropic.Anthropic(api_key=self._api_key)
@@ -121,9 +122,24 @@ class AnthropicBridge(LLMBridge):
                     yield block.text
                 elif block.type == "tool_use":
                     has_tool_use = True
-                    result = handle_tool_call(
-                        block.name, block.input, device_settings, setting_changes,
-                    )
+
+                    if block.name == "request_approval":
+                        # Special handling: yield SSE event BEFORE blocking
+                        prompt = block.input.get("prompt", "Confirm?")
+                        options = block.input.get("options", ["Yes", "No"])[:3]
+                        if len(options) < 2:
+                            options = ["Yes", "No"]
+                        request_id, sse_data = create_approval_request(prompt, options)
+                        # Yield the SSE event dict — caller will emit it
+                        yield sse_data
+                        # Now block until device responds
+                        choice = wait_for_approval(request_id, timeout=60.0)
+                        result = json.dumps({"choice": choice, "request_id": request_id})
+                    else:
+                        result = handle_tool_call(
+                            block.name, block.input, device_settings, setting_changes,
+                        )
+
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,
@@ -131,7 +147,6 @@ class AnthropicBridge(LLMBridge):
                     })
 
             if not has_tool_use:
-                # Done — return setting changes via the generator return value
                 return setting_changes
 
             # Continue conversation with tool results

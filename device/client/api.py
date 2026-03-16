@@ -28,6 +28,7 @@ class BackendClient:
     def __init__(self, base_url: str | None = None):
         self.base_url = base_url or os.environ.get("BITOS_SERVER_URL", DEFAULT_SERVER_URL)
         self.device_token = os.environ.get("BITOS_DEVICE_TOKEN", "")
+        self.on_approval_request = None  # Callable[[str, str, list[str]], None] or None
         if not self.device_token:
             logging.warning("[BITOS] BITOS_DEVICE_TOKEN is not set; running in dev mode without device token auth")
 
@@ -201,12 +202,41 @@ class BackendClient:
                         elif "setting_change" in chunk:
                             # Agent requested a setting change — apply it
                             self._apply_setting_change(chunk["setting_change"])
+                        elif "approval_request" in chunk:
+                            # Agent wants user approval — show overlay
+                            self._handle_approval_request(chunk["approval_request"])
                         elif "perception" in chunk:
                             # Perception metadata — log but don't yield as text
                             logging.debug("perception: %s", chunk["perception"])
                     except json.JSONDecodeError:
                         yield data
 
+
+    def _handle_approval_request(self, data: dict) -> None:
+        """Handle an approval_request SSE event from the agent."""
+        request_id = data.get("id", "")
+        prompt = data.get("prompt", "Confirm?")
+        options = data.get("options", ["Yes", "No"])
+        logging.info("approval_request: id=%s prompt=%s", request_id, prompt)
+
+        if self.on_approval_request:
+            # Show the overlay — main.py wires this up
+            self.on_approval_request(request_id, prompt, options)
+
+    def submit_approval(self, request_id: str, choice: str) -> bool:
+        """POST /chat/approval — submit user's choice for a blocking approval."""
+        try:
+            resp = httpx.post(
+                f"{self.base_url}/chat/approval",
+                json={"request_id": request_id, "choice": choice},
+                timeout=10,
+                headers=self._request_headers(),
+            )
+            resp.raise_for_status()
+            return bool(resp.json().get("ok"))
+        except Exception as exc:
+            logging.warning("approval_submit_failed: id=%s error=%s", request_id, exc)
+            return False
 
     def _apply_setting_change(self, change: dict) -> None:
         """Apply a setting change requested by the agent."""

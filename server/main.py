@@ -1012,6 +1012,21 @@ async def shutdown():
     return {"status": "ok"}
 
 
+class ApprovalResponse(BaseModel):
+    request_id: str
+    choice: str
+
+
+@app.post("/chat/approval")
+async def submit_approval(payload: ApprovalResponse):
+    """Device submits user's choice for a blocking approval request."""
+    from agent_tools import resolve_approval
+    ok = resolve_approval(payload.request_id, payload.choice)
+    if not ok:
+        raise HTTPException(status_code=404, detail="No pending approval with that ID")
+    return {"ok": True, "request_id": payload.request_id, "choice": payload.choice}
+
+
 @app.post("/chat")
 async def chat(payload: ChatRequest):
     """Stream model response from the active LLM bridge as SSE."""
@@ -1082,11 +1097,15 @@ async def chat(payload: ChatRequest):
                 extended_thinking=payload.extended_thinking,
             )
 
-            # Consume generator — return value contains setting changes
+            # Consume generator — yields text (str) or SSE event dicts
             try:
                 while True:
-                    text = next(gen)
-                    yield to_sse_data(text)
+                    chunk = next(gen)
+                    if isinstance(chunk, dict):
+                        # Special SSE event (e.g., approval_request)
+                        yield f"data: {json.dumps(chunk)}\n\n"
+                    else:
+                        yield to_sse_data(chunk)
             except StopIteration as e:
                 setting_changes = e.value or []
             except Exception as tool_exc:
