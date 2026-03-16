@@ -7,7 +7,6 @@ import pygame
 
 from device.display.theme import get_font
 from device.display.tokens import (
-    FONT_SIZE_SIDEBAR_ITEM,
     WHITE, BLACK,
     GRAY_44, GRAY_AA, GRAY_08, GRAY_0A,
 )
@@ -15,10 +14,10 @@ from device.display.tokens import (
 SEP_COLOR = GRAY_0A
 
 SIDEBAR_W = 84
-ITEM_H = 27  # padding top+bottom + 12px font (27*9=243 fits in 248px)
-FONT_SIZE = FONT_SIZE_SIDEBAR_ITEM
+ITEM_H = 23  # 23*9=207px fits in 208px available height
+FONT_SIZE = 14  # bumped from 12 for readability
 PAD_X = 7
-PAD_Y = 7
+PAD_Y = 4  # reduced from 7 to fit 9 items at larger font
 
 ITEMS = ["HOME", "CHAT", "TASKS", "SETTINGS", "FOCUS", "MAIL", "MSGS", "MUSIC", "HISTORY"]
 
