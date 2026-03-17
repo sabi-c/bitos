@@ -400,6 +400,10 @@ app = FastAPI(title="BITOS Server", version=__version__)
 from endpoints.ws_01_compat import router as ws_01_router
 app.include_router(ws_01_router)
 
+# ── SMS/iMessage webhook endpoint ──
+from endpoints.webhook_sms import router as webhook_sms_router
+app.include_router(webhook_sms_router)
+
 settings_store = UISettingsStore(UI_SETTINGS_FILE)
 llm_bridge = create_llm_bridge()
 _token_warning_logged = False
@@ -419,14 +423,20 @@ from heartbeat import (
 )
 
 # ── Integration bridge (polls adapters → dispatcher) ──
+bluebubbles = BlueBubblesAdapter()
 _integration_bridge = IntegrationBridge(
     _notif_dispatcher,
     adapters={
-        "bluebubbles": BlueBubblesAdapter(),
+        "bluebubbles": bluebubbles,
         "gmail": GmailAdapter(),
         "vikunja": VikunjaAdapter(),
     },
 )
+
+# ── SMS Gateway (iMessage via BlueBubbles) ──
+from integrations.sms_gateway import SMSGateway
+sms_gateway = SMSGateway()
+sms_gateway.register_adapter("imessage", bluebubbles)
 
 
 async def _integration_poll_loop():

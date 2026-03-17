@@ -602,7 +602,11 @@ class _HeartbeatEngine:
         return (now - self._last_proactive_time).total_seconds() >= PROACTIVE_COOLDOWN_SECONDS
 
     async def _deliver(self, message: str, action_type: str, now: datetime) -> None:
-        """Push proactive message to devices and log it."""
+        """Push proactive message to devices and log it.
+
+        If no WebSocket device clients are connected, falls back to sending
+        the message via iMessage through the SMS gateway.
+        """
         self._last_proactive_time = now
         payload = {
             "type": "proactive_message",
@@ -613,6 +617,10 @@ class _HeartbeatEngine:
 
         # Push to all connected WebSocket clients
         await _broadcast_to_devices(payload)
+
+        # SMS fallback: if no device clients connected, send via iMessage
+        if not _proactive_clients:
+            await self._sms_fallback(message, action_type)
 
         # Log to activity feed
         try:
@@ -653,6 +661,29 @@ class _HeartbeatEngine:
             "heartbeat_proactive [%s] -> %d clients: %s",
             action_type, len(_proactive_clients), message[:120],
         )
+
+    # ── SMS Fallback ─────────────────────────────────────────────────
+
+    async def _sms_fallback(self, message: str, action_type: str) -> None:
+        """Send a proactive message via iMessage when no devices are connected."""
+        try:
+            from integrations.bluebubbles_adapter import BlueBubblesAdapter
+            adapter = BlueBubblesAdapter()
+            chat_guid = adapter.self_chat_guid
+            if not chat_guid:
+                logger.debug(
+                    "heartbeat_sms_fallback: no BLUEBUBBLES_SELF_CHAT_GUID configured, skipping"
+                )
+                return
+
+            prefix = f"[{action_type}] " if "manual" not in action_type else ""
+            ok = await adapter.send_message_async(chat_guid, f"{prefix}{message}")
+            if ok:
+                logger.info("heartbeat_sms_fallback: sent via iMessage (%s)", action_type)
+            else:
+                logger.warning("heartbeat_sms_fallback: send_message returned False")
+        except Exception as exc:
+            logger.warning("heartbeat_sms_fallback_error: %s", exc)
 
     # ── Manual Trigger ────────────────────────────────────────────────
 
