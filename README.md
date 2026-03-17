@@ -37,10 +37,11 @@ The UI is 1-bit pixel-style on a 240×280 display with single-button navigation.
 5. `make run-dev` (terminal 2)
 
 Keyboard mapping in desktop mode:
-- `SPACE` = short
-- `ENTER` = long
-- `BACKSPACE` = back
-- `TAB` = quick-capture
+- `SPACE` / `DOWN` / `J` = next (short press)
+- `ENTER` = select (double press)
+- `BACKSPACE` / `ESC` = back (long press)
+- `UP` / `K` = previous (triple press)
+- `TAB` = agent overlay
 
 ## First Boot on Hardware
 See `docs/planning/FIRST_BOOT.md`.
@@ -57,16 +58,29 @@ Short version:
 `Device (Pygame/ST7789) → HTTP → Server (FastAPI) → Claude API`
 
 Single button model:
-- `SHORT` = scroll
-- `LONG` = select
-- `DOUBLE` = back
-- `TRIPLE` = capture
+- `SHORT` = next item
+- `DOUBLE` = select
+- `LONG` = go back
+- `TRIPLE` = agent overlay
+- `5× PRESS` = quick menu (shutdown, reboot, settings, help)
 
 ## Current Status
-- Phase 5 complete (BLE foundation, WiFi provisioning, companion PWA)
-- Phase 6 in progress (resilience, shutdown, offline UI)
+- **Phase 7 in progress** — consciousness layer, voice fine-tuning, live conversation mode
+- Phases 1–6 complete: hardware, display, chat, BLE, companion, resilience
 - CI: passing on main
 - Companion PWA: https://bitos-p8xw.onrender.com
+
+### What's working
+- Multi-turn chat with Claude (Sonnet 4.6 primary, Haiku 4.5 for sub-agents)
+- 14 agent tools: iMessage, email, calendar, tasks, web search, memory, contacts, settings, approval
+- 6 agent modes: Producer / Hacker / Clown / Monk / Storyteller / Director
+- Long-term memory (SQLite FTS5 fact store, Haiku extraction)
+- Proactive heartbeat (morning briefing, evening wind-down, idle check-in, task reminders)
+- TTS with fallback chain: Cartesia → Edge TTS → Speechify → Chatterbox → Piper → OpenAI → eSpeak
+- Notification system (WebSocket push, DND/priority, toast/banner rendering)
+- First-boot setup wizard (5-step guided flow)
+- BLE pairing + WiFi provisioning from companion app
+- OTA updates via git pull
 
 ## Companion App
 Scan the device QR code to open the companion in Safari (iPhone) or Chrome (Mac/Android).
