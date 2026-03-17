@@ -63,7 +63,7 @@ import display.tokens as tokens
 from display.tokens import FPS
 from input.handler import ButtonEvent, create_button_handler
 from notifications import NotificationPoller
-from overlays import AgentOverlay, NotificationQueue, NotificationToast, QROverlay
+from overlays import AgentOverlay, BlobOverlay, NotificationQueue, NotificationToast, QROverlay
 from overlays.notification_banner import NotificationBanner
 from bluetooth import AuthManager, get_gatt_server
 from bluetooth.characteristics import DeviceInfoCharacteristic, DeviceStatusCharacteristic, WiFiStatusCharacteristic
@@ -1256,7 +1256,7 @@ def main():
         screen_mgr.push(boot)
 
     power_overlay: PowerOverlay | None = None
-    agent_overlay: AgentOverlay | None = None
+    agent_overlay: AgentOverlay | BlobOverlay | None = None
 
     def close_power_overlay():
         nonlocal power_overlay
@@ -1289,7 +1289,7 @@ def main():
             agent_overlay._dismiss()
             agent_overlay = None
             return
-        agent_overlay = AgentOverlay(
+        agent_overlay = BlobOverlay(
             audio_pipeline=audio_pipeline,
             client=client,
             led=led,
