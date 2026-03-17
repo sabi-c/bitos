@@ -330,7 +330,7 @@ def main():
     notification_queue = NotificationQueue(repository=repository)
     status_state = StatusState()
     screen_mgr = ScreenManager(notification_queue=notification_queue, status_state=status_state)
-    idle_mgr = IdleManager(driver, repository)
+    idle_mgr = IdleManager(driver, repository, screen_manager=screen_mgr)
     power_mgr = PowerManager()
     power_mgr.system_power_save()
 
@@ -362,10 +362,21 @@ def main():
     button = create_button_handler(board=board, active_screen_name_getter=_active_screen_name)
     logger.info("[Button] handler ready mode=%s gpio_wired=%s", os.environ.get("BITOS_BUTTON", "unset"), board is not None)
 
+    # Audio click feedback on button presses
+    from audio.click_sounds import ClickSoundPlayer
+    click_sounds = ClickSoundPlayer(volume=0.12, enabled=True)
+
     def _on_button(btn_event: ButtonEvent):
         logger.info("[Button] %s", btn_event.name)
         idle_mgr.wake()
         power_mgr.poke()
+        # Audio click feedback (non-blocking)
+        if btn_event == ButtonEvent.SHORT_PRESS:
+            click_sounds.play_tap()
+        elif btn_event == ButtonEvent.DOUBLE_PRESS:
+            click_sounds.play_confirm()
+        elif btn_event == ButtonEvent.LONG_PRESS:
+            click_sounds.play_back()
         if power_overlay is not None:
             power_overlay.handle_input(btn_event.name)
             return
