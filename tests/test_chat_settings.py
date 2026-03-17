@@ -42,7 +42,7 @@ class ChatSettingsTests(unittest.TestCase):
         repo.get_setting = MagicMock(return_value=None)
         panel = ChatSettingsPanel(repository=repo, on_back=MagicMock())
         labels = [s["label"] for s in panel._settings]
-        self.assertIn("VOICE SPEED", labels)
+        self.assertIn("TEXT SPEED", labels)
 
     def test_short_press_cycles_settings(self):
         repo = MagicMock()

@@ -46,7 +46,7 @@ class ChatSettingsPanel(BaseScreen):
         self._settings = [
             {"label": "VOICE MODE", "key": "voice_mode", "value": str(voice_mode or "auto"),
              "options": ["off", "on", "auto"]},
-            {"label": "VOLUME", "key": "volume", "value": str(int(volume)),
+            {"label": "VOLUME", "key": "volume", "value": str(int(volume if volume is not None else 100)),
              "options": [str(v) for v in range(0, 110, 10)]},
             {"label": "TTS ENGINE", "key": "tts_engine", "value": str(tts_engine or "auto"),
              "options": _TTS_ENGINES},

@@ -36,9 +36,15 @@ class BootDiagnosticsTests(unittest.TestCase):
         d.results = {name: True for name in d.CHECKS}
         self.assertTrue(d.is_complete())
 
-    def test_all_critical_passed_false_when_api_key_fails(self):
+    def test_all_critical_passed_true_even_when_api_key_fails(self):
+        """api_key is non-critical — device can boot offline."""
         d = BootDiagnostics()
         d.results = {"display": True, "button": True, "api_key": False}
+        self.assertTrue(d.all_critical_passed())
+
+    def test_all_critical_passed_false_when_button_fails(self):
+        d = BootDiagnostics()
+        d.results = {"display": True, "button": False, "api_key": True}
         self.assertFalse(d.all_critical_passed())
 
 

@@ -10,7 +10,11 @@ import struct
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "device"))
 
 from audio.pipeline import MockAudioPipeline, WM8960Pipeline, get_audio_pipeline
-from audio.recorder import AudioRecorder
+
+try:
+    from audio.recorder import AudioRecorder
+except ImportError:
+    AudioRecorder = None
 
 
 class AudioWM8960Tests(unittest.TestCase):
@@ -50,6 +54,7 @@ class AudioWM8960Tests(unittest.TestCase):
         p = MockAudioPipeline()
         self.assertIsNone(p.speak("hello"))
 
+    @unittest.skipIf(AudioRecorder is None, "pyaudio not installed")
     def test_stereo_to_mono_wav_averages_channels(self):
         left = [1000, -3000, 2000]
         right = [3000, 1000, -2000]

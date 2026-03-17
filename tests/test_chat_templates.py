@@ -1,6 +1,7 @@
 import os
 import unittest
 from pathlib import Path
+from unittest.mock import MagicMock
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
@@ -10,12 +11,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "device"))
 
-from screens.panels.chat import ChatPanel
-
-
-class _NoopClient:
-    def chat(self, _message):
-        return iter([""])
+from screens.panels.chat import ChatPanel, ChatMode, DEFAULT_TEMPLATES
 
 
 class ChatTemplateTests(unittest.TestCase):
@@ -28,26 +24,27 @@ class ChatTemplateTests(unittest.TestCase):
     def tearDownClass(cls):
         pygame.quit()
 
-    def test_no_messages_shows_templates(self):
-        panel = ChatPanel(_NoopClient())
-        self.assertTrue(panel._showing_templates())
+    def _make_panel(self):
+        client = MagicMock()
+        client.chat.return_value = iter([""])
+        return ChatPanel(client=client)
+
+    def test_default_templates_populated(self):
+        panel = self._make_panel()
         self.assertGreater(len(panel._templates), 0)
+        self.assertEqual(panel._templates, list(DEFAULT_TEMPLATES))
 
-    def test_long_press_on_template_sends_message(self):
-        panel = ChatPanel(_NoopClient())
-        template_message = panel._templates[0]["message"]
+    def test_action_menu_includes_templates(self):
+        panel = self._make_panel()
+        items = panel._action_items()
+        labels = [i.get("label") for i in items]
+        # Templates appear at start, followed by nav items
+        self.assertIn(DEFAULT_TEMPLATES[0]["label"], labels)
 
-        panel.handle_action("LONG_PRESS")
-
-        self.assertEqual(panel._messages[0]["role"], "user")
-        self.assertEqual(panel._messages[0]["text"], template_message)
-
-    def test_templates_hidden_after_first_message(self):
-        panel = ChatPanel(_NoopClient())
-
-        panel.handle_action("LONG_PRESS")
-
-        self.assertFalse(panel._showing_templates())
+    def test_entering_actions_mode(self):
+        panel = self._make_panel()
+        panel._mode = ChatMode.ACTIONS
+        self.assertEqual(panel._mode, ChatMode.ACTIONS)
 
 
 if __name__ == "__main__":

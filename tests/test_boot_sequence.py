@@ -7,6 +7,14 @@ from pathlib import Path
 DEVICE_ROOT = Path(__file__).resolve().parents[1] / "device"
 sys.path.insert(0, str(DEVICE_ROOT))
 
+# Purge cached server-side packages that shadow device-side ones
+for _pkg in ("integrations", "notifications", "storage", "client"):
+    if _pkg in sys.modules:
+        sys.modules.pop(_pkg)
+    for _k in list(sys.modules):
+        if _k.startswith(_pkg + "."):
+            sys.modules.pop(_k, None)
+
 spec = importlib.util.spec_from_file_location("device_entry", DEVICE_ROOT / "main.py")
 device_main = importlib.util.module_from_spec(spec)
 assert spec and spec.loader

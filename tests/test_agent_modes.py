@@ -6,6 +6,14 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "server"))
 
+# Purge cached device-side packages that shadow server-side ones
+for _pkg in ("integrations", "notifications"):
+    if _pkg in sys.modules:
+        sys.modules.pop(_pkg)
+    for _k in list(sys.modules):
+        if _k.startswith(_pkg + "."):
+            sys.modules.pop(_k, None)
+
 from fastapi.testclient import TestClient
 
 import main as server_main
@@ -20,8 +28,8 @@ class _CapturingBridge:
     def __init__(self):
         self.calls = []
 
-    def stream_text(self, message: str, system_prompt: str | None = None):
-        self.calls.append({"message": message, "system_prompt": system_prompt})
+    def stream_text(self, message: str, system_prompt: str | None = None, model_override: str | None = None, extended_thinking: bool = False):
+        self.calls.append({"message": message, "system_prompt": system_prompt, "model_override": model_override})
         yield "ok"
 
 
