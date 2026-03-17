@@ -247,12 +247,8 @@ def main():
     from bluetooth.audio_manager import BluetoothAudioManager
     bt_audio_manager = BluetoothAudioManager(repository=repository)
 
-    # Auto-reconnect to last BT audio device in background
-    threading.Thread(
-        target=bt_audio_manager.auto_reconnect_last,
-        name="bt-audio-reconnect",
-        daemon=True,
-    ).start()
+    # NOTE: BT audio auto-reconnect moved to after GATT server start (see below)
+    # to avoid D-Bus contention with bluezero's GLib main loop.
 
     # Detect timezone from IP geolocation in background (like greeting fetch)
     threading.Thread(
@@ -1145,6 +1141,13 @@ def main():
         gatt_server.set_discoverable(False)
     except Exception as exc:
         logger.error("[BITOS] GATT server failed to start: %s", exc)
+
+    # Auto-reconnect BT audio AFTER GATT is initialized to avoid D-Bus contention
+    threading.Thread(
+        target=bt_audio_manager.auto_reconnect_last,
+        name="bt-audio-reconnect",
+        daemon=True,
+    ).start()
 
     try:
         provision_server.start()

@@ -73,6 +73,11 @@ class BluetoothAudioManager:
         if not self._bt_available:
             logger.warning("[BT-AUDIO] bluetoothctl not available — Bluetooth audio disabled")
 
+        # Detect audio stack: PulseAudio (pactl) or ALSA-only (amixer/aplay)
+        self._has_pulseaudio = self._check_pulseaudio()
+        if not self._has_pulseaudio:
+            logger.info("[BT-AUDIO] PulseAudio not available — using ALSA for audio routing")
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -95,10 +100,8 @@ class BluetoothAudioManager:
         self._scan_results = []
 
         try:
-            # Power on adapter and set agent
+            # Power on adapter (agent is registered by GATT server — don't duplicate)
             self._run_bluetoothctl(["power", "on"])
-            self._run_bluetoothctl(["agent", "NoInputNoOutput"])
-            self._run_bluetoothctl(["default-agent"])
 
             # Start scanning
             self._run_bluetoothctl(["scan", "on"], timeout=2, ignore_errors=True)
@@ -357,17 +360,28 @@ class BluetoothAudioManager:
 
     def is_audio_routed_to_bt(self) -> bool:
         """Return True if audio is currently routed to a Bluetooth sink."""
-        try:
-            result = subprocess.run(
-                ["pactl", "get-default-sink"],
-                capture_output=True, text=True, timeout=5,
-            )
-            if result.returncode == 0:
-                sink = result.stdout.strip().lower()
-                return "bluez" in sink or "bluetooth" in sink
-        except Exception:
-            pass
-        return False
+        if self._has_pulseaudio:
+            try:
+                result = subprocess.run(
+                    ["pactl", "get-default-sink"],
+                    capture_output=True, text=True, timeout=5,
+                )
+                if result.returncode == 0:
+                    sink = result.stdout.strip().lower()
+                    return "bluez" in sink or "bluetooth" in sink
+            except Exception:
+                pass
+            return False
+        else:
+            # ALSA path: check if .asoundrc contains bluealsa
+            try:
+                import pathlib
+                rc = pathlib.Path.home() / ".asoundrc"
+                if rc.exists():
+                    return "bluealsa" in rc.read_text().lower()
+            except Exception:
+                pass
+            return False
 
     def auto_reconnect_last(self) -> bool:
         """Try to reconnect to the last paired device (call at boot).
@@ -395,6 +409,18 @@ class BluetoothAudioManager:
         try:
             result = subprocess.run(
                 ["bluetoothctl", "--version"],
+                capture_output=True, text=True, timeout=5,
+            )
+            return result.returncode == 0
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return False
+
+    @staticmethod
+    def _check_pulseaudio() -> bool:
+        """Return True if PulseAudio (pactl) is available."""
+        try:
+            result = subprocess.run(
+                ["pactl", "--version"],
                 capture_output=True, text=True, timeout=5,
             )
             return result.returncode == 0
@@ -471,9 +497,27 @@ class BluetoothAudioManager:
         return info
 
     def _switch_audio_to_bt(self) -> None:
-        """Switch PulseAudio default sink to the Bluetooth device."""
+        """Switch audio output to the Bluetooth device.
+
+        Uses PulseAudio (pactl) if available, otherwise writes an ALSA
+        .asoundrc config pointing the default PCM to the bluealsa device.
+        """
+        if self._has_pulseaudio:
+            self._switch_audio_to_bt_pulse()
+        else:
+            self._switch_audio_to_bt_alsa()
+
+    def _switch_audio_to_speaker(self) -> None:
+        """Switch audio output back to the built-in speaker."""
+        if self._has_pulseaudio:
+            self._switch_audio_to_speaker_pulse()
+        else:
+            self._switch_audio_to_speaker_alsa()
+
+    # -- PulseAudio path --------------------------------------------------
+
+    def _switch_audio_to_bt_pulse(self) -> None:
         try:
-            # List sinks and find the bluez one
             result = subprocess.run(
                 ["pactl", "list", "short", "sinks"],
                 capture_output=True, text=True, timeout=5,
@@ -492,18 +536,14 @@ class BluetoothAudioManager:
                             capture_output=True, timeout=5,
                         )
                         logger.info("[BT-AUDIO] audio routed to BT sink: %s", sink_name)
-
-                        # Move existing streams to the new sink
                         self._move_streams_to_sink(sink_name)
                         return
 
             logger.warning("[BT-AUDIO] no Bluetooth sink found in pactl")
-
         except Exception as exc:
-            logger.error("[BT-AUDIO] switch_audio_to_bt error: %s", exc)
+            logger.error("[BT-AUDIO] switch_audio_to_bt (pulse) error: %s", exc)
 
-    def _switch_audio_to_speaker(self) -> None:
-        """Switch PulseAudio default sink back to the built-in speaker."""
+    def _switch_audio_to_speaker_pulse(self) -> None:
         try:
             result = subprocess.run(
                 ["pactl", "list", "short", "sinks"],
@@ -516,22 +556,18 @@ class BluetoothAudioManager:
                 parts = line.split("\t")
                 if len(parts) >= 2:
                     sink_name = parts[1]
-                    # Look for the non-BT sink (ALSA / built-in)
                     if "bluez" not in sink_name.lower() and "bluetooth" not in sink_name.lower():
                         subprocess.run(
                             ["pactl", "set-default-sink", sink_name],
                             capture_output=True, timeout=5,
                         )
                         logger.info("[BT-AUDIO] audio routed to speaker: %s", sink_name)
-
-                        # Move existing streams to the speaker
                         self._move_streams_to_sink(sink_name)
                         return
 
             logger.warning("[BT-AUDIO] no built-in speaker sink found")
-
         except Exception as exc:
-            logger.error("[BT-AUDIO] switch_audio_to_speaker error: %s", exc)
+            logger.error("[BT-AUDIO] switch_audio_to_speaker (pulse) error: %s", exc)
 
     @staticmethod
     def _move_streams_to_sink(sink_name: str) -> None:
@@ -543,17 +579,70 @@ class BluetoothAudioManager:
             )
             if result.returncode != 0:
                 return
-
             for line in result.stdout.strip().splitlines():
                 parts = line.split("\t")
                 if parts:
-                    stream_id = parts[0]
                     subprocess.run(
-                        ["pactl", "move-sink-input", stream_id, sink_name],
+                        ["pactl", "move-sink-input", parts[0], sink_name],
                         capture_output=True, timeout=5,
                     )
         except Exception:
             pass  # Best-effort stream migration
+
+    # -- ALSA path (Pi OS Lite without PulseAudio) -------------------------
+
+    def _switch_audio_to_bt_alsa(self) -> None:
+        """Write ~/.asoundrc to route default ALSA output to bluealsa."""
+        with self._lock:
+            dev = self._connected_device
+        if not dev:
+            return
+
+        address = dev.address
+        asoundrc = (
+            f'# Auto-generated by BITOS BT audio manager\n'
+            f'pcm.!default {{\n'
+            f'    type plug\n'
+            f'    slave.pcm {{\n'
+            f'        type bluealsa\n'
+            f'        device "{address}"\n'
+            f'        profile "a2dp"\n'
+            f'    }}\n'
+            f'}}\n'
+            f'ctl.!default {{\n'
+            f'    type bluealsa\n'
+            f'}}\n'
+        )
+        try:
+            import pathlib
+            home = pathlib.Path.home()
+            rc_path = home / ".asoundrc"
+            # Back up existing config
+            if rc_path.exists():
+                backup = home / ".asoundrc.bak"
+                if not backup.exists():
+                    rc_path.rename(backup)
+                    logger.info("[BT-AUDIO] backed up existing .asoundrc")
+            rc_path.write_text(asoundrc)
+            logger.info("[BT-AUDIO] ALSA default routed to BT device %s", address)
+        except Exception as exc:
+            logger.error("[BT-AUDIO] failed to write .asoundrc: %s", exc)
+
+    def _switch_audio_to_speaker_alsa(self) -> None:
+        """Restore original ~/.asoundrc (or remove BT override)."""
+        try:
+            import pathlib
+            home = pathlib.Path.home()
+            rc_path = home / ".asoundrc"
+            backup = home / ".asoundrc.bak"
+            if backup.exists():
+                backup.rename(rc_path)
+                logger.info("[BT-AUDIO] restored original .asoundrc")
+            elif rc_path.exists():
+                rc_path.unlink()
+                logger.info("[BT-AUDIO] removed BT .asoundrc — using system default")
+        except Exception as exc:
+            logger.error("[BT-AUDIO] failed to restore .asoundrc: %s", exc)
 
     def _save_last_device(self, address: str) -> None:
         """Persist the last connected device address for auto-reconnect."""

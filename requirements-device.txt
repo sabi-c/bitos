@@ -3,3 +3,4 @@ qrcode==7.4.2
 httpx>=0.28.0
 edge-tts>=6.1.0
 pydub>=0.25.1
+bluezero>=0.8.0  # BLE GATT server — requires: sudo apt install python3-gi libgirepository1.0-dev

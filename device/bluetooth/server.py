@@ -251,6 +251,15 @@ class BitosGATTServer:
         dongle = adapter_mod.Adapter(addr)
         dongle.powered = True
 
+        # Register agent once at GATT startup — stays active for all pairing flows
+        # (not just during discoverable mode). Single owner avoids races with audio_manager.
+        try:
+            subprocess.run(["bluetoothctl", "agent", "NoInputNoOutput"], capture_output=True, timeout=5, check=False)
+            subprocess.run(["bluetoothctl", "default-agent"], capture_output=True, timeout=5, check=False)
+            logger.info("[BLE] NoInputNoOutput agent registered at GATT startup")
+        except Exception as exc:
+            logger.warning("[BLE] agent registration failed: %s", exc)
+
         self._peripheral = peripheral_mod.Peripheral(addr, local_name="BITOS")
 
         # -- Service --
