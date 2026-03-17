@@ -11,6 +11,12 @@
 <body>
   <h1>&#9678; BITOS</h1>
 
+  <!-- Connection badge -->
+  <div class="conn-badge" id="conn-badge">
+    <div class="conn-dot" id="conn-dot"></div>
+    <span id="conn-label">CHECKING...</span>
+  </div>
+
   <!-- Status hero -->
   <div class="card" id="status-card">
     <h2>DEVICE STATUS</h2>
@@ -90,6 +96,10 @@
       navigator.serviceWorker.register('/sw.js').catch(() => {});
     }
   </script>
+  <script src="js/auth.js"></script>
+  <script src="js/crypto.js"></script>
+  <script src="js/ble.js"></script>
+  <script src="js/connection.js"></script>
   <script src="js/nav.js"></script>
   <script>
     const SERVER = getServerUrl();
@@ -97,9 +107,70 @@
     let currentMode = 'producer';
     let refreshTimer = null;
 
+    // ── Device provisioning URL (HTTP port 8080) ──
+    function getDeviceProvisionUrl() {
+      const s = connMgr.settings;
+      const ip = s.deviceIp || 'bitos.local';
+      const port = s.port || 8080;
+      return `http://${ip}:${port}`;
+    }
+
+    // ── Check device health via HTTP provisioning server ──
+    async function checkDeviceHealth() {
+      const url = getDeviceProvisionUrl();
+      try {
+        const r = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(3000) });
+        if (r.ok) {
+          const d = await r.json();
+          return { online: true, data: d };
+        }
+      } catch (_) {}
+      return { online: false };
+    }
+
+    // ── Fetch device status from provisioning server ──
+    async function fetchDeviceProvisionStatus() {
+      const url = getDeviceProvisionUrl();
+      try {
+        const r = await fetch(`${url}/api/device/status`, { signal: AbortSignal.timeout(3000) });
+        if (r.ok) return r.json();
+      } catch (_) {}
+      return null;
+    }
+
+    // ── Fetch WiFi status from provisioning server ──
+    async function fetchWifiStatus() {
+      const url = getDeviceProvisionUrl();
+      try {
+        const r = await fetch(`${url}/api/wifi/status`, { signal: AbortSignal.timeout(3000) });
+        if (r.ok) return r.json();
+      } catch (_) {}
+      return null;
+    }
+
+    // ── Update connection badge ──
+    function updateConnectionBadge(serverOk, deviceOk) {
+      const dot = document.getElementById('conn-dot');
+      const label = document.getElementById('conn-label');
+      dot.className = 'conn-dot';
+
+      if (serverOk && deviceOk) {
+        dot.classList.add('online');
+        label.textContent = 'ONLINE';
+      } else if (serverOk || deviceOk) {
+        dot.classList.add('partial');
+        label.textContent = serverOk ? 'SERVER ONLY' : 'DEVICE ONLY';
+      } else {
+        label.textContent = 'DEVICE OFFLINE';
+      }
+    }
+
     // ── Fetch device status ──
     async function fetchStatus() {
-      // Device settings (name, agent mode)
+      let serverOk = false;
+      let deviceOk = false;
+
+      // Device settings (name, agent mode) from main server
       try {
         const r = await fetch(`${SERVER}/settings/device`, { signal: AbortSignal.timeout(3000) });
         if (r.ok) {
@@ -113,7 +184,7 @@
         }
       } catch (_) {}
 
-      // Battery
+      // Battery from main server
       try {
         const r = await fetch(`${SERVER}/device/battery`, { signal: AbortSignal.timeout(3000) });
         if (r.ok) {
@@ -133,13 +204,13 @@
           document.getElementById('s-server').textContent =
             (d.version || 'online');
           document.getElementById('s-server').style.color = '#4f4';
-          // wifi from health if available
           if (d.wifi_ssid) {
             document.getElementById('s-wifi').textContent = d.wifi_ssid;
           } else {
             document.getElementById('s-wifi').textContent = 'Connected';
           }
           document.getElementById('s-wifi').style.color = '#4f4';
+          serverOk = true;
         } else {
           throw new Error();
         }
@@ -154,14 +225,14 @@
       const deviceCheck = await checkDeviceHealth();
       const linkEl = document.getElementById('s-device-link');
       if (deviceCheck.online) {
+        deviceOk = true;
         linkEl.textContent = 'Online';
         linkEl.style.color = '#4f4';
-        // If server is offline but device is reachable, update device name
         if (document.getElementById('s-device').textContent === '--') {
           document.getElementById('s-device').textContent = 'BITOS';
         }
-        // Try to get richer status from device
-        const devStatus = await fetchDeviceStatus();
+        // Try richer status from device provisioning server
+        const devStatus = await fetchDeviceProvisionStatus();
         if (devStatus) {
           if (devStatus.battery != null && document.getElementById('s-battery').textContent === '--') {
             const chg = devStatus.charging ? ' +' : '';
@@ -172,10 +243,18 @@
             document.getElementById('s-wifi').style.color = '#4f4';
           }
         }
+        // Also try WiFi status endpoint
+        const wifiSt = await fetchWifiStatus();
+        if (wifiSt && wifiSt.connected && wifiSt.ssid) {
+          document.getElementById('s-wifi').textContent = wifiSt.ssid;
+          document.getElementById('s-wifi').style.color = '#4f4';
+        }
       } else {
         linkEl.textContent = 'Offline';
         linkEl.style.color = '#f44';
       }
+
+      updateConnectionBadge(serverOk, deviceOk);
     }
 
     // ── Fetch context (weather + events) ──
@@ -288,7 +367,6 @@
       const ms = parseInt(mins) * 60000;
       if (isNaN(ms) || ms <= 0) return;
       showToast('FOCUS: ' + mins + ' MIN');
-      // Request notification permission upfront
       if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
         Notification.requestPermission();
       }
