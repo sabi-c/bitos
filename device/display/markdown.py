@@ -120,3 +120,72 @@ def strip_markdown(text: str) -> str:
     # Convert bullet markers to bullet char
     text = re.sub(r'^[-*]\s+', '\u2022 ', text)
     return text
+
+
+def wrap_markdown_text(text: str, font, max_width: int) -> list[str]:
+    """Word-wrap text while preserving markdown markers.
+
+    Measures line width using stripped (visible) text so markdown syntax
+    characters don't waste pixel space, but keeps the markers in the
+    returned lines so parse_line() can style them during rendering.
+
+    Args:
+        text: Raw text that may contain markdown.
+        font: Pygame font for measuring pixel widths.
+        max_width: Maximum pixel width per line.
+
+    Returns:
+        List of wrapped lines with markdown preserved.
+    """
+    lines: list[str] = []
+
+    for paragraph in text.split("\n"):
+        if not paragraph.strip():
+            lines.append("")
+            continue
+
+        # Detect block-level prefix (bullet / numbered list) for continuation indent
+        indent_prefix = ""
+        body = paragraph
+        stripped_p = paragraph.strip()
+        if stripped_p.startswith("- ") or stripped_p.startswith("* "):
+            # Will become bullet char in parse_line; measure with bullet
+            indent_prefix = "  "  # continuation lines get 2-space indent
+        elif re.match(r"^\d+\.\s", stripped_p):
+            m = re.match(r"^(\d+\.)\s", stripped_p)
+            if m:
+                indent_prefix = " " * (len(m.group(1)) + 1)
+
+        words = paragraph.split(" ")
+        current_raw = ""  # with markdown markers
+
+        for word in words:
+            test_raw = f"{current_raw} {word}".strip() if current_raw else word
+            test_visible = strip_markdown(test_raw)
+            w = font.size(test_visible)[0]
+            if w <= max_width:
+                current_raw = test_raw
+            else:
+                if current_raw:
+                    lines.append(current_raw)
+                # Check if word itself fits (with indent for continuation)
+                word_with_indent = indent_prefix + word if lines else word
+                word_visible = strip_markdown(word_with_indent)
+                if font.size(word_visible)[0] <= max_width:
+                    current_raw = word_with_indent
+                else:
+                    # Character-level wrap (rare on 240px display)
+                    current_raw = indent_prefix if lines else ""
+                    for char in word:
+                        test_char = current_raw + char
+                        if font.size(strip_markdown(test_char))[0] <= max_width:
+                            current_raw = test_char
+                        else:
+                            if current_raw.strip():
+                                lines.append(current_raw)
+                            current_raw = char
+
+        if current_raw:
+            lines.append(current_raw)
+
+    return lines or [""]

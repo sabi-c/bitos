@@ -1,6 +1,7 @@
 """Tests for the lightweight markdown parser."""
+import pygame
 from device.display.markdown import (
-    parse_line, strip_markdown, Segment,
+    parse_line, strip_markdown, wrap_markdown_text, Segment,
     STYLE_NORMAL, STYLE_BOLD, STYLE_ITALIC, STYLE_CODE,
     STYLE_HEADER, STYLE_BULLET,
 )
@@ -97,3 +98,60 @@ class TestStripMarkdown:
 
     def test_plain_unchanged(self):
         assert strip_markdown("hello world") == "hello world"
+
+
+class TestWrapMarkdownText:
+    """Tests for markdown-aware word wrapping."""
+
+    @classmethod
+    def setup_class(cls):
+        pygame.init()
+        cls.font = pygame.font.Font(None, 16)
+
+    @classmethod
+    def teardown_class(cls):
+        pygame.quit()
+
+    def test_short_text_no_wrap(self):
+        lines = wrap_markdown_text("hello", self.font, 300)
+        assert lines == ["hello"]
+
+    def test_preserves_bold_markers(self):
+        lines = wrap_markdown_text("**bold**", self.font, 300)
+        assert lines == ["**bold**"]
+        # parse_line should still detect the bold
+        segs = parse_line(lines[0])
+        assert segs[0].style == STYLE_BOLD
+
+    def test_empty_line_paragraph_break(self):
+        lines = wrap_markdown_text("hello\n\nworld", self.font, 300)
+        assert "" in lines  # paragraph break preserved
+
+    def test_bullet_preserved(self):
+        lines = wrap_markdown_text("- item one", self.font, 300)
+        assert lines[0] == "- item one"
+        segs = parse_line(lines[0])
+        assert segs[0].style == STYLE_BULLET
+
+    def test_wrap_excludes_marker_width(self):
+        """Markdown markers should not count toward visible width."""
+        # Create text with bold markers that fits without markers but not with
+        plain = "a " * 20  # roughly 40 chars
+        bold_text = "**" + plain.strip() + "**"
+        # Wrap at a width that fits the plain text
+        plain_w = self.font.size(plain.strip())[0]
+        lines_md = wrap_markdown_text(bold_text, self.font, plain_w + 10)
+        lines_plain = wrap_markdown_text(plain.strip(), self.font, plain_w + 10)
+        # Both should produce the same number of lines (markers don't add width)
+        assert len(lines_md) == len(lines_plain)
+
+    def test_numbered_list(self):
+        lines = wrap_markdown_text("1. first item", self.font, 300)
+        assert lines[0] == "1. first item"
+
+    def test_multiline_with_markdown(self):
+        text = "**Title**\n- item one\n- item two"
+        lines = wrap_markdown_text(text, self.font, 300)
+        assert "**Title**" in lines
+        assert "- item one" in lines
+        assert "- item two" in lines

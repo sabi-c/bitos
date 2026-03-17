@@ -32,7 +32,7 @@ from display.pagination import split_into_pages as _shared_split_into_pages
 from display.pagination import wrap_text as _shared_wrap_text
 from display.typewriter import TypewriterRenderer
 from display.theme import merge_runtime_ui_settings, load_ui_font, ui_line_height
-from display.markdown import parse_line, STYLE_BOLD, STYLE_ITALIC, STYLE_CODE, STYLE_HEADER, STYLE_BULLET
+from display.markdown import parse_line, wrap_markdown_text, STYLE_BOLD, STYLE_ITALIC, STYLE_CODE, STYLE_HEADER, STYLE_BULLET
 from client.api import BackendClient, BackendChatError
 from audio import AudioPipeline
 from storage.repository import DeviceRepository
@@ -692,22 +692,42 @@ class ChatPanel(BaseScreen):
                     snapshot[i] = {"role": "user", "text": self._user_typewriter.get_visible_text()}
                     break
 
-        visible_lines = []
+        visible_lines = []  # list of (line_text, role)
+        avail_w = PHYSICAL_W - SAFE_INSET * 2
         for msg in snapshot:
-            prefix = "> " if msg["role"] == "user" else ""
-            color = DIM2 if msg["role"] == "user" else WHITE
-            lines = self._wrap_text(prefix + msg["text"], PHYSICAL_W - SAFE_INSET * 2)
-            for line in lines:
-                visible_lines.append((line, color))
+            if msg["role"] == "user":
+                prefix = "> "
+                lines = self._wrap_text(prefix + msg["text"], avail_w)
+                for line in lines:
+                    visible_lines.append((line, "user"))
+            else:
+                # Assistant: markdown-aware wrap preserving markers
+                lines = wrap_markdown_text(msg["text"], self._font, avail_w)
+                for line in lines:
+                    visible_lines.append((line, "assistant"))
+            # Paragraph spacing between messages
+            visible_lines.append(("", "spacer"))
+
+        # Remove trailing spacer
+        if visible_lines and visible_lines[-1][1] == "spacer":
+            visible_lines.pop()
 
         msg_y = top
         max_visible = int((bottom - top) / self._line_height)
         start = max(0, len(visible_lines) - max_visible - self._scroll_offset)
-        for line_text, color in visible_lines[start:]:
+        for line_text, role in visible_lines[start:]:
             if msg_y > bottom:
                 break
-            text_surface = self._font.render(line_text, False, color)
-            surface.blit(text_surface, (SAFE_INSET, msg_y))
+            if role == "spacer":
+                # Half-height paragraph gap
+                msg_y += self._line_height // 2
+                continue
+            if role == "assistant":
+                self._render_styled_line(surface, line_text, SAFE_INSET, msg_y)
+            else:
+                # User messages: dim, no markdown parsing
+                text_surface = self._font.render(line_text, False, DIM2)
+                surface.blit(text_surface, (SAFE_INSET, msg_y))
             msg_y += self._line_height
 
         # Retry hint
