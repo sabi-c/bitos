@@ -65,7 +65,7 @@ from notifications import NotificationPoller
 from overlays import AgentOverlay, NotificationQueue, NotificationToast, QROverlay
 from overlays.notification_banner import NotificationBanner
 from bluetooth import AuthManager, get_gatt_server
-from bluetooth.characteristics import DeviceInfoCharacteristic, WiFiStatusCharacteristic
+from bluetooth.characteristics import DeviceInfoCharacteristic, DeviceStatusCharacteristic, WiFiStatusCharacteristic
 from bluetooth.constants import build_setup_url
 from bluetooth.network_manager import NetworkPriorityManager
 from bluetooth.wifi_manager import WiFiManager
@@ -509,6 +509,7 @@ def main():
         return screen_mgr.set_compose_text(target=target, text=text, cursor=cursor_pos)
 
     device_info_char = DeviceInfoCharacteristic()
+    device_status_char = DeviceStatusCharacteristic()
 
     startup_health = {"backend": None, "database": None, "api_key": bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY"))}
 
