@@ -49,7 +49,15 @@ class NotificationPoller:
         consecutive_errors = 0
         while not self._stop.wait(1.0):
             try:
+                setup_done = self._repository.get_setting("setup_complete", False)
                 now = time.time()
+                # Settings polling always runs (companion app needs it during setup)
+                if now >= next_settings_poll:
+                    self._poll_pending_settings()
+                    next_settings_poll = now + 5.0
+                # All other notifications suppressed until setup/passcode complete
+                if not setup_done:
+                    continue
                 if now >= next_health_poll:
                     self._poll_health_state()
                     next_health_poll = now + 30.0
@@ -62,9 +70,6 @@ class NotificationPoller:
                 if now >= next_update_poll:
                     self._poll_update_available()
                     next_update_poll = now + 3600.0  # Re-check hourly
-                if now >= next_settings_poll:
-                    self._poll_pending_settings()
-                    next_settings_poll = now + 5.0  # Check every 5s
                 if now >= next_activity_poll:
                     self._poll_activity_feed()
                     next_activity_poll = now + 30.0  # Check every 30s

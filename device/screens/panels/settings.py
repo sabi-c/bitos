@@ -11,6 +11,9 @@
 """BITOS Settings panel and picker/detail screens (Phase 4 wiring)."""
 from __future__ import annotations
 
+import logging
+import threading
+
 import pygame
 
 from display.theme import load_ui_font, merge_runtime_ui_settings
@@ -347,15 +350,24 @@ class SettingsPanel(BaseScreen):
         if not self._client:
             return
         if self._update_available:
-            # Trigger the update
             self._firmware_status = "UPDATING..."
-            try:
-                self._client.trigger_update()
-            except Exception:
-                self._firmware_status = "UPDATE FAILED"
+            def _do_update():
+                try:
+                    result = self._client.trigger_update()
+                    if result.get("ok"):
+                        self._firmware_status = "DONE — RESTARTING"
+                        self._update_available = False
+                    else:
+                        self._firmware_status = "UPDATE FAILED"
+                except Exception as exc:
+                    logging.getLogger(__name__).error("ota_update_error: %s", exc)
+                    self._firmware_status = "UPDATE FAILED"
+            threading.Thread(target=_do_update, daemon=True).start()
         else:
-            # Just refresh the status
-            self._refresh_firmware_status()
+            self._firmware_status = "CHECKING..."
+            def _do_check():
+                self._refresh_firmware_status()
+            threading.Thread(target=_do_check, daemon=True).start()
 
     def _refresh_integration_status(self):
         if not self._client:

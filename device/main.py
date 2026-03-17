@@ -378,10 +378,14 @@ def main():
     button.on(ButtonEvent.HOLD_START, lambda: _on_button(ButtonEvent.HOLD_START))
     button.on(ButtonEvent.HOLD_END, lambda: _on_button(ButtonEvent.HOLD_END))
     def _on_power_gesture():
-        # Dev bypass: 5-press on lock screen skips PIN
         current = screen_mgr.current if hasattr(screen_mgr, 'current') else None
+        # Dev bypass: 5-press on lock screen skips PIN
         if isinstance(current, LockScreen):
             current.bypass_unlock()
+            return
+        # 5-press during setup wizard skips to home
+        if isinstance(current, SetupWizardPanel):
+            current._finish_wizard()
             return
         open_power_overlay()
 
