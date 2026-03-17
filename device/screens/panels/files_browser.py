@@ -26,6 +26,12 @@ class FilesBrowserPanel(BaseScreen):
         self._state = "loading"  # loading | ready | empty | error
         self._files: list[dict] = []
         self._load_thread: threading.Thread | None = None
+        self._path_stack: list[str] = []  # folder drill-down stack
+
+    @property
+    def _current_path(self) -> str:
+        """Current folder path from stack."""
+        return self._path_stack[-1] if self._path_stack else ""
 
     def on_enter(self):
         self._fetch_files()
@@ -34,12 +40,15 @@ class FilesBrowserPanel(BaseScreen):
         if self._load_thread and self._load_thread.is_alive():
             return
 
+        current_path = self._current_path
+
         def _run():
             try:
-                files = self._client.get_files()
+                files = self._client.get_files(path=current_path)
                 with self._lock:
                     self._files = files
                     self._state = "ready" if files else "empty"
+                    self._cursor = 0
             except Exception:
                 with self._lock:
                     self._files = []
@@ -54,7 +63,11 @@ class FilesBrowserPanel(BaseScreen):
 
     def handle_action(self, action: str):
         if action == "LONG_PRESS":
-            if self._on_back:
+            # If in subfolder, pop path and go up; else call on_back
+            if self._path_stack:
+                self._path_stack.pop()
+                self._fetch_files()
+            elif self._on_back:
                 self._on_back()
             return
 
@@ -68,14 +81,27 @@ class FilesBrowserPanel(BaseScreen):
                 self._cursor = (self._cursor - 1) % len(self._files)
             elif action == "DOUBLE_PRESS":
                 selected = self._files[self._cursor]
-                if self._on_open_file:
-                    self._on_open_file(selected)
+                if selected.get("type") == "dir":
+                    # Drill into directory
+                    self._path_stack.append(selected.get("path", ""))
+                    self._lock.release()
+                    try:
+                        self._fetch_files()
+                    finally:
+                        self._lock.acquire()
+                else:
+                    if self._on_open_file:
+                        self._on_open_file(selected)
 
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
 
-        # Status bar
-        title = self._font_small.render("FILES", False, WHITE)
+        # Status bar — show current path or "FILES"
+        header = self._current_path if self._path_stack else "FILES"
+        # Truncate long paths to fit display
+        if len(header) > 24:
+            header = ".../" + header.split("/")[-1] if "/" in header else header[:24]
+        title = self._font_small.render(header.upper(), False, WHITE)
         surface.blit(title, (SAFE_INSET, (STATUS_BAR_H - title.get_height()) // 2))
         pygame.draw.line(surface, HAIRLINE, (0, STATUS_BAR_H - 1), (PHYSICAL_W, STATUS_BAR_H - 1))
 
@@ -117,15 +143,32 @@ class FilesBrowserPanel(BaseScreen):
             dim_color = BLACK if focused else DIM3
             indicator = "> " if focused else "  "
 
-            # File type indicator
-            type_label = file_data.get("type", "text")[:3].upper()
-            type_surf = self._font_small.render(indicator + type_label, False, dim_color)
-            surface.blit(type_surf, (SAFE_INSET, y + 2))
+            entry_type = file_data.get("type", "text")
 
-            # File name
-            name = str(file_data.get("name", "untitled"))[:24]
-            name_surf = self._font_body.render(name, False, text_color)
-            surface.blit(name_surf, (SAFE_INSET, y + self._font_small.get_height() + 4))
+            if entry_type == "dir":
+                # Directory entry: show folder icon and item count
+                type_label = "DIR"
+                type_surf = self._font_small.render(indicator + type_label, False, dim_color)
+                surface.blit(type_surf, (SAFE_INSET, y + 2))
+
+                name = str(file_data.get("name", "untitled"))[:24]
+                name_surf = self._font_body.render(name, False, text_color)
+                surface.blit(name_surf, (SAFE_INSET, y + self._font_small.get_height() + 4))
+
+                # Item count on right side
+                count = file_data.get("item_count", 0)
+                count_label = f"{count} items" if count != 1 else "1 item"
+                count_surf = self._font_small.render(count_label, False, dim_color)
+                surface.blit(count_surf, (PHYSICAL_W - SAFE_INSET - count_surf.get_width(), y + 2))
+            else:
+                # File entry: show type and name
+                type_label = entry_type[:3].upper()
+                type_surf = self._font_small.render(indicator + type_label, False, dim_color)
+                surface.blit(type_surf, (SAFE_INSET, y + 2))
+
+                name = str(file_data.get("name", "untitled"))[:24]
+                name_surf = self._font_body.render(name, False, text_color)
+                surface.blit(name_surf, (SAFE_INSET, y + self._font_small.get_height() + 4))
 
             y += ROW_H_MIN
 

@@ -58,31 +58,39 @@ class MarkdownViewerPanelTests(unittest.TestCase):
         panel = self._make_panel(content=long_content)
         self.assertGreaterEqual(len(panel._pages), 1)
 
-    def test_triple_press_advances_page(self):
+    def test_short_press_advances_page(self):
         panel = self._make_panel()
         # Mark page 0 typewriter as done
         panel._page_typewriter = None
         panel._page_revealed[0] = True
-        panel.handle_action("TRIPLE_PRESS")
+        panel.handle_action("SHORT_PRESS")
         self.assertEqual(panel._current_page, 1)
 
-    def test_triple_press_cycles(self):
+    def test_short_press_cycles(self):
         panel = self._make_panel()
         panel._page_revealed = [True, True, True]
         panel._page_typewriter = None
         panel._current_page = 2
-        panel.handle_action("TRIPLE_PRESS")
+        panel.handle_action("SHORT_PRESS")
         self.assertEqual(panel._current_page, 0)
 
-    def test_triple_press_marks_current_revealed(self):
+    def test_short_press_marks_current_revealed(self):
         panel = self._make_panel()
         panel._page_revealed = [False, False, False]
         panel._current_page = 0
         panel._page_typewriter = MagicMock()
         panel._page_typewriter.finished = False
-        panel.handle_action("TRIPLE_PRESS")
+        panel.handle_action("SHORT_PRESS")
         self.assertTrue(panel._page_revealed[0])
         self.assertEqual(panel._current_page, 1)
+
+    def test_triple_press_goes_back_page(self):
+        panel = self._make_panel()
+        panel._page_revealed = [True, True, True]
+        panel._page_typewriter = None
+        panel._current_page = 1
+        panel.handle_action("TRIPLE_PRESS")
+        self.assertEqual(panel._current_page, 0)
 
     def test_long_press_calls_on_back(self):
         called = []
@@ -105,7 +113,14 @@ class MarkdownViewerPanelTests(unittest.TestCase):
         surface = pygame.Surface((240, 280))
         panel.render(surface)
 
-    def test_single_page_no_triple_advance(self):
+    def test_single_page_no_short_advance(self):
+        panel = self._make_panel(pages=["Only one page."])
+        panel._page_revealed = [True]
+        panel._page_typewriter = None
+        panel.handle_action("SHORT_PRESS")
+        self.assertEqual(panel._current_page, 0)
+
+    def test_single_page_no_triple_back(self):
         panel = self._make_panel(pages=["Only one page."])
         panel._page_revealed = [True]
         panel._page_typewriter = None

@@ -1592,33 +1592,54 @@ def _is_safe_path(base: Path, target: Path) -> bool:
 
 
 @app.get("/files")
-async def list_files(path: str = "", limit: int = 20):
-    """List files in the curated file system."""
+async def list_files(path: str = "", limit: int = 50):
+    """List directories and files in the curated file system.
+
+    Directories are listed first (type="dir" with item_count),
+    then files sorted alphabetically by name.
+    """
     scan_dir = BITOS_FILES_DIR / path
     if not _is_safe_path(BITOS_FILES_DIR, scan_dir):
         raise HTTPException(status_code=400, detail="Invalid path")
     if not scan_dir.is_dir():
-        return {"files": []}
+        return {"files": [], "path": path}
 
-    files = []
-    for entry in sorted(scan_dir.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
-        if not entry.is_file():
+    dirs: list[dict] = []
+    files: list[dict] = []
+    for entry in sorted(scan_dir.iterdir(), key=lambda p: p.name.lower()):
+        if entry.name.startswith("."):
             continue
-        if entry.suffix.lower() not in _ALLOWED_EXTENSIONS:
-            continue
-        rel = entry.relative_to(BITOS_FILES_DIR)
-        file_type = "markdown" if entry.suffix.lower() == ".md" else "text"
-        files.append({
-            "id": _file_id_encode(str(rel)),
-            "name": entry.stem,
-            "path": str(rel),
-            "size": entry.stat().st_size,
-            "type": file_type,
-        })
-        if len(files) >= limit:
-            break
+        if entry.is_dir():
+            # Count visible items inside
+            try:
+                item_count = sum(
+                    1 for child in entry.iterdir()
+                    if not child.name.startswith(".")
+                    and (child.is_dir() or child.suffix.lower() in _ALLOWED_EXTENSIONS)
+                )
+            except OSError:
+                item_count = 0
+            rel = entry.relative_to(BITOS_FILES_DIR)
+            dirs.append({
+                "id": _file_id_encode(str(rel)),
+                "name": entry.name,
+                "path": str(rel),
+                "type": "dir",
+                "item_count": item_count,
+            })
+        elif entry.is_file() and entry.suffix.lower() in _ALLOWED_EXTENSIONS:
+            rel = entry.relative_to(BITOS_FILES_DIR)
+            file_type = "markdown" if entry.suffix.lower() == ".md" else "text"
+            files.append({
+                "id": _file_id_encode(str(rel)),
+                "name": entry.stem,
+                "path": str(rel),
+                "size": entry.stat().st_size,
+                "type": file_type,
+            })
 
-    return {"files": files}
+    combined = dirs + files
+    return {"files": combined[:limit], "path": path}
 
 
 @app.get("/files/{file_id}")
@@ -1696,6 +1717,48 @@ async def parse_file(file_id: str):
         "page_count": len(pages),
         "title": title,
     }
+
+
+class FileQueryRequest(BaseModel):
+    question: str = Field(..., min_length=1, max_length=500)
+
+
+@app.post("/files/{file_id}/query")
+async def query_file(file_id: str, req: FileQueryRequest):
+    """Answer a question about a file using LLM context."""
+    try:
+        rel_path = _file_id_decode(file_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid file ID")
+
+    file_path = BITOS_FILES_DIR / rel_path
+    if not _is_safe_path(BITOS_FILES_DIR, file_path):
+        raise HTTPException(status_code=400, detail="Invalid path")
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    content = file_path.read_text(encoding="utf-8")
+    title = file_path.stem.replace("-", " ").replace("_", " ").title()
+
+    prompt = (
+        f"Document: {title}\n\n{content[:4000]}\n\n"
+        f"Question: {req.question}\n\n"
+        f"Answer concisely in 2-3 sentences (under 300 characters). "
+        f"This will be displayed on a tiny OLED screen."
+    )
+
+    try:
+        complete_text = getattr(llm_bridge, "complete_text", None)
+        if callable(complete_text):
+            answer = complete_text(prompt)
+        else:
+            answer = "".join(llm_bridge.stream_text(prompt))
+        answer = answer.strip()
+    except Exception as exc:
+        logger.warning("file_query_llm_failed: %s", exc)
+        raise HTTPException(status_code=502, detail="LLM query failed")
+
+    return {"answer": answer, "file_id": file_id, "question": req.question}
 
 
 # ── Heartbeat Endpoints ─────────────────────────────────────────────

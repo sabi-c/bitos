@@ -1018,11 +1018,23 @@ def main():
 
     def open_files_browser():
         def _open_file_viewer(file_data: dict):
+            def _agent_query(context: str):
+                nonlocal agent_overlay
+                if agent_overlay is not None:
+                    return
+                agent_overlay = AgentOverlay(
+                    audio_pipeline=audio_pipeline,
+                    client=client,
+                    led=led,
+                    on_dismiss=lambda: _clear_agent_overlay(),
+                )
+
             screen_mgr.push(
                 MarkdownViewerPanel(
                     file_data=file_data,
                     client=client,
                     on_back=lambda: screen_mgr.pop(),
+                    on_agent_query=_agent_query,
                     ui_settings=ui_settings,
                     repository=repository,
                 )
