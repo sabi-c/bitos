@@ -158,7 +158,7 @@ class ChatPreviewTests(unittest.TestCase):
         panel = ChatPreviewPanel(on_action=cb)
         panel._rec_state = RecState.LAUNCHING
         panel._transcribed_text = "test message"
-        for _ in range(10):
+        for _ in range(30):
             panel.update(1 / 15)
         cb.assert_called_with("respond_with_text")
 
@@ -190,8 +190,8 @@ class ChatPreviewTests(unittest.TestCase):
         self.assertEqual(panel._rec_state, RecState.LAUNCHING)
         self.assertEqual(panel._transcribed_text, "hello world")
 
-        # Advance animation to completion
-        for _ in range(10):
+        # Advance animation to completion (25 frame duration)
+        for _ in range(30):
             panel.update(1 / 15)
         cb.assert_called_with("respond_with_text")
 

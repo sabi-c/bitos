@@ -76,8 +76,8 @@ class ChatPreviewPanel(PreviewPanel):
 
         # Expansion animation
         self._launch_anim_frame: int = 0
-        self._launch_anim_duration: int = 5  # frames
-        self._launch_target_h: int = 50
+        self._launch_anim_duration: int = 25  # frames (~1.7s at 15fps)
+        self._launch_target_h: int = 0  # set dynamically from surface height
         self._launch_current_h: int = ITEM_H
 
         # Dependencies
@@ -155,9 +155,10 @@ class ChatPreviewPanel(PreviewPanel):
         # Expansion animation during LAUNCHING
         if self._rec_state == RecState.LAUNCHING:
             self._launch_anim_frame += 1
+            target_h = self._launch_target_h or 208  # fallback to typical panel height
             t = min(1.0, self._launch_anim_frame / self._launch_anim_duration)
             eased = 1 - (1 - t) ** 3  # ease_out_cubic
-            self._launch_current_h = int(ITEM_H + (self._launch_target_h - ITEM_H) * eased)
+            self._launch_current_h = int(ITEM_H + (target_h - ITEM_H) * eased)
             if t >= 1.0:
                 self._rec_state = RecState.READY
                 self._launch_current_h = ITEM_H
@@ -166,6 +167,12 @@ class ChatPreviewPanel(PreviewPanel):
     # ── Render ──
 
     def render(self, surface: pygame.Surface) -> None:
+        # Capture surface dimensions for launch animation
+        self._surface_w = surface.get_width()
+        self._surface_h = surface.get_height()
+        if self._launch_target_h == 0:
+            self._launch_target_h = self._surface_h
+
         font = get_font(GREETING_FONT_SIZE)
         w = surface.get_width()
         line_h = font.get_height() + 2
@@ -208,7 +215,10 @@ class ChatPreviewPanel(PreviewPanel):
                          (w - GREETING_PAD_X, greeting_h - 1))
 
         # ── Submenu items ──
-        if self._rec_state == RecState.READY:
+        if self._rec_state == RecState.LAUNCHING:
+            # Full-screen takeover banner
+            self._render_launch_banner(surface)
+        elif self._rec_state == RecState.READY:
             self._render_items(surface, y_offset=greeting_h)
         else:
             self._render_record_row_and_dimmed_items(surface, greeting_h)
@@ -269,6 +279,47 @@ class ChatPreviewPanel(PreviewPanel):
             return ITEM_H + subtext_font.get_height() + 2
 
         return ITEM_H
+
+    def _render_launch_banner(self, surface: pygame.Surface) -> None:
+        """Full-screen takeover banner during LAUNCHING state."""
+        w = surface.get_width()
+        h = surface.get_height()
+
+        # Dark background fills entire surface
+        t = min(1.0, self._launch_anim_frame / self._launch_anim_duration)
+        eased = 1 - (1 - t) ** 3  # ease_out_cubic
+        bg_brightness = int(10 + 20 * eased)
+        surface.fill((bg_brightness, bg_brightness, bg_brightness))
+
+        # Expanding accent line from center
+        line_w = int(w * eased)
+        line_x = (w - line_w) // 2
+        line_y = h // 2 - 20
+        if line_w > 0:
+            pygame.draw.line(surface, DIM2,
+                             (line_x, line_y), (line_x + line_w, line_y))
+
+        # "STARTING CONVERSATION..." — larger font, centered
+        title_font = get_font(FONT_SIZE + 2)
+        dot_count = int(time.time() * 3) % 4
+        dots = "." * dot_count
+        title_text = "STARTING CONVERSATION" + dots
+        title_surf = title_font.render(title_text, False, WHITE)
+        tx = (w - title_surf.get_width()) // 2
+        ty = h // 2 - title_surf.get_height() // 2
+        surface.blit(title_surf, (tx, ty))
+
+        # Transcribed text below in dimmer, smaller font
+        if self._transcribed_text:
+            sub_font = get_font(FONT_SIZE - 2)
+            # Word-wrap the transcribed text
+            lines = _wrap_text(self._transcribed_text, sub_font, w - PAD_X * 4)
+            sub_y = ty + title_surf.get_height() + 8
+            for line in lines[:3]:  # max 3 lines
+                sub_surf = sub_font.render(line, False, DIM3)
+                sx = (w - sub_surf.get_width()) // 2
+                surface.blit(sub_surf, (sx, sub_y))
+                sub_y += sub_font.get_height() + 2
 
     def _render_record_row_and_dimmed_items(self, surface: pygame.Surface, y_offset: int) -> None:
         """Render custom RECORD row + dimmed remaining items."""
