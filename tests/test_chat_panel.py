@@ -120,6 +120,10 @@ class ChatModeTests(unittest.TestCase):
 
     def test_short_press_in_idle_starts_field_recording(self):
         panel = self._make_panel()
+        # First tap shows confirmation hint
+        panel.handle_action("SHORT_PRESS")
+        self.assertEqual(panel._mode, ChatMode.IDLE)
+        # Second tap within confirmation window starts recording
         panel.handle_action("SHORT_PRESS")
         self.assertEqual(panel._mode, ChatMode.RECORDING)
         self.assertFalse(panel._quick_talk)
@@ -130,6 +134,7 @@ class ChatModeTests(unittest.TestCase):
         audio.is_available = MagicMock(return_value=True)
         panel = self._make_panel(audio=audio)
         panel._mode = ChatMode.SPEAKING
+        panel._speaking_overlay.show()
         panel.handle_action("SHORT_PRESS")
         audio.stop_speaking.assert_called_once()
         self.assertEqual(panel._mode, ChatMode.IDLE)
