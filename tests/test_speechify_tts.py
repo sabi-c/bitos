@@ -104,7 +104,9 @@ class TestTTSFallbackChain:
             with patch.object(TextToSpeech, "__init__", lambda self, **kw: None):
                 tts = TextToSpeech.__new__(TextToSpeech)
                 tts.player = MagicMock()
-                assert tts._detect_engine() == "speechify"
+                # When edge_tts is not available, speechify should be detected
+                with patch.object(TextToSpeech, "_check_edge_tts", return_value=False):
+                    assert tts._detect_engine() == "speechify"
 
     def test_speechify_not_detected_without_key(self):
         from device.audio.tts import TextToSpeech

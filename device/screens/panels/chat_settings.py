@@ -14,7 +14,7 @@ from display.theme import load_ui_font, merge_runtime_ui_settings, ui_line_heigh
 logger = logging.getLogger(__name__)
 
 # TTS engines available on the device (detected at runtime)
-_TTS_ENGINES = ["speechify", "chatterbox", "piper", "openai", "espeak", "auto"]
+_TTS_ENGINES = ["auto", "edge_tts", "speechify", "chatterbox", "piper", "openai", "espeak"]
 
 
 class ChatSettingsPanel(BaseScreen):

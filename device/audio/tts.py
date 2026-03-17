@@ -1,4 +1,10 @@
-"""TTS helpers with runtime fallback chain: speechify -> chatterbox -> piper -> openai -> espeak -> silent."""
+"""TTS helpers with runtime fallback chain.
+
+Priority: edge_tts -> speechify -> chatterbox -> piper -> openai -> espeak -> silent.
+
+Edge TTS is preferred when available because it's free, fast (~200ms TTFB),
+and requires no API key. Speechify remains the premium option when keyed.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +13,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import wave
 from pathlib import Path
 
@@ -34,7 +41,28 @@ class TextToSpeech:
         except Exception:
             pass
         self.engine = self._detect_engine()
+        # Track latency metrics for diagnostics
+        self.last_synthesis_ms: int = 0
+        self.last_ttfb_ms: int = 0  # time to first audio byte
         logger.info("tts_engine=%s", self.engine)
+
+    @staticmethod
+    def _check_edge_tts() -> bool:
+        """Return True if edge-tts is importable."""
+        try:
+            from . import edge_tts_provider
+            return edge_tts_provider.is_available()
+        except Exception:
+            return False
+
+    @staticmethod
+    def _check_chatterbox() -> bool:
+        """Return True if chatterbox-tts is importable."""
+        try:
+            import chatterbox.tts  # noqa: F401
+            return True
+        except Exception:
+            return False
 
     def _detect_engine(self) -> str:
         # Check if user has forced a specific engine in settings
@@ -46,6 +74,7 @@ class TextToSpeech:
         except Exception:
             pass
 
+        has_edge_tts = self._check_edge_tts()
         has_speechify = bool(os.environ.get("SPEECHIFY_API_KEY"))
         has_chatterbox = self._check_chatterbox()
         has_openai_key = bool(os.environ.get("OPENAI_API_KEY"))
@@ -53,24 +82,29 @@ class TextToSpeech:
             os.getenv("PIPER_MODEL", "/home/pi/bitos/models/tts/en_US-lessac-medium.onnx")
         )
         has_espeak = shutil.which("espeak") or shutil.which("espeak-ng")
-        logger.info("tts_detect: preferred=%s speechify=%s chatterbox=%s piper=%s openai=%s espeak=%s",
-                     preferred, has_speechify, has_chatterbox, bool(has_piper), has_openai_key, bool(has_espeak))
+        logger.info(
+            "tts_detect: preferred=%s edge_tts=%s speechify=%s chatterbox=%s piper=%s openai=%s espeak=%s",
+            preferred, has_edge_tts, has_speechify, has_chatterbox,
+            bool(has_piper), has_openai_key, bool(has_espeak),
+        )
 
         # If user picked a specific engine and it's available, use it
         if preferred and preferred != "auto":
-            if preferred == "speechify" and has_speechify:
-                return "speechify"
-            if preferred == "chatterbox" and has_chatterbox:
-                return "chatterbox"
-            if preferred == "piper" and has_piper:
-                return "piper"
-            if preferred == "openai" and has_openai_key:
-                return "openai"
-            if preferred == "espeak" and has_espeak:
-                return "espeak"
+            engine_checks = {
+                "edge_tts": has_edge_tts,
+                "speechify": has_speechify,
+                "chatterbox": has_chatterbox,
+                "piper": has_piper,
+                "openai": has_openai_key,
+                "espeak": has_espeak,
+            }
+            if preferred in engine_checks and engine_checks[preferred]:
+                return preferred
             logger.warning("tts_preferred=%s not available, falling back to auto", preferred)
 
-        # Auto: best available
+        # Auto: best available (edge_tts first — free, fast, no key needed)
+        if has_edge_tts:
+            return "edge_tts"
         if has_speechify:
             return "speechify"
         if has_chatterbox:
@@ -92,9 +126,13 @@ class TextToSpeech:
 
         logger.info("tts_speak: engine=%s text_len=%d text_preview='%s'",
                      self.engine, len(text), text[:60].replace('\n', ' '))
+
+        t0 = time.monotonic()
         out = Path(tempfile.mkstemp(prefix="bitos_tts_", suffix=".wav")[1])
         try:
-            if self.engine == "speechify":
+            if self.engine == "edge_tts":
+                self._run_edge_tts(text, out)
+            elif self.engine == "speechify":
                 self._run_speechify(text, out)
             elif self.engine == "chatterbox":
                 self._run_chatterbox(text, out)
@@ -104,46 +142,77 @@ class TextToSpeech:
                 self._run_openai_tts(text, out)
             elif self.engine == "espeak":
                 self._run_espeak(text, out)
+
+            synthesis_ms = int((time.monotonic() - t0) * 1000)
+            self.last_synthesis_ms = synthesis_ms
+
             if not out.exists() or out.stat().st_size == 0:
-                logger.warning("tts_speak: output file empty or missing after synthesis")
+                logger.warning("tts_speak: output file empty or missing after synthesis (%dms)", synthesis_ms)
                 return False
+
             size = out.stat().st_size
-            logger.info("tts_speak: synthesized %d bytes", size)
+            logger.info("tts_speak: synthesized %d bytes in %dms (ttfb=%dms)",
+                        size, synthesis_ms, self.last_ttfb_ms)
+
             # Only resample if using pygame (desktop); aplay reads WAV headers natively
             from .player import _USE_APLAY
             if not _USE_APLAY:
                 self._ensure_48k_stereo_wav(out)
                 logger.info("tts_speak: resampled to 48k stereo, %d bytes", out.stat().st_size)
+
             logger.info("tts_speak: playing audio")
             return self.player.play_file(str(out))
         finally:
             if out.exists():
                 out.unlink(missing_ok=True)
 
+    def _run_edge_tts(self, text: str, output_file: Path) -> None:
+        """Synthesize with Edge TTS (free Microsoft TTS, ~200ms latency)."""
+        t0 = time.monotonic()
+
+        from . import edge_tts_provider
+
+        def on_first_chunk(path):
+            self.last_ttfb_ms = int((time.monotonic() - t0) * 1000)
+            logger.info("edge_tts_ttfb: %dms", self.last_ttfb_ms)
+
+        ok = edge_tts_provider.synthesize(text, output_file)
+        if not ok:
+            logger.warning("edge_tts_fallback: trying speechify or next engine")
+            self._run_fallback(text, output_file, skip="edge_tts")
+
     def _run_speechify(self, text: str, output_file: Path) -> None:
         from .speechify import synthesize
         if not synthesize(text, output_file):
-            # Fallback to next available engine
             logger.warning("speechify_fallback: trying next engine")
-            for fallback in ("piper", "openai", "espeak"):
-                if fallback == "piper" and shutil.which("piper"):
-                    self._run_piper(text, output_file)
-                    return
-                if fallback == "openai" and os.environ.get("OPENAI_API_KEY"):
-                    self._run_openai_tts(text, output_file)
-                    return
-                if fallback == "espeak" and (shutil.which("espeak") or shutil.which("espeak-ng")):
-                    self._run_espeak(text, output_file)
-                    return
+            self._run_fallback(text, output_file, skip="speechify")
 
-    @staticmethod
-    def _check_chatterbox() -> bool:
-        """Return True if chatterbox-tts is importable."""
-        try:
-            import chatterbox.tts  # noqa: F401
-            return True
-        except Exception:
-            return False
+    def _run_fallback(self, text: str, output_file: Path, skip: str = "") -> None:
+        """Try fallback engines in order, skipping the one that already failed."""
+        fallbacks = [
+            ("edge_tts", lambda: self._check_edge_tts(), self._run_edge_tts),
+            ("speechify", lambda: bool(os.environ.get("SPEECHIFY_API_KEY")), self._run_speechify_direct),
+            ("piper", lambda: bool(shutil.which("piper")), self._run_piper),
+            ("openai", lambda: bool(os.environ.get("OPENAI_API_KEY")), self._run_openai_tts),
+            ("espeak", lambda: bool(shutil.which("espeak") or shutil.which("espeak-ng")), self._run_espeak),
+        ]
+        for name, check, run in fallbacks:
+            if name == skip:
+                continue
+            if check():
+                logger.info("tts_fallback: trying %s", name)
+                try:
+                    run(text, output_file)
+                    if output_file.exists() and output_file.stat().st_size > 0:
+                        return
+                except Exception as exc:
+                    logger.warning("tts_fallback_%s_failed: %s", name, exc)
+        logger.error("tts_fallback: all engines failed")
+
+    def _run_speechify_direct(self, text: str, output_file: Path) -> None:
+        """Call Speechify without triggering its own fallback chain."""
+        from .speechify import synthesize
+        synthesize(text, output_file)
 
     def _run_chatterbox(self, text: str, output_file: Path) -> None:
         """Synthesize speech with Chatterbox Turbo (local 350M model)."""
@@ -180,7 +249,6 @@ class TextToSpeech:
             env=env,
         )
 
-
     def _run_openai_tts(self, text: str, output_file: Path) -> None:
         import openai
 
@@ -199,11 +267,15 @@ class TextToSpeech:
         subprocess.run([espeak_cmd, "-v", "en-us", "-s", "150", "-w", str(output_file), text], check=False, timeout=20, env=env)
 
     def _ensure_48k_stereo_wav(self, path: Path) -> None:
-        with wave.open(str(path), "rb") as src:
-            in_channels = src.getnchannels()
-            in_rate = src.getframerate()
-            sample_width = src.getsampwidth()
-            frames = src.readframes(src.getnframes())
+        try:
+            with wave.open(str(path), "rb") as src:
+                in_channels = src.getnchannels()
+                in_rate = src.getframerate()
+                sample_width = src.getsampwidth()
+                frames = src.readframes(src.getnframes())
+        except Exception as exc:
+            logger.warning("tts_resample: cannot read WAV: %s", exc)
+            return
 
         if sample_width != 2:
             return
