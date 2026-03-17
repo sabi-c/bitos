@@ -747,6 +747,44 @@ async def get_voice_catalog():
     return build_catalog(current_engine=engine, current_voice_id=voice_id, current_params=params)
 
 
+@app.post("/settings/device/test-voice")
+async def test_voice_on_device(request: Request):
+    """Queue a voice test command for the device to play."""
+    body = await request.json()
+    text = body.get("text", "Hello! This is how I sound.")
+    engine = body.get("engine", "auto")
+    voice_id = body.get("voice_id", "")
+    params = body.get("params", {})
+    import json
+
+    with _device_settings_lock:
+        if "_pending_changes" not in _device_settings_cache:
+            _device_settings_cache["_pending_changes"] = []
+        _device_settings_cache["_pending_changes"].append({
+            "key": "_test_voice",
+            "value": json.dumps({"text": text, "engine": engine, "voice_id": voice_id, "params": params}),
+        })
+    return {"ok": True, "queued": "test_voice"}
+
+
+@app.post("/settings/device/test-typewriter")
+async def test_typewriter_on_device(request: Request):
+    """Queue a typewriter test command for the device to render."""
+    body = await request.json()
+    text = body.get("text", "The quick brown fox jumps over the lazy dog.")
+    config = body.get("config", {})
+    import json
+
+    with _device_settings_lock:
+        if "_pending_changes" not in _device_settings_cache:
+            _device_settings_cache["_pending_changes"] = []
+        _device_settings_cache["_pending_changes"].append({
+            "key": "_test_typewriter",
+            "value": json.dumps({"text": text, "config": config}),
+        })
+    return {"ok": True, "queued": "test_typewriter"}
+
+
 @app.get("/settings/catalog")
 async def settings_catalog():
     """Return catalog metadata for editable UI settings."""

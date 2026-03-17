@@ -29,6 +29,7 @@ class BackendClient:
         self.base_url = base_url or os.environ.get("BITOS_SERVER_URL", DEFAULT_SERVER_URL)
         self.device_token = os.environ.get("BITOS_DEVICE_TOKEN", "")
         self.on_approval_request = None  # Callable[[str, str, list[str]], None] or None
+        self.on_test_typewriter: callable | None = None
         self._conversation_id: str | None = None  # Multi-turn conversation tracking
         if not self.device_token:
             logging.warning("[BITOS] BITOS_DEVICE_TOKEN is not set; running in dev mode without device token auth")
@@ -290,6 +291,15 @@ class BackendClient:
         value = change.get("value")
         if not key:
             return
+
+        # Test commands (prefixed with _) — not persisted
+        if key == "_test_voice":
+            self._handle_test_voice(value)
+            return
+        if key == "_test_typewriter":
+            self._handle_test_typewriter(value)
+            return
+
         try:
             from storage.repository import DeviceRepository
             repo = DeviceRepository()
@@ -303,6 +313,42 @@ class BackendClient:
                 player.set_volume(max(0, min(100, int(value))) / 100.0)
         except Exception as exc:
             logging.warning("agent_setting_apply_failed: key=%s error=%s", key, exc)
+
+    def _handle_test_voice(self, value: str) -> None:
+        """Play a voice test with specified engine/voice/params."""
+        import json
+        try:
+            data = json.loads(value) if isinstance(value, str) else value
+            text = data.get("text", "Hello!")
+            engine = data.get("engine", "auto")
+            voice_id = data.get("voice_id", "")
+            params = data.get("params", {})
+
+            from storage.repository import DeviceRepository
+            repo = DeviceRepository()
+            # Temporarily set voice settings for this test
+            if engine and engine != "auto":
+                repo.set_setting("tts_engine", engine)
+            if voice_id:
+                repo.set_setting("voice_id", voice_id)
+            if params:
+                repo.set_setting("voice_params", json.dumps(params))
+
+            from audio.tts import TextToSpeech
+            tts = TextToSpeech()
+            tts.speak(text)
+        except Exception as exc:
+            logging.warning("test_voice_failed: %s", exc)
+
+    def _handle_test_typewriter(self, value: str) -> None:
+        """Trigger a typewriter test overlay on the device."""
+        import json
+        try:
+            data = json.loads(value) if isinstance(value, str) else value
+            if self.on_test_typewriter:
+                self.on_test_typewriter(data.get("text", "Test"), data.get("config", {}))
+        except Exception as exc:
+            logging.warning("test_typewriter_failed: %s", exc)
 
     def get_integration_status(self) -> dict:
         """GET /status/integrations."""

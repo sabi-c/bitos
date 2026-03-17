@@ -322,6 +322,18 @@ def main():
     power_mgr = PowerManager()
     power_mgr.system_power_save()
 
+    # Wire test-typewriter overlay from companion app
+    def _show_test_typewriter(text: str, config: dict):
+        from overlays.test_typewriter import TestTypewriterOverlay
+        overlay = TestTypewriterOverlay(
+            text=text,
+            config=config,
+            on_dismiss=lambda: screen_mgr.dismiss_banner(),
+        )
+        screen_mgr.show_banner(overlay)
+
+    client.on_test_typewriter = _show_test_typewriter
+
     def _active_screen_name() -> str:
         current = screen_mgr.current
         if current is None:
