@@ -69,9 +69,9 @@ from bluetooth.characteristics import DeviceInfoCharacteristic, WiFiStatusCharac
 from bluetooth.constants import build_setup_url
 from bluetooth.network_manager import NetworkPriorityManager
 from bluetooth.wifi_manager import WiFiManager
-from device.http_provision import ProvisioningServer
-from device.ble.ble_service import get_ble_service
-from device.ble.pairing_manager import PairingManager
+from http_provision import ProvisioningServer
+from ble.ble_service import get_ble_service
+from ble.pairing_manager import PairingManager
 from audio.pipeline import get_audio_pipeline
 from audio.recording_adapter import RecordingAdapter
 from hardware import StatusPoller, StatusState, SystemMonitor
@@ -110,8 +110,8 @@ from integrations.adapters import create_runtime_adapter
 from integrations.queue import OutboundCommandQueue
 from integrations.runtime import OutboundWorkerRuntimeLoop
 from integrations.worker import OutboundCommandWorker
-from device.notifications.router import NotificationRouter
-from device.notifications.ws_client import DeviceWSClient
+from notifications.router import NotificationRouter
+from notifications.ws_client import DeviceWSClient
 logger = logging.getLogger(__name__)
 
 

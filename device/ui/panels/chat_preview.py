@@ -15,11 +15,11 @@ from enum import Enum, auto
 
 import pygame
 
-from device.display.theme import get_font
-from device.display.tokens import DIM2, DIM3, HAIRLINE, WHITE
-from device.display.animator import blink_cursor
-from device.display.typewriter import TypewriterRenderer
-from device.ui.panels.base import PreviewPanel, ITEM_H, PAD_X, PAD_Y, FONT_SIZE
+from display.theme import get_font
+from display.tokens import DIM2, DIM3, HAIRLINE, WHITE
+from display.animator import blink_cursor
+from display.typewriter import TypewriterRenderer
+from ui.panels.base import PreviewPanel, ITEM_H, PAD_X, PAD_Y, FONT_SIZE
 
 
 # ── Greeting area constants ──
