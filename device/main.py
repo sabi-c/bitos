@@ -838,20 +838,23 @@ def main():
 
     def open_chat_greeting(**kwargs):
         text = kwargs.get("text")
-        panel = ChatPanel(
-            client=client,
-            ui_settings=ui_settings,
-            repository=repository,
-            audio_pipeline=audio_pipeline,
-            led=led,
-            on_back=lambda: screen_mgr.pop(),
-            on_settings=open_chat_settings,
-            mode="greeting",
-        )
-        screen_mgr.push(panel)
-        # If text was provided from inline recording, auto-send it
-        if text and hasattr(panel, "send_message"):
-            panel.send_message(text)
+        try:
+            panel = ChatPanel(
+                client=client,
+                ui_settings=ui_settings,
+                repository=repository,
+                audio_pipeline=audio_pipeline,
+                led=led,
+                on_back=lambda: screen_mgr.pop(),
+                on_settings=open_chat_settings,
+                mode="greeting",
+            )
+            screen_mgr.push(panel)
+            # If text was provided from inline recording, auto-send it
+            if text and hasattr(panel, "send_message"):
+                panel.send_message(text)
+        except Exception as exc:
+            logger.error("[BITOS] open_chat_greeting crashed: %s", exc, exc_info=True)
 
     def open_chat_history():
         def _open_session(session_id: int):

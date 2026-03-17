@@ -79,6 +79,7 @@ class ChatPreviewPanel(PreviewPanel):
         self._launch_anim_duration: int = 25  # frames (~1.7s at 15fps)
         self._launch_target_h: int = 0  # set dynamically from surface height
         self._launch_current_h: int = ITEM_H
+        self._deferred_action: str | None = None  # fire on next update to avoid mid-frame stack changes
 
         # Dependencies
         self._audio_pipeline = audio_pipeline
@@ -145,6 +146,17 @@ class ChatPreviewPanel(PreviewPanel):
     # ── Update loop ──
 
     def update(self, dt: float) -> None:
+        # Fire deferred action first (from previous frame's animation completion)
+        if self._deferred_action:
+            action = self._deferred_action
+            self._deferred_action = None
+            try:
+                self._on_action(action)
+            except Exception:
+                import logging as _log
+                _log.getLogger(__name__).error("deferred action '%s' failed", action, exc_info=True)
+            return  # skip rest of update this frame
+
         self._cursor_anim.update(dt)
         if self._greeting_typewriter and not self._greeting_typewriter.finished:
             self._greeting_typewriter.update(dt)
@@ -162,7 +174,8 @@ class ChatPreviewPanel(PreviewPanel):
             if t >= 1.0:
                 self._rec_state = RecState.READY
                 self._launch_current_h = ITEM_H
-                self._on_action("respond_with_text")
+                # Defer to next frame so we don't modify screen stack mid-render
+                self._deferred_action = "respond_with_text"
 
     # ── Render ──
 
