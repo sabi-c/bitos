@@ -153,6 +153,7 @@ class ChatPanel(BaseScreen):
         self._page_revealed: list[bool] = []
         self._page_typewriter: TypewriterRenderer | None = None
         self._context_header: str = ""
+        self._user_browsing: bool = False  # True when user manually navigated pages
 
         # Speech queue: (text, user_message) tuples waiting for TTS
         self._speech_queue: deque[tuple[str, str]] = deque(maxlen=5)
@@ -376,6 +377,8 @@ class ChatPanel(BaseScreen):
                 self._page_typewriter = None
                 # Cycle to next page
                 self._current_page = (self._current_page + 1) % len(self._pages)
+                # Track that user manually navigated (disables auto-scroll during streaming)
+                self._user_browsing = True
                 self._start_page_typewriter()
 
     # Grace period: tap within this many seconds to cancel instead of send
@@ -454,6 +457,7 @@ class ChatPanel(BaseScreen):
                     self._page_revealed[self._current_page] = True
                 self._page_typewriter = None
                 self._current_page = (self._current_page + 1) % len(self._pages)
+                self._user_browsing = True
                 self._start_page_typewriter()
             # Stay in SPEAKING mode if there are queued utterances,
             # otherwise go to IDLE
@@ -492,14 +496,19 @@ class ChatPanel(BaseScreen):
         self._page_typewriter = TypewriterRenderer(page_text, speed=speed)
 
     def _build_pages(self, response_text: str, user_message: str = "") -> None:
-        """Split response into paginated pages and start typewriter on page 1."""
+        """Split response into paginated pages and start typewriter on page 1.
+
+        During streaming, this may be called multiple times as text grows.
+        We preserve the user's browsing position if they manually navigated,
+        otherwise auto-advance to the last page so the latest text is visible.
+        """
         # Context header: truncated user message
         if user_message:
             truncated = user_message[:35]
             if len(user_message) > 35:
                 truncated += "..."
             self._context_header = f"> {truncated}"
-        else:
+        elif not self._context_header:
             self._context_header = ""
 
         # Calculate available lines per page
@@ -512,11 +521,45 @@ class ChatPanel(BaseScreen):
         wrapped = self._wrap_text(response_text, PHYSICAL_W - SAFE_INSET * 2)
 
         # Split into pages
-        self._pages = self._split_into_pages(wrapped, lines_per_page)
-        self._current_page = 0
-        self._page_revealed = [False] * len(self._pages)
-        self._page_typewriter = None
-        self._start_page_typewriter()
+        old_page_count = len(self._pages)
+        old_current = self._current_page
+        new_pages = self._split_into_pages(wrapped, lines_per_page)
+        new_page_count = len(new_pages)
+
+        # Preserve revealed state for pages that haven't changed
+        old_revealed = list(self._page_revealed)
+        new_revealed = [False] * new_page_count
+        for i in range(min(len(old_revealed), new_page_count)):
+            new_revealed[i] = old_revealed[i]
+
+        self._pages = new_pages
+        self._page_revealed = new_revealed
+
+        if self._is_streaming and old_page_count > 0:
+            # During streaming: auto-advance to last page unless user is browsing
+            if self._user_browsing:
+                # Keep user on their chosen page (clamped to valid range)
+                self._current_page = min(old_current, new_page_count - 1)
+                # Don't touch the page typewriter for the page they're viewing
+            else:
+                # Auto-advance to the last page where new content appears
+                last_page = new_page_count - 1
+                if last_page != old_current or self._page_typewriter is None:
+                    self._current_page = last_page
+                    # Mark all pages before the last as revealed (skip typewriter for them)
+                    for i in range(last_page):
+                        self._page_revealed[i] = True
+                    # Start typewriter on the new last page
+                    self._page_typewriter = None
+                    self._page_revealed[last_page] = False
+                    self._start_page_typewriter()
+                # else: same page, let existing typewriter continue
+        else:
+            # Initial build (not streaming, or first call): start from page 0
+            self._current_page = 0
+            self._user_browsing = False
+            self._page_typewriter = None
+            self._start_page_typewriter()
 
     def _get_action_bar_content(self) -> list[tuple[str, str]]:
         """Return action bar items for the current mode."""
@@ -643,7 +686,13 @@ class ChatPanel(BaseScreen):
             cx += seg_surf.get_width()
 
     def _render_paginated(self, surface: pygame.Surface, top: int, bottom: int) -> None:
-        """Render current page with context header and page indicator."""
+        """Render current page with context header and page indicator.
+
+        During typewriter reveal, we render the page's pre-wrapped lines but
+        truncate to the number of characters revealed so far. This avoids
+        re-wrapping partial text (which causes line count mismatches and visual
+        jumps as words complete).
+        """
         y = top
 
         # Context header (1 line, dimmed)
@@ -652,19 +701,43 @@ class ChatPanel(BaseScreen):
             surface.blit(header_surf, (SAFE_INSET, y))
             y += self._line_height
 
-        # Page text
-        page = self._pages[self._current_page] if self._current_page < len(self._pages) else []
-
-        if self._page_typewriter and not self._page_typewriter.finished:
-            visible = self._page_typewriter.get_visible_text()
-            display_lines = self._wrap_text(visible, PHYSICAL_W - SAFE_INSET * 2)
+        # Page text — use pre-wrapped lines from pagination
+        if self._current_page >= len(self._pages):
+            page = []
         else:
-            display_lines = page
+            page = self._pages[self._current_page]
 
-        for line_text in display_lines:
+        # Determine how many characters to show (typewriter reveal)
+        if self._page_typewriter and not self._page_typewriter.finished:
+            visible_text = self._page_typewriter.get_visible_text()
+            chars_to_show = len(visible_text)
+        else:
+            chars_to_show = -1  # show all
+
+        chars_shown = 0
+        for line_text in page:
             if y + self._line_height > bottom - self._line_height:
                 break
-            self._render_styled_line(surface, line_text, SAFE_INSET, y)
+
+            if chars_to_show < 0:
+                # Fully revealed — render the whole line
+                self._render_styled_line(surface, line_text, SAFE_INSET, y)
+            else:
+                # Count characters in this line (plus newline separator)
+                line_len = len(line_text)
+                remaining = chars_to_show - chars_shown
+                if remaining <= 0:
+                    break  # haven't revealed this line yet
+                if remaining >= line_len:
+                    # Full line revealed
+                    self._render_styled_line(surface, line_text, SAFE_INSET, y)
+                else:
+                    # Partial line — truncate and render
+                    partial = line_text[:remaining]
+                    self._render_styled_line(surface, partial, SAFE_INSET, y)
+                # +1 for the newline that joins lines in the typewriter text
+                chars_shown += line_len + 1
+
             y += self._line_height
 
         # Page indicator (centered, small font, DIM1) — only if 2+ pages
@@ -1086,6 +1159,7 @@ class ChatPanel(BaseScreen):
         self._page_revealed = []
         self._page_typewriter = None
         self._context_header = ""
+        self._user_browsing = False
         self._status = self.STATUS_CONNECTED
         self._status_detail = ""
         self._last_failed_message = None
@@ -1135,16 +1209,21 @@ class ChatPanel(BaseScreen):
                 self._mark_failed(message, kind, retryable, custom_copy=str(result.get("error")))
                 return
 
-            _page_started = False
+            _last_page_build_len = 0
             for chunk in result:
                 response_text += chunk
                 with self._messages_lock:
                     self._messages[-1]["text"] = response_text
 
-                # Progressive pagination: build page 1 early so typewriter starts sooner
-                if not _page_started and len(response_text) >= 80:
+                # Progressive pagination: rebuild pages as text grows so new
+                # pages appear and auto-scroll keeps up with incoming content.
+                # First build at 80 chars, then every ~200 chars thereafter.
+                text_len = len(response_text)
+                if text_len >= 80 and (text_len - _last_page_build_len) >= 200 or (
+                    _last_page_build_len == 0 and text_len >= 80
+                ):
                     self._build_pages(response_text, user_message=message)
-                    _page_started = True
+                    _last_page_build_len = text_len
 
             # Parse and apply inline commands (e.g. {{volume:80}})
             response_text = self._parse_commands(response_text)
@@ -1192,6 +1271,7 @@ class ChatPanel(BaseScreen):
             self._mark_failed(message, "unknown", True, custom_copy=f"error: {str(exc)[:30]}")
         finally:
             self._is_streaming = False
+            self._user_browsing = False  # reset so next response auto-scrolls
             if self._mode in (ChatMode.STREAMING, ChatMode.SPEAKING):
                 self._mode = ChatMode.IDLE
             if self._led:
