@@ -22,7 +22,7 @@ DB_PATH = DATA_DIR / "activity.db"
 ACTIVITY_TYPES = {
     "chat", "task_create", "task_complete", "message_sent", "email_sent",
     "setting_change", "approval", "quick_action", "message_read", "email_read",
-    "calendar_read", "contact_search",
+    "calendar_read", "contact_search", "heartbeat",
 }
 
 # Status flow: pending → running → done | failed
@@ -200,6 +200,7 @@ def track_tool_call(tool_name: str, tool_input: dict, execute_fn) -> str:
         "update_device_setting": "setting_change",
         "request_approval": "approval",
         "get_device_settings": "setting_change",
+        "web_search": "quick_action",
     }
     activity_type = type_map.get(tool_name, "chat")
     title = f"{tool_name}({json.dumps(tool_input)[:80]})"

@@ -2,3 +2,4 @@ fastapi
 uvicorn
 anthropic
 httpx
+duckduckgo-search>=7.0.0

@@ -411,6 +411,13 @@ _notif_store = QueueStore(_notif_db_path)
 _notif_dispatcher = NotificationDispatcher(_notif_store)
 _device_ws = DeviceWSHandler(_notif_dispatcher)
 
+# ── Heartbeat (proactive agent) ──
+from heartbeat import (
+    start_heartbeat, stop_heartbeat, get_heartbeat_status,
+    trigger_action as heartbeat_trigger_action, record_user_activity,
+    register_proactive_ws, unregister_proactive_ws,
+)
+
 # ── Integration bridge (polls adapters → dispatcher) ──
 _integration_bridge = IntegrationBridge(
     _notif_dispatcher,
@@ -519,6 +526,16 @@ async def _start_integration_poll():
     global _integration_poll_task
     _integration_poll_task = asyncio.create_task(_integration_poll_loop())
     logger.info("integration_bridge: background poll started (30s interval)")
+
+
+@app.on_event("startup")
+async def _start_heartbeat():
+    await start_heartbeat(app)
+
+
+@app.on_event("shutdown")
+async def _stop_heartbeat():
+    await stop_heartbeat()
 
 
 @app.get("/health")
@@ -1616,6 +1633,22 @@ async def parse_file(file_id: str):
     }
 
 
+# ── Heartbeat Endpoints ─────────────────────────────────────────────
+
+
+@app.get("/heartbeat/status")
+async def heartbeat_status():
+    """Current heartbeat state, scheduled actions, and recent log."""
+    return get_heartbeat_status()
+
+
+@app.post("/heartbeat/trigger/{action}")
+async def heartbeat_trigger(action: str):
+    """Manually trigger a heartbeat action for testing."""
+    result = await heartbeat_trigger_action(action)
+    return result
+
+
 @app.post("/shutdown")
 async def shutdown():
     """Graceful shutdown hook for device power gesture flow."""
@@ -1646,6 +1679,9 @@ async def chat(payload: ChatRequest):
         raise HTTPException(status_code=400, detail="No message provided")
 
     agent_mode = payload.agent_mode or "producer"
+
+    # Record user activity for heartbeat idle tracking
+    record_user_activity()
 
     # Fetch lightweight activity counts for agent notification awareness
     activity_summary = None
@@ -1735,6 +1771,16 @@ async def chat(payload: ChatRequest):
     def stream_response():
         from agent_tools import DEVICE_TOOLS
 
+        # Filter tools based on user settings
+        active_tools = DEVICE_TOOLS
+        if not payload.web_search:
+            active_tools = [t for t in active_tools if t["name"] != "web_search"]
+        if not payload.memory:
+            active_tools = [
+                t for t in active_tools
+                if t["name"] not in ("remember_fact", "recall_facts")
+            ]
+
         full_response_parts: list[str] = []
 
         # Use tool-aware streaming for Anthropic provider
@@ -1743,7 +1789,7 @@ async def chat(payload: ChatRequest):
 
             gen = llm_bridge.stream_with_tools(
                 message,
-                tools=DEVICE_TOOLS,
+                tools=active_tools,
                 tool_handler=None,  # handled internally
                 device_settings=device_settings,
                 system_prompt=system_prompt,
@@ -2121,6 +2167,26 @@ async def ws_activity(ws: WebSocket):
         logger.warning("[WS] Activity feed error: %s", exc)
     finally:
         unregister_activity_ws(ws)
+
+
+@app.websocket("/ws/proactive")
+async def ws_proactive(ws: WebSocket):
+    """WebSocket endpoint for proactive heartbeat messages to devices."""
+    await ws.accept()
+    register_proactive_ws(ws)
+    logger.info("[WS] Proactive client connected")
+    try:
+        while True:
+            data = await ws.receive_json()
+            msg_type = data.get("type")
+            if msg_type == "ping":
+                await ws.send_json({"type": "pong"})
+    except WebSocketDisconnect:
+        logger.info("[WS] Proactive client disconnected")
+    except Exception as exc:
+        logger.warning("[WS] Proactive error: %s", exc)
+    finally:
+        unregister_proactive_ws(ws)
 
 
 if __name__ == "__main__":

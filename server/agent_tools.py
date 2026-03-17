@@ -541,6 +541,11 @@ def _handle_tool_call_inner(
     if tool_name == "recall_facts":
         return _recall_facts(tool_input)
 
+    # ── Web search tool ─────────────────────────────────────────────
+    if tool_name == "web_search":
+        from web_search import web_search_tool_handler
+        return web_search_tool_handler(tool_input)
+
     # ── Task management tools ────────────────────────────────────────
     if tool_name == "create_task":
         return _create_task(tool_input)

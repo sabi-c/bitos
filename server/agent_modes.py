@@ -114,7 +114,13 @@ def get_system_prompt(
     if battery_pct is not None and battery_pct < 20:
         context_blocks.append(f"[BATTERY LOW: {battery_pct}%]")
 
-    if not web_search:
+    if web_search:
+        context_blocks.append(
+            "WEB SEARCH: You have a web_search tool. Use it when the user asks about "
+            "current events, facts you're unsure about, weather, prices, news, or anything "
+            "that benefits from up-to-date information. Summarize results concisely."
+        )
+    else:
         context_blocks.append("WEB SEARCH IS DISABLED. Do not suggest searching the web or reference web lookups.")
 
     if not memory:
