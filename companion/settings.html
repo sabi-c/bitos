@@ -407,6 +407,57 @@
       </div>
     </div>
 
+    <!-- WiFi / HTTP Connection -->
+    <div class="card" id="card-wifi-conn">
+      <div class="card-header" onclick="toggleCard('card-wifi-conn')">
+        <h2>WIFI CONNECTION</h2>
+        <span class="card-chevron">&#9660;</span>
+      </div>
+      <div class="card-body">
+        <div class="setting-row">
+          <div class="setting-label-wrap">
+            <div class="setting-label">Device address</div>
+            <div class="setting-sublabel">IP or hostname of your BITOS device</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <input type="text" id="settings-device-ip" placeholder="bitos.local"
+                 style="flex:1;background:#111;border:1px solid #444;color:#fff;
+                        font-family:monospace;font-size:13px;padding:8px;outline:none">
+          <button class="secondary" onclick="saveDeviceIp()" style="width:auto;padding:8px 14px;margin:0;font-size:11px">
+            SAVE
+          </button>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label-wrap">
+            <div class="setting-label">Provisioning port</div>
+            <div class="setting-sublabel">Default: 8080</div>
+          </div>
+          <div class="setting-control">
+            <input type="number" id="settings-device-port" value="8080"
+                   style="width:70px;background:#111;border:1px solid #444;color:#fff;
+                          font-family:monospace;font-size:13px;padding:6px;text-align:center;outline:none"
+                   onchange="saveDevicePort()">
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label-wrap">
+            <div class="setting-label">Connection mode</div>
+            <div class="setting-sublabel">Auto tries HTTP first, falls back to BLE</div>
+          </div>
+          <div class="setting-control">
+            <div class="picker" data-key="conn_mode">
+              <button class="picker-opt active" data-value="auto" onclick="setConnMode('auto',this)">AUTO</button>
+              <button class="picker-opt" data-value="wifi" onclick="setConnMode('wifi',this)">WIFI</button>
+              <button class="picker-opt" data-value="ble" onclick="setConnMode('ble',this)">BLE</button>
+            </div>
+          </div>
+        </div>
+        <div class="status" id="wifi-conn-test-status"></div>
+        <button class="secondary" onclick="testWifiConnection()">TEST WIFI CONNECTION</button>
+      </div>
+    </div>
+
     <div class="card" id="card-ble">
       <div class="card-header" onclick="toggleCard('card-ble')">
         <h2>BLE CONNECTION</h2>
@@ -418,11 +469,26 @@
         <div id="ble-unavailable" style="display:none">
           <div class="status" style="color:#888;font-size:10px;line-height:1.6;padding:8px 0">
             Web Bluetooth is not available in this browser.<br>
-            Settings work fine over HTTP — BLE is optional.<br>
+            Settings work fine over WiFi — BLE is optional.<br>
             For BLE: use Chrome (desktop) or enable Web Bluetooth<br>
-            in Safari → Settings → Advanced → Feature Flags.
+            in Safari &rarr; Settings &rarr; Advanced &rarr; Feature Flags.
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Connection Logs -->
+    <div class="card" id="card-conn-logs">
+      <div class="card-header" onclick="toggleCard('card-conn-logs')">
+        <h2>CONNECTION LOG</h2>
+        <span class="card-chevron">&#9660;</span>
+      </div>
+      <div class="card-body">
+        <div class="log-viewer" id="conn-log-viewer" style="display:block;max-height:200px;overflow-y:auto;font-size:10px;color:#888;background:#0a0a0a;padding:8px;margin-bottom:8px;border:1px solid #222">
+          <span style="color:#555">No connection events yet</span>
+        </div>
+        <button class="secondary" onclick="refreshConnLogs()">REFRESH LOGS</button>
+        <button class="secondary" onclick="clearConnLogs()" style="margin-top:4px">CLEAR LOGS</button>
       </div>
     </div>
   </div>
