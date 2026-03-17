@@ -8,9 +8,11 @@ Gestures:
 - DOUBLE_PRESS: confirm/select the highlighted option
 - LONG_PRESS: dismiss/cancel (always returns "cancelled")
 
-Renders as a centered card similar to NotificationBanner full mode.
-Duck-types with NotificationBanner so ScreenManager can use it in the
-_active_banner slot.
+Renders as a 1-bit UI kit styled card with:
+- 3px white outer border
+- White header bar with category title in black
+- Prompt + description body
+- Split buttons at bottom with divider
 """
 from __future__ import annotations
 
@@ -21,10 +23,24 @@ from typing import Callable
 import pygame
 
 from display.tokens import (
-    BLACK, WHITE, DIM1, DIM2, DIM3, HAIRLINE,
+    BLACK, WHITE, DIM1, DIM2, DIM3, DIM4, HAIRLINE,
     PHYSICAL_W, PHYSICAL_H, SAFE_INSET,
     FONT_PATH, FONT_SIZES,
 )
+
+# ── Category → header label mapping ─────────────────────────────
+
+CATEGORY_HEADERS = {
+    "permission": "PERMISSION REQUEST",
+    "action": "ACTION REQUIRED",
+    "confirm": "CONFIRM",
+    "agent": "AGENT REQUEST",
+}
+
+OUTER_BORDER = 3
+HEADER_H = 26
+BUTTON_H = 30
+CARD_PAD = 10
 
 
 @dataclass
@@ -34,6 +50,8 @@ class ApprovalOverlay:
     request_id: str
     prompt: str
     options: list[str]
+    description: str = ""
+    category: str = "permission"
     on_choice: Callable[[str, str], None] | None = None  # (request_id, chosen_option)
     on_cancel: Callable[[str], None] | None = None  # (request_id)
     timeout_ms: int = 60_000  # 60s default timeout
@@ -91,7 +109,7 @@ class ApprovalOverlay:
         return False
 
     def render(self, surface: pygame.Surface) -> None:
-        """Render centered approval card."""
+        """Render 1-bit UI kit styled approval card."""
         if self._dismissed:
             return
 
@@ -104,74 +122,120 @@ class ApprovalOverlay:
         font_small = self._font("small")
         hint_font = self._font("hint")
 
-        # Card dimensions — scale with number of options
-        option_row_h = max(22, font.get_height() + 8)
+        # ── Calculate card dimensions ────────────────────────────
         card_w = PHYSICAL_W - SAFE_INSET * 2
-        # Header (12) + prompt area (50) + divider (8) + options + divider (8) + hints (20) + progress (4)
-        card_h = 12 + 50 + 8 + (option_row_h * len(self.options)) + 8 + 20 + 4
-        card_h = min(card_h, PHYSICAL_H - 20)  # cap height
+        inner_w = card_w - OUTER_BORDER * 2
+
+        # Measure prompt text height
+        max_text_w = inner_w - CARD_PAD * 2
+        prompt_lines = self._wrap_text(self.prompt, font, max_text_w)[:4]
+        prompt_h = len(prompt_lines) * (font.get_height() + 3)
+
+        # Measure description text height
+        desc_h = 0
+        desc_lines: list[str] = []
+        if self.description:
+            desc_lines = self._wrap_text(self.description, font_small, max_text_w)[:3]
+            desc_h = len(desc_lines) * (font_small.get_height() + 2) + 6
+
+        # Card height: border(3) + header(26) + padding(8) + prompt + desc + padding(8) + buttons + border(3) + progress(3)
+        card_h = (
+            OUTER_BORDER + HEADER_H
+            + CARD_PAD + prompt_h + desc_h + CARD_PAD
+            + 1  # divider above buttons
+            + BUTTON_H
+            + OUTER_BORDER + 3  # progress bar
+        )
+        card_h = min(card_h, PHYSICAL_H - 20)
+
         card_x = SAFE_INSET
         card_y = (PHYSICAL_H - card_h) // 2
 
-        # Card background
+        # ── Card background + 3px white outer border ────────────
         card_rect = pygame.Rect(card_x, card_y, card_w, card_h)
-        pygame.draw.rect(surface, (15, 15, 15), card_rect)
-        pygame.draw.rect(surface, DIM2, card_rect, 1)
+        pygame.draw.rect(surface, BLACK, card_rect)
+        pygame.draw.rect(surface, WHITE, card_rect, OUTER_BORDER)
 
-        y = card_y + 10
+        # ── White header bar ─────────────────────────────────────
+        header_rect = pygame.Rect(
+            card_x + OUTER_BORDER,
+            card_y + OUTER_BORDER,
+            inner_w,
+            HEADER_H,
+        )
+        pygame.draw.rect(surface, WHITE, header_rect)
 
-        # Header
-        header_surf = font_small.render("AGENT REQUEST", False, DIM2)
-        surface.blit(header_surf, (card_x + 12, y))
-        y += header_surf.get_height() + 8
+        header_text = CATEGORY_HEADERS.get(self.category, self.category.upper())
+        header_surf = font_small.render(header_text, False, BLACK)
+        hx = header_rect.x + (header_rect.width - header_surf.get_width()) // 2
+        hy = header_rect.y + (header_rect.height - header_surf.get_height()) // 2
+        surface.blit(header_surf, (hx, hy))
 
-        # Prompt text (word-wrapped, max 3 lines)
-        max_msg_w = card_w - 24
-        prompt_lines = self._wrap_text(self.prompt, font, max_msg_w)[:3]
+        # ── Body: prompt + description ───────────────────────────
+        y = card_y + OUTER_BORDER + HEADER_H + CARD_PAD
+        body_x = card_x + OUTER_BORDER + CARD_PAD
+
         for line in prompt_lines:
             line_surf = font.render(line, False, WHITE)
-            surface.blit(line_surf, (card_x + 12, y))
+            surface.blit(line_surf, (body_x, y))
             y += font.get_height() + 3
-        y += 6
 
-        # Divider
-        pygame.draw.line(surface, HAIRLINE, (card_x + 12, y), (card_x + card_w - 12, y))
-        y += 8
+        if desc_lines:
+            y += 4
+            for line in desc_lines:
+                line_surf = font_small.render(line, False, DIM3)
+                surface.blit(line_surf, (body_x, y))
+                y += font_small.get_height() + 2
 
-        # Options
+        # ── Divider above buttons ────────────────────────────────
+        btn_area_y = card_y + card_h - OUTER_BORDER - BUTTON_H - 3
+        divider_y = btn_area_y - 1
+        pygame.draw.line(
+            surface, WHITE,
+            (card_x + OUTER_BORDER, divider_y),
+            (card_x + card_w - OUTER_BORDER, divider_y),
+        )
+
+        # ── Split buttons ────────────────────────────────────────
+        n = len(self.options)
+        btn_w = inner_w // max(n, 1)
+
         for idx, option in enumerate(self.options):
             is_selected = idx == self._selected
-            opt_rect = pygame.Rect(card_x + 8, y, card_w - 16, option_row_h)
+            bx = card_x + OUTER_BORDER + btn_w * idx
+            by = btn_area_y
+            bw = btn_w if idx < n - 1 else (inner_w - btn_w * idx)  # last gets remainder
+
+            btn_rect = pygame.Rect(bx, by, bw, BUTTON_H)
 
             if is_selected:
-                pygame.draw.rect(surface, WHITE, opt_rect)
-                indicator = "> "
-                opt_color = BLACK
+                pygame.draw.rect(surface, WHITE, btn_rect)
+                text_color = BLACK
             else:
-                indicator = "  "
-                opt_color = DIM1
+                pygame.draw.rect(surface, BLACK, btn_rect)
+                text_color = DIM1
 
-            opt_text = f"{indicator}{option}"
-            opt_surf = font.render(opt_text, False, opt_color)
-            opt_y = y + (option_row_h - opt_surf.get_height()) // 2
-            surface.blit(opt_surf, (card_x + 12, opt_y))
-            y += option_row_h
+            # Button label
+            lbl_surf = font_small.render(option, False, text_color)
+            lx = bx + (bw - lbl_surf.get_width()) // 2
+            ly = by + (BUTTON_H - lbl_surf.get_height()) // 2
+            surface.blit(lbl_surf, (lx, ly))
 
-        y += 4
+            # Vertical divider between buttons
+            if idx < n - 1:
+                dx = bx + bw
+                pygame.draw.line(
+                    surface, WHITE,
+                    (dx, btn_area_y),
+                    (dx, btn_area_y + BUTTON_H),
+                )
 
-        # Divider
-        pygame.draw.line(surface, HAIRLINE, (card_x + 12, y), (card_x + card_w - 12, y))
-        y += 6
-
-        # Gesture hints
-        hints = "TAP:next  DBL:select  LONG:cancel"
-        hints_surf = hint_font.render(hints, False, DIM3)
-        hints_x = card_x + (card_w - hints_surf.get_width()) // 2
-        surface.blit(hints_surf, (hints_x, y))
-
-        # Progress bar at bottom of card
+        # ── Progress bar at very bottom of card ──────────────────
         progress_w = int(card_w * min(1.0, self.elapsed_ms / max(1, self.timeout_ms)))
-        pygame.draw.rect(surface, DIM3, pygame.Rect(card_x, card_y + card_h - 2, progress_w, 2))
+        pygame.draw.rect(
+            surface, DIM3,
+            pygame.Rect(card_x, card_y + card_h - 2, progress_w, 2),
+        )
 
     def _cancel(self, reason: str = "dismissed") -> None:
         self._dismissed = True
