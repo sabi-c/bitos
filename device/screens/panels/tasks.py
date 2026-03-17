@@ -11,10 +11,11 @@ from display.theme import merge_runtime_ui_settings, load_ui_font
 
 
 class TasksPanel(BaseScreen):
-    def __init__(self, client, repository, on_back=None, ui_settings: dict | None = None):
+    def __init__(self, client, repository, on_back=None, on_task_complete=None, ui_settings: dict | None = None):
         self._client = client
         self._repository = repository
         self._on_back = on_back
+        self._on_task_complete = on_task_complete
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
         self._font_body = load_ui_font("body", self._ui_settings)
         self._font_small = load_ui_font("small", self._ui_settings)
@@ -78,7 +79,10 @@ class TasksPanel(BaseScreen):
                     self._confirm_complete = True
                     return
                 if 0 <= self._cursor < len(self._tasks):
-                    self._tasks[self._cursor]["done"] = True
+                    task = self._tasks[self._cursor]
+                    task["done"] = True
+                    if self._on_task_complete:
+                        self._on_task_complete(str(task.get("title", "DONE")))
                 self._confirm_complete = False
 
     def _render_skeleton(self, surface, y, count=4):

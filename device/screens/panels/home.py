@@ -1,5 +1,6 @@
 """BITOS Home panel with button-first sidebar navigation."""
 
+import threading
 from datetime import datetime
 
 import pygame
@@ -53,6 +54,9 @@ class HomePanel(BaseScreen):
         self._font_hint = load_ui_font("hint", self._ui_settings)
         self._capture_count = 0
         self._capture_refresh_elapsed = 5.0
+        self._context_fetching = False
+        self._context_elapsed = 0.0
+        self._context_interval = 60.0  # poll every 60 seconds
         self._widget_strip = WidgetStrip([
             Widget(key="time", label="TIME", value=datetime.now().strftime("%H:%M")),
             Widget(key="weather", label="WEATHER", value="--"),
@@ -96,6 +100,12 @@ class HomePanel(BaseScreen):
         msg_unread = int(getattr(self._status_state, "imessage_unread", 0)) if self._status_state else 0
         mail_unread = int(getattr(self._status_state, "gmail_unread", 0)) if self._status_state else 0
         self._widget_strip.update_widget("unread", value=str(msg_unread + mail_unread))
+
+        # Poll live context from backend (weather, headlines)
+        self._context_elapsed += float(dt)
+        if self._context_elapsed >= self._context_interval:
+            self._context_elapsed = 0.0
+            self._poll_context()
 
         # Advance ticker scroll
         if self._ticker_text:
@@ -237,6 +247,27 @@ class HomePanel(BaseScreen):
     def _open_home(self):
         # Already on home panel.
         return
+
+    def _poll_context(self):
+        if self._context_fetching or not self._client:
+            return
+        self._context_fetching = True
+
+        def _fetch():
+            try:
+                ctx = self._client.get_context()
+                if ctx:
+                    weather = ctx.get("weather_summary", ctx.get("weather", "--"))
+                    self._widget_strip.update_widget("weather", value=str(weather)[:8])
+                    headlines = ctx.get("headlines", [])
+                    if headlines:
+                        self._ticker_text = " \u00b7 ".join(str(h) for h in headlines[:5])
+            except Exception:
+                pass  # keep previous values on failure
+            finally:
+                self._context_fetching = False
+
+        threading.Thread(target=_fetch, daemon=True).start()
 
     def _refresh_capture_count(self):
         self._capture_refresh_elapsed = 0.0

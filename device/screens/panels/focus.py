@@ -16,8 +16,9 @@ class FocusPanel(BaseScreen):
     """Minimal focus timer experience for Phase 4 shell breadth."""
     _owns_status_bar = True
 
-    def __init__(self, on_back=None, ui_settings: dict | None = None, duration_seconds: int = 25 * 60, repository=None):
+    def __init__(self, on_back=None, on_open_ui_lab=None, ui_settings: dict | None = None, duration_seconds: int = 25 * 60, repository=None):
         self._on_back = on_back
+        self._on_open_ui_lab = on_open_ui_lab
         self._repository = repository
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
         self._font_timer = load_ui_font("timer", self._ui_settings)
@@ -44,6 +45,7 @@ class FocusPanel(BaseScreen):
             [
                 NavItem(key="start_pause", label="START", status="READY", action=self._toggle_running),
                 NavItem(key="reset", label="RESET", status="ZERO", action=self._reset_timer),
+                NavItem(key="ui_lab", label="UI LAB", status="TEST", action=self._open_ui_lab),
                 NavItem(key="back", label="BACK", status="HOME", action=self._go_back),
             ]
         )
@@ -202,6 +204,10 @@ class FocusPanel(BaseScreen):
         self._total_seconds = self._default_duration
         self._elapsed_seconds = 0
         self._remaining_seconds = self._total_seconds
+
+    def _open_ui_lab(self):
+        if self._on_open_ui_lab:
+            self._on_open_ui_lab()
 
     def _go_back(self):
         if self._on_back:
