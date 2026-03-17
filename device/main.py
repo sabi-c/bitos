@@ -282,13 +282,16 @@ def main():
 
     audio_pipeline = get_audio_pipeline()
 
-    # Soft-start ALSA speaker to prevent WM8960 pop/click on boot
-    from audio.player import init_alsa_soft_start
-    try:
-        vol = DeviceRepository().get_setting("volume", 100)
-        init_alsa_soft_start(target_pct=max(0, min(100, int(vol))))
-    except Exception:
-        init_alsa_soft_start()
+    # Soft-start ALSA speaker in background to prevent WM8960 pop/click
+    def _alsa_soft_start():
+        from audio.player import init_alsa_soft_start
+        try:
+            vol = DeviceRepository().get_setting("volume", 100)
+            init_alsa_soft_start(target_pct=max(0, min(100, int(vol))))
+        except Exception:
+            init_alsa_soft_start()
+    import threading as _thr
+    _thr.Thread(target=_alsa_soft_start, daemon=True, name="alsa-softstart").start()
 
     led = LEDController(board=board)
     monitor = SystemMonitor(interval=30)
@@ -397,7 +400,12 @@ def main():
         """Show an interactive notification banner that wakes the screen.
 
         Called from notification poller or heartbeat when agent has something to say.
+        Suppressed on lock screen and setup wizard.
         """
+        current = screen_mgr.current if hasattr(screen_mgr, 'current') else None
+        if isinstance(current, (LockScreen, SetupWizardPanel)):
+            logger.debug("[Banner] suppressed on %s", type(current).__name__)
+            return
         was_sleeping = idle_mgr.state in ("dim", "sleep")
         idle_mgr.wake()
 
@@ -645,22 +653,24 @@ def main():
     )
     outbound_loop = OutboundWorkerRuntimeLoop(outbound_worker, interval_seconds=0.2, max_per_tick=1)
 
-    server_ok = client.health()
-    if server_ok:
-        logger.info("[BITOS] Backend connected ✓")
-    else:
-        logger.warning("[BITOS] Backend not reachable — chat will not work until server starts")
-
+    # Non-blocking server check — don't delay boot for network
     ui_settings = None
-    try:
-        ui_settings = client.get_ui_settings()
-        logger.info(
-            "[BITOS] UI settings loaded (font=%s, scale=%s)",
-            ui_settings.get("font_family"),
-            ui_settings.get("font_scale"),
-        )
-    except Exception as exc:
-        logger.warning("[BITOS] UI settings unavailable, using defaults (%s)", exc)
+    def _async_server_check():
+        nonlocal ui_settings
+        try:
+            if client.health():
+                logger.info("[BITOS] Backend connected ✓")
+                settings = client.get_ui_settings()
+                if settings:
+                    ui_settings = settings
+                    logger.info("[BITOS] UI settings loaded (font=%s, scale=%s)",
+                                settings.get("font_family"), settings.get("font_scale"))
+            else:
+                logger.warning("[BITOS] Backend not reachable — chat will not work until server starts")
+        except Exception as exc:
+            logger.warning("[BITOS] Server check failed: %s", exc)
+    import threading
+    threading.Thread(target=_async_server_check, daemon=True, name="server-check").start()
 
     # Apply on-device font scale override from local repository
     local_font_scale = repository.get_setting("font_scale", default=None)

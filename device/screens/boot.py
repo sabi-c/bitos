@@ -145,7 +145,7 @@ class BootScreen(BaseScreen):
         self._orb_anim = orb_rotate()
         self._cursor_anim = blink_cursor()
         self._elapsed = 0.0
-        self._auto_advance_time = 8.0
+        self._auto_advance_time = 4.0
         self._done = False
         self._diagnostics = BootDiagnostics()
         self._diagnostics.run_async()

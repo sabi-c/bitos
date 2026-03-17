@@ -18,7 +18,7 @@ Environment=SERVER_URL=http://localhost:8000
 Environment=WHISPLAY_DRIVER_PATH=/home/pi/Whisplay/Driver
 Environment=PYTHONPATH=/home/pi/bitos
 Environment=PYTHONWARNINGS=ignore::RuntimeWarning
-ExecStartPre=/bin/bash -c "until curl -sf http://localhost:8000/health; do sleep 1; done"
+ExecStartPre=/bin/bash -c "for i in $(seq 1 10); do curl -sf http://localhost:8000/health && exit 0; sleep 1; done; echo 'Server not ready after 10s, starting device anyway'; exit 0"
 ExecStart=/home/pi/bitos/.venv/bin/python -m device.main
 Restart=always
 RestartSec=5
