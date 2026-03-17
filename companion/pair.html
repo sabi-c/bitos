@@ -9,108 +9,425 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <style>
-    body{background:#0b0b0b;color:#f2f2f2;font-family:system-ui,sans-serif;margin:0;padding:24px}
-    .card{max-width:480px;margin:0 auto;padding:18px;border:1px solid #333;border-radius:14px;background:#121212}
-    .row{display:flex;gap:10px;margin-top:10px}
-    .btn{padding:11px 12px;border:1px solid #555;background:#1b1b1b;color:#fff;border-radius:10px;cursor:pointer}
-    .btn.wide{display:block;width:100%}
-    .btn.primary{background:#fff;color:#000;border-color:#fff;font-weight:bold}
-    .btn.secondary{background:#0e0e0e;border-color:#444;color:#aaa}
-    input,textarea{width:100%;background:#0e0e0e;color:#fff;border:1px solid #444;border-radius:8px;padding:10px}
-    textarea{min-height:88px}
-    .muted{color:#aaa;font-size:12px}
-    .step{border-top:1px solid #2b2b2b;padding-top:12px;margin-top:12px}
-    .ok{color:#8fd58f}
-    .err{color:#d58f8f}
-    .pin-display{font-size:32px;letter-spacing:8px;font-family:monospace;text-align:center;padding:24px;border:2px solid #fff;margin:16px 0;color:#fff}
-    .pin-status{text-align:center;color:#aaa;font-size:13px;margin-top:8px}
-    .hidden{display:none}
-    .or-divider{display:flex;align-items:center;gap:12px;margin:10px 0;color:#555;font-size:11px;letter-spacing:.08em}
-    .or-divider::before,.or-divider::after{content:'';flex:1;border-top:1px solid #333}
-    .conn-label{font-size:10px;letter-spacing:.06em;color:#666;margin-bottom:6px}
-    .transport-tag{display:inline-block;font-size:10px;padding:3px 8px;border:1px solid #444;color:#888;border-radius:4px;margin-bottom:8px}
-    .ble-notice{font-size:12px;line-height:1.6;color:#d58f8f;padding:8px 0}
-    .ble-notice.warn{color:#f8a44c}
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #000; color: #fff;
+      font-family: monospace; font-size: 14px;
+      display: flex; flex-direction: column;
+      align-items: center; padding: 32px 16px;
+      min-height: 100vh;
+    }
+    h1 { font-size: 20px; letter-spacing: .1em; margin-bottom: 8px; }
+    .sub { color: #555; font-size: 11px; margin-bottom: 24px; }
+
+    /* Progress bar */
+    .progress-bar {
+      display: flex; align-items: center; gap: 0;
+      width: 100%; max-width: 400px;
+      margin-bottom: 24px;
+    }
+    .progress-step {
+      flex: 1; text-align: center; position: relative;
+    }
+    .progress-step .step-num {
+      width: 24px; height: 24px;
+      border: 2px solid #333; display: inline-flex;
+      align-items: center; justify-content: center;
+      font-size: 11px; color: #555;
+      margin-bottom: 4px;
+    }
+    .progress-step.active .step-num {
+      border-color: #fff; color: #fff;
+    }
+    .progress-step.done .step-num {
+      border-color: #4f4; color: #4f4;
+    }
+    .progress-step .step-label {
+      display: block; font-size: 8px;
+      letter-spacing: .04em; color: #333;
+    }
+    .progress-step.active .step-label { color: #aaa; }
+    .progress-step.done .step-label { color: #4f4; }
+    .progress-line {
+      width: 20px; height: 1px; background: #333;
+      margin-bottom: 16px;
+    }
+    .progress-line.done { background: #4f4; }
+
+    /* Card */
+    .card {
+      border: 2px solid #fff; padding: 20px;
+      width: 100%; max-width: 400px; margin-bottom: 16px;
+    }
+    .card.subtle { border-color: #333; }
+    .card h2 {
+      font-size: 11px; letter-spacing: .08em;
+      margin-bottom: 14px; color: #aaa;
+    }
+
+    /* Buttons */
+    button {
+      width: 100%; background: #fff; color: #000;
+      border: none; font-family: monospace; font-size: 14px;
+      font-weight: bold; padding: 12px; cursor: pointer;
+      letter-spacing: .06em;
+    }
+    button:disabled { background: #333; color: #666; cursor: default; }
+    button.secondary {
+      background: #000; color: #fff; border: 2px solid #444;
+      margin-top: 8px;
+    }
+    button.success-btn {
+      background: #000; color: #4f4; border: 2px solid #4f4;
+    }
+    button.danger-btn {
+      background: #000; color: #f44; border: 2px solid #f44;
+    }
+
+    /* Inputs */
+    input {
+      width: 100%; background: #111; border: 2px solid #444;
+      color: #fff; font-family: monospace; font-size: 14px;
+      padding: 10px; margin-bottom: 10px; outline: none;
+    }
+    input:focus { border-color: #fff; }
+
+    /* Status */
+    .status {
+      font-size: 11px; letter-spacing: .06em; color: #888;
+      text-align: center; padding: 8px; min-height: 20px;
+      line-height: 1.6;
+    }
+    .status.ok { color: #4f4; }
+    .status.error { color: #f44; }
+    .status.info { color: #4af; }
+
+    /* Transport tag */
+    .transport-tag {
+      display: inline-block; font-size: 9px;
+      letter-spacing: .06em; padding: 2px 6px;
+      border: 1px solid #444; color: #888;
+      margin-bottom: 8px;
+    }
+    .transport-tag.http { border-color: #4af; color: #4af; }
+    .transport-tag.ble { border-color: #a4f; color: #a4f; }
+
+    /* Pairing display */
+    .pin-display {
+      font-size: 32px; letter-spacing: 8px;
+      font-family: monospace; text-align: center;
+      padding: 24px; border: 2px solid #fff;
+      margin: 16px 0; color: #fff;
+    }
+    .pin-status {
+      text-align: center; color: #888; font-size: 12px;
+      margin-top: 8px; line-height: 1.6;
+    }
+
+    /* Row layout */
+    .row { display: flex; gap: 8px; margin-top: 10px; }
+    .row button { flex: 1; }
+
+    /* Connection spinner */
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .spinner-large {
+      width: 32px; height: 32px;
+      border: 3px solid #333; border-top-color: #fff;
+      border-radius: 50%; margin: 16px auto;
+      animation: spin .8s linear infinite;
+    }
+    .spinner-inline {
+      display: inline-block; width: 12px; height: 12px;
+      border: 2px solid #333; border-top-color: #888;
+      border-radius: 50%; margin-right: 6px;
+      animation: spin .6s linear infinite;
+      vertical-align: middle;
+    }
+
+    /* Connection health indicator */
+    .conn-health {
+      display: flex; align-items: center; justify-content: center;
+      gap: 8px; padding: 8px 12px; margin-bottom: 12px;
+      border: 1px solid #333; font-size: 11px;
+      letter-spacing: .04em;
+    }
+    .conn-health .health-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #333;
+    }
+    .conn-health .health-dot.good { background: #4f4; }
+    .conn-health .health-dot.weak { background: #fa0; }
+    .conn-health .health-dot.bad { background: #f44; }
+    .conn-health .health-label { color: #888; }
+
+    /* Or divider */
+    .or-divider {
+      display: flex; align-items: center; gap: 12px;
+      margin: 10px 0; color: #333; font-size: 10px; letter-spacing: .06em;
+    }
+    .or-divider::before, .or-divider::after {
+      content: ''; flex: 1; border-top: 1px solid #222;
+    }
+
+    /* Step sections */
+    .pair-step { display: none; }
+    .pair-step.active { display: block; }
+
+    /* BLE notices */
+    .ble-notice {
+      font-size: 12px; line-height: 1.6; color: #f44;
+      padding: 8px 0; text-align: center;
+    }
+    .ble-notice.warn { color: #fa0; }
+
+    /* Celebration */
+    .celebration {
+      text-align: center; padding: 20px 0;
+    }
+    .celebration .check {
+      font-size: 48px; color: #4f4;
+      margin-bottom: 12px;
+    }
+    .celebration .title {
+      font-size: 16px; letter-spacing: .06em;
+      margin-bottom: 8px;
+    }
+    .celebration .subtitle {
+      font-size: 12px; color: #888;
+      line-height: 1.6;
+    }
+    .next-links {
+      display: flex; flex-direction: column; gap: 8px;
+      margin-top: 16px;
+    }
+    .next-links a {
+      display: block; text-align: center;
+      text-decoration: none; font-family: monospace;
+      font-size: 13px; font-weight: bold;
+      letter-spacing: .06em; padding: 12px;
+    }
+    .next-links a.primary-link {
+      background: #fff; color: #000;
+    }
+    .next-links a.secondary-link {
+      background: #000; color: #fff; border: 2px solid #444;
+    }
+
+    /* Error states */
+    .error-card {
+      border: 2px solid #f44; padding: 16px;
+      margin-bottom: 12px;
+    }
+    .error-card .error-title {
+      font-size: 12px; color: #f44;
+      letter-spacing: .06em; margin-bottom: 8px;
+    }
+    .error-card .error-msg {
+      font-size: 11px; color: #888; line-height: 1.6;
+    }
+
+    /* Keyboard input */
+    textarea {
+      width: 100%; background: #111; border: 2px solid #444;
+      color: #fff; font-family: monospace; font-size: 14px;
+      padding: 10px; min-height: 80px; outline: none;
+      resize: vertical;
+    }
+    textarea:focus { border-color: #fff; }
+
+    /* BT guide link */
+    .bt-guide-link {
+      display: block; width: 100%; max-width: 400px;
+      text-align: center; font-size: 10px;
+      color: #4af; letter-spacing: .04em;
+      margin-bottom: 12px; text-decoration: none;
+    }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h1>COMPANION PAIR</h1>
+  <h1>&#9678; BITOS</h1>
+  <div class="sub">COMPANION PAIR</div>
 
-    <div class="step">
-      <h3>1. CONNECT</h3>
+  <!-- Progress indicator -->
+  <div class="progress-bar" id="progress-bar">
+    <div class="progress-step active" id="ps1">
+      <div class="step-num">1</div>
+      <span class="step-label">CONNECT</span>
+    </div>
+    <div class="progress-line" id="pl1"></div>
+    <div class="progress-step" id="ps2">
+      <div class="step-num">2</div>
+      <span class="step-label">PAIR</span>
+    </div>
+    <div class="progress-line" id="pl2"></div>
+    <div class="progress-step" id="ps3">
+      <div class="step-num">3</div>
+      <span class="step-label">INFO</span>
+    </div>
+    <div class="progress-line" id="pl3"></div>
+    <div class="progress-step" id="ps4">
+      <div class="step-num">4</div>
+      <span class="step-label">AUTH</span>
+    </div>
+    <div class="progress-line" id="pl4"></div>
+    <div class="progress-step" id="ps5">
+      <div class="step-num">5</div>
+      <span class="step-label">DONE</span>
+    </div>
+  </div>
+
+  <!-- Connection health -->
+  <div class="conn-health" id="conn-health" style="display:none">
+    <div class="health-dot" id="health-dot"></div>
+    <span class="health-label" id="health-label">--</span>
+  </div>
+
+  <!-- Step 1: Connect -->
+  <div class="pair-step active" id="step-connect">
+    <div class="card">
+      <h2>STEP 1 — CONNECT</h2>
 
       <!-- BLE option -->
       <div id="ble-connect-section">
-        <div class="conn-label">BLUETOOTH</div>
-        <button class="btn wide" id="btn-ble-connect" onclick="connectDevice()">CONNECT VIA BLUETOOTH &rarr;</button>
+        <button id="btn-ble-connect" onclick="connectDevice()">
+          CONNECT VIA BLUETOOTH
+        </button>
       </div>
 
       <div class="or-divider">OR</div>
 
       <!-- WiFi/HTTP option -->
       <div id="wifi-connect-section">
-        <div class="conn-label">WI-FI (SAME NETWORK)</div>
-        <input id="device-host" type="text" placeholder="Device IP or bitos.local" value="bitos.local" style="margin-bottom:6px" />
-        <input id="device-port" type="text" placeholder="Port (default: 8080)" value="8080" style="margin-bottom:8px" />
-        <button class="btn wide" id="btn-wifi-connect" onclick="connectHTTP()">CONNECT VIA WI-FI &rarr;</button>
+        <input id="device-host" type="text" placeholder="Device IP or bitos.local" value="bitos.local" />
+        <input id="device-port" type="text" placeholder="Port (default: 8080)" value="8080" />
+        <button class="secondary" id="btn-wifi-connect" onclick="connectHTTP()">
+          CONNECT VIA WI-FI
+        </button>
       </div>
 
-      <div id="connect-status" class="muted"></div>
+      <div class="status" id="connect-status"></div>
+
+      <!-- Connecting spinner (hidden by default) -->
+      <div id="connect-spinner" style="display:none">
+        <div class="spinner-large"></div>
+        <div class="status" id="connect-spinner-label">Scanning for BITOS...</div>
+      </div>
+
+      <!-- Error state -->
+      <div id="connect-error" style="display:none">
+        <div class="error-card">
+          <div class="error-title" id="connect-error-title">CONNECTION FAILED</div>
+          <div class="error-msg" id="connect-error-msg"></div>
+        </div>
+        <button class="secondary" onclick="resetConnect()">TRY AGAIN</button>
+      </div>
 
       <!-- BLE availability notices -->
       <div class="ble-notice warn" id="ble-warn" style="display:none">
-        Web Bluetooth is not supported on iOS. Use "Connect via Wi-Fi" instead, or use Chrome on Android/desktop.
+        Web Bluetooth is not supported on iOS. Use "Connect via Wi-Fi" instead.
       </div>
       <div class="ble-notice" id="ble-unavailable" style="display:none">
-        Web Bluetooth is not available in this browser. Use "Connect via Wi-Fi" to pair your device over the local network.
+        Web Bluetooth is not available. Use "Connect via Wi-Fi" to pair over the local network.
       </div>
     </div>
 
-    <div class="step hidden" id="step-pairing">
-      <h3>2. CONFIRM PAIRING CODE</h3>
-      <div class="pin-display" id="pairing-pin">WAITING FOR DEVICE...</div>
-      <div class="pin-status" id="pairing-status">Check your BITOS screen &mdash; codes must match</div>
+    <a href="bt-guide.html" class="bt-guide-link">BLUETOOTH PAIRING GUIDE &rarr;</a>
+  </div>
+
+  <!-- Step 2: Pairing code -->
+  <div class="pair-step" id="step-pairing">
+    <div class="card">
+      <h2>STEP 2 — CONFIRM PAIRING CODE</h2>
+      <div class="pin-display" id="pairing-pin">
+        <span class="spinner-inline"></span> WAITING...
+      </div>
+      <div class="pin-status" id="pairing-status">
+        Check your BITOS screen — codes must match
+      </div>
       <div class="row">
-        <button class="btn wide" onclick="confirmPairing()">&check; CODES MATCH</button>
-        <button class="btn secondary wide" onclick="rejectPairing()">&cross; CANCEL</button>
+        <button class="success-btn" onclick="confirmPairing()">CODES MATCH</button>
+        <button class="danger-btn" onclick="rejectPairing()">CANCEL</button>
       </div>
     </div>
+  </div>
 
-    <div class="step">
-      <h3>3. READ DEVICE INFO</h3>
-      <button class="btn" onclick="readInfo()">READ</button>
-      <div id="info" class="muted"></div>
-    </div>
-
-    <div class="step">
-      <h3>4. ENTER PIN</h3>
-      <div class="transport-tag" id="transport-tag"></div>
-      <input id="pin" type="password" placeholder="Device PIN" />
-      <button class="btn" onclick="authPin()">AUTHENTICATE</button>
-      <div id="auth" class="muted"></div>
-    </div>
-
-    <div class="step">
-      <h3>5. PAIRED</h3>
-      <div id="paired" class="muted">Authenticate to continue.</div>
-      <div class="row">
-        <a href="setup.html" class="btn" style="text-decoration:none;display:inline-block">CONFIGURE WI-FI</a>
-        <button class="btn" onclick="disconnect()">DISCONNECT</button>
+  <!-- Step 3: Device info -->
+  <div class="pair-step" id="step-info">
+    <div class="card">
+      <h2>STEP 3 — DEVICE INFO</h2>
+      <div class="status" id="info-status">
+        <span class="spinner-inline"></span> Reading device info...
       </div>
-      <a href="settings.html" style="
-         display:block; width:100%;
-         background:#000; color:#aaa;
-         border:2px solid #333;
-         font-family:monospace; font-size:13px;
-         text-align:center; padding:12px;
-         margin-top:8px; text-decoration:none;
-         letter-spacing:.06em">
-        DEVICE SETTINGS
-      </a>
-      <h4>KEYBOARD INPUT</h4>
-      <textarea id="kb-input" placeholder="Type here &rarr; appears on device screen"></textarea>
-      <button class="btn wide" onclick="sendKeyboard()">SEND TO DEVICE &rarr;</button>
+      <div id="info-details" style="display:none">
+        <div style="font-size:12px;color:#ccc;line-height:1.8;padding:8px 0" id="info-text"></div>
+      </div>
+      <button class="secondary" onclick="goToAuth()" id="btn-to-auth" disabled>CONTINUE</button>
+    </div>
+  </div>
+
+  <!-- Step 4: Auth -->
+  <div class="pair-step" id="step-auth">
+    <div class="card">
+      <div class="transport-tag" id="transport-tag">--</div>
+      <h2>STEP 4 — ENTER PIN</h2>
+      <div class="status" style="margin-bottom:8px">
+        Enter the PIN shown on your BITOS device.
+        Default PIN is 0000.
+      </div>
+      <input id="pin" type="password" placeholder="4-digit PIN"
+             inputmode="numeric" pattern="[0-9]*" maxlength="4" />
+      <button onclick="authPin()">AUTHENTICATE</button>
+      <div class="status" id="auth-status"></div>
+
+      <!-- Auth error state -->
+      <div id="auth-error" style="display:none">
+        <div class="error-card">
+          <div class="error-title">PIN INCORRECT</div>
+          <div class="error-msg" id="auth-error-msg">
+            The PIN you entered does not match. Check your BITOS
+            device screen for the correct code.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 5: Paired / Done -->
+  <div class="pair-step" id="step-done">
+    <div class="card">
+      <h2>STEP 5 — PAIRED</h2>
+
+      <!-- Celebration -->
+      <div class="celebration">
+        <div class="check">&#10003;</div>
+        <div class="title">SUCCESSFULLY PAIRED</div>
+        <div class="subtitle" id="paired-info">
+          Your companion is connected to BITOS.
+        </div>
+      </div>
+
+      <!-- What's next -->
+      <div class="next-links">
+        <a href="setup.html" class="primary-link">CONFIGURE WI-FI</a>
+        <a href="dashboard.html" class="secondary-link">GO TO DASHBOARD</a>
+        <a href="settings.html" class="secondary-link">DEVICE SETTINGS</a>
+        <a href="chat.html" class="secondary-link">START CHATTING</a>
+      </div>
+
+      <button class="danger-btn" onclick="disconnect()" style="margin-top:12px">
+        DISCONNECT
+      </button>
+    </div>
+
+    <!-- Keyboard input (post-pairing) -->
+    <div class="card subtle" style="margin-top:8px">
+      <h2>KEYBOARD INPUT</h2>
+      <textarea id="kb-input" placeholder="Type here — appears on device screen"></textarea>
+      <button class="secondary" onclick="sendKeyboard()" style="margin-top:8px">
+        SEND TO DEVICE
+      </button>
     </div>
   </div>
 
@@ -126,7 +443,27 @@
   <script>
     let companion = null;
     let pairingActive = false;
+    let currentStep = 1;
     const hasBLE = isBleAvailable();
+
+    // ── Progress management ──
+    function setStep(n) {
+      currentStep = n;
+      for (let i = 1; i <= 5; i++) {
+        const ps = document.getElementById('ps' + i);
+        ps.classList.remove('active', 'done');
+        if (i < n) ps.classList.add('done');
+        if (i === n) ps.classList.add('active');
+      }
+      for (let i = 1; i <= 4; i++) {
+        const pl = document.getElementById('pl' + i);
+        pl.classList.toggle('done', i < n);
+      }
+      const steps = ['step-connect', 'step-pairing', 'step-info', 'step-auth', 'step-done'];
+      steps.forEach((id, idx) => {
+        document.getElementById(id).classList.toggle('active', idx === n - 1);
+      });
+    }
 
     // ── BLE availability ──
     if (!hasBLE) {
@@ -139,7 +476,10 @@
         document.getElementById('ble-unavailable').style.display = 'block';
       }
       // Make WiFi the visually primary button
-      document.getElementById('btn-wifi-connect').className = 'btn wide primary';
+      document.getElementById('btn-wifi-connect').className = 'btn wide';
+      document.getElementById('btn-wifi-connect').style.background = '#fff';
+      document.getElementById('btn-wifi-connect').style.color = '#000';
+      document.getElementById('btn-wifi-connect').style.border = 'none';
     }
 
     // ── Parse QR pairing params ──
@@ -172,63 +512,140 @@
       const tag = document.getElementById('transport-tag');
       if (companion && companion.transport === 'http') {
         tag.textContent = 'VIA WI-FI';
+        tag.className = 'transport-tag http';
       } else {
         tag.textContent = 'VIA BLUETOOTH';
+        tag.className = 'transport-tag ble';
       }
+    }
+
+    function showConnectionHealth(transport) {
+      const healthEl = document.getElementById('conn-health');
+      const dot = document.getElementById('health-dot');
+      const label = document.getElementById('health-label');
+      healthEl.style.display = 'flex';
+      dot.className = 'health-dot good';
+      label.textContent = 'CONNECTED VIA ' +
+        (transport === 'http' ? 'WI-FI' : 'BLUETOOTH');
+    }
+
+    function hideConnectionHealth() {
+      document.getElementById('conn-health').style.display = 'none';
+    }
+
+    function showConnectError(title, msg) {
+      document.getElementById('connect-spinner').style.display = 'none';
+      document.getElementById('connect-error').style.display = 'block';
+      document.getElementById('connect-error-title').textContent = title;
+      document.getElementById('connect-error-msg').textContent = msg;
+      // Hide main controls
+      document.getElementById('ble-connect-section').style.display = 'none';
+      document.getElementById('wifi-connect-section').style.display = 'none';
+      document.querySelectorAll('#step-connect .or-divider').forEach(
+        el => el.style.display = 'none');
+    }
+
+    function resetConnect() {
+      document.getElementById('connect-error').style.display = 'none';
+      document.getElementById('connect-spinner').style.display = 'none';
+      document.getElementById('connect-status').textContent = '';
+      document.getElementById('ble-connect-section').style.display = 'block';
+      document.getElementById('wifi-connect-section').style.display = 'block';
+      document.querySelectorAll('#step-connect .or-divider').forEach(
+        el => el.style.display = 'flex');
     }
 
     // ── BLE Connect ──
     async function connectDevice() {
       if (isQrExpired()) {
-        document.getElementById('connect-status').innerHTML =
-          '<span class="err">QR expired \u2014 scan a new code on the device</span>';
+        showConnectError('QR EXPIRED', 'Scan a new QR code on the device to get fresh pairing credentials.');
         return;
       }
+      // Show spinner
+      document.getElementById('connect-spinner').style.display = 'block';
+      document.getElementById('connect-spinner-label').textContent = 'Scanning for BITOS device...';
+      document.getElementById('connect-status').textContent = '';
       try {
-        document.getElementById('connect-status').textContent = 'Connecting via Bluetooth...';
         companion = new BitosCompanion();
         _applyPairingCredentials(companion);
         await companion.connect();
-        document.getElementById('connect-status').innerHTML = '<span class="ok">Connected via Bluetooth</span>';
+        document.getElementById('connect-spinner').style.display = 'none';
+        document.getElementById('connect-status').innerHTML =
+          '<span style="color:#4f4">Connected via Bluetooth</span>';
         updateTransportTag();
+        showConnectionHealth('ble');
+        // Go to pairing step
+        setTimeout(() => setStep(2), 600);
         showPairingStep();
       } catch (e) {
-        document.getElementById('connect-status').innerHTML = '<span class="err">' + e.message + '</span>';
+        document.getElementById('connect-spinner').style.display = 'none';
+        // Categorize error
+        const msg = e.message || '';
+        if (msg.includes('User cancelled') || msg.includes('user denied')) {
+          document.getElementById('connect-status').innerHTML =
+            '<span style="color:#888">Cancelled. Tap CONNECT to try again.</span>';
+        } else if (msg.includes('not found') || msg.includes('No device')) {
+          showConnectError('DEVICE NOT FOUND',
+            'No BITOS device was detected nearby. Make sure the device is powered on and in range.');
+        } else if (msg.includes('timeout') || msg.includes('Timeout')) {
+          showConnectError('CONNECTION TIMED OUT',
+            'The connection attempt timed out. Move closer to the device and try again.');
+        } else {
+          showConnectError('CONNECTION FAILED', msg);
+        }
       }
     }
 
     // ── HTTP/WiFi Connect ──
     async function connectHTTP() {
       if (isQrExpired()) {
-        document.getElementById('connect-status').innerHTML =
-          '<span class="err">QR expired \u2014 scan a new code on the device</span>';
+        showConnectError('QR EXPIRED', 'Scan a new QR code on the device.');
         return;
       }
       const host = document.getElementById('device-host').value.trim() || 'bitos.local';
       const port = document.getElementById('device-port').value.trim() || '8080';
       const baseUrl = 'http://' + host + ':' + port;
-      document.getElementById('connect-status').textContent = 'Connecting to ' + baseUrl + '...';
+
+      // Show spinner
+      document.getElementById('connect-spinner').style.display = 'block';
+      document.getElementById('connect-spinner-label').textContent =
+        'Connecting to ' + baseUrl + '...';
+      document.getElementById('connect-status').textContent = '';
+
       try {
         companion = new BitosHttpCompanion(baseUrl);
         _applyPairingCredentials(companion);
         await companion.connect();
         sessionStorage.setItem('bitos_provision_url', baseUrl);
-        document.getElementById('connect-status').innerHTML = '<span class="ok">Connected via Wi-Fi</span>';
-        updateTransportTag();
-        // Skip BLE pairing step for HTTP — go straight to PIN
-      } catch (e) {
+        document.getElementById('connect-spinner').style.display = 'none';
         document.getElementById('connect-status').innerHTML =
-          '<span class="err">Could not reach device at ' + baseUrl + '. Ensure both devices are on the same Wi-Fi network.</span>';
+          '<span style="color:#4f4">Connected via Wi-Fi</span>';
+        updateTransportTag();
+        showConnectionHealth('http');
+        // Skip BLE pairing step for HTTP — auto-read info then go to PIN
+        setTimeout(() => {
+          setStep(3);
+          autoReadInfo();
+        }, 600);
+      } catch (e) {
+        document.getElementById('connect-spinner').style.display = 'none';
+        const msg = e.message || '';
+        if (msg.includes('timeout') || msg.includes('Timeout') || e.name === 'AbortError') {
+          showConnectError('CONNECTION TIMED OUT',
+            'Could not reach ' + baseUrl + '. Make sure the device is powered on and both devices are on the same Wi-Fi network.');
+        } else {
+          showConnectError('DEVICE NOT REACHABLE',
+            'Could not reach device at ' + baseUrl + '. Check the IP address and ensure both devices are on the same Wi-Fi network.');
+        }
       }
     }
 
     function showPairingStep() {
-      const el = document.getElementById('step-pairing');
-      el.classList.remove('hidden');
       pairingActive = true;
-      document.getElementById('pairing-pin').textContent = 'WAITING FOR DEVICE...';
+      document.getElementById('pairing-pin').innerHTML =
+        '<span class="spinner-inline"></span> WAITING...';
       document.getElementById('pairing-status').textContent =
-        'Check your BITOS screen \u2014 codes must match';
+        'Check your BITOS screen — codes must match';
       pollPairingStatus();
     }
 
@@ -254,46 +671,87 @@
 
     function confirmPairing() {
       pairingActive = false;
-      document.getElementById('pairing-pin').textContent = 'PAIRED \u2713';
+      document.getElementById('pairing-pin').textContent = 'PAIRED';
+      document.getElementById('pairing-pin').style.color = '#4f4';
+      document.getElementById('pairing-pin').style.borderColor = '#4f4';
       document.getElementById('pairing-status').innerHTML =
-        '<span class="ok">Pairing confirmed</span>';
+        '<span style="color:#4f4">Pairing confirmed</span>';
+      setTimeout(() => {
+        setStep(3);
+        autoReadInfo();
+      }, 800);
     }
 
     function rejectPairing() {
       pairingActive = false;
       document.getElementById('pairing-pin').textContent = 'CANCELLED';
+      document.getElementById('pairing-pin').style.color = '#f44';
+      document.getElementById('pairing-pin').style.borderColor = '#f44';
       document.getElementById('pairing-status').innerHTML =
-        '<span class="err">Pairing rejected</span>';
+        '<span style="color:#f44">Pairing rejected — disconnect and try again</span>';
     }
 
-    async function readInfo() {
+    async function autoReadInfo() {
+      const statusEl = document.getElementById('info-status');
+      const detailsEl = document.getElementById('info-details');
+      const btnEl = document.getElementById('btn-to-auth');
+      statusEl.innerHTML = '<span class="spinner-inline"></span> Reading device info...';
       try {
         const info = await companion.readDeviceInfo();
         const serial = (info.serial || 'unknown').slice(-6);
-        const infoEl = document.getElementById('info');
-        infoEl.textContent = 'serial: ' + serial + ' | model: ' + (info.model || 'BITOS') + ' | protocol: ' + (info.protocol || 'v1');
+        detailsEl.style.display = 'block';
+        document.getElementById('info-text').textContent =
+          'Serial: ...' + serial +
+          '  |  Model: ' + (info.model || 'BITOS') +
+          '  |  Protocol: ' + (info.protocol || 'v1');
+        statusEl.innerHTML = '<span style="color:#4f4">Device info read successfully</span>';
+        btnEl.disabled = false;
       } catch (e) {
-        document.getElementById('info').textContent = e.message;
+        statusEl.innerHTML = '<span style="color:#fa0">Could not read device info — continue anyway</span>';
+        btnEl.disabled = false;
       }
+    }
+
+    function goToAuth() {
+      setStep(4);
     }
 
     async function authPin() {
       if (isQrExpired()) {
-        document.getElementById('auth').innerHTML =
-          '<span class="err">QR expired \u2014 scan a new code on the device</span>';
+        document.getElementById('auth-status').innerHTML =
+          '<span style="color:#f44">QR expired — scan a new code on the device</span>';
         return;
       }
+      const pin = document.getElementById('pin').value;
+      document.getElementById('auth-status').innerHTML =
+        '<span class="spinner-inline"></span> Authenticating...';
+      document.getElementById('auth-error').style.display = 'none';
       try {
-        const pin = document.getElementById('pin').value;
         await companion.authenticate(pin);
-        const status = await companion.readStatus();
-        document.getElementById('auth').innerHTML = '<span class="ok">Authenticated</span>';
-        const battStr = status.battery_pct != null ? status.battery_pct + '%' : (status.battery || '--');
-        const wifiStr = status.wifi_ssid || status.wifi || '--';
-        const aiStr = status.ai_online != null ? (status.ai_online ? 'online' : 'offline') : (status.ai || '--');
-        document.getElementById('paired').textContent = 'battery: ' + battStr + ' | wifi: ' + wifiStr + ' | ai: ' + aiStr;
+        document.getElementById('auth-status').innerHTML =
+          '<span style="color:#4f4">Authenticated</span>';
+
+        // Read status for the done screen
+        try {
+          const status = await companion.readStatus();
+          const battStr = status.battery_pct != null ? status.battery_pct + '%' : (status.battery || '--');
+          const wifiStr = status.wifi_ssid || status.wifi || '--';
+          const aiStr = status.ai_online != null ? (status.ai_online ? 'online' : 'offline') : (status.ai || '--');
+          document.getElementById('paired-info').textContent =
+            'Battery: ' + battStr + '  |  Wi-Fi: ' + wifiStr + '  |  AI: ' + aiStr;
+        } catch (_) {}
+
+        setTimeout(() => setStep(5), 600);
       } catch (e) {
-        document.getElementById('auth').textContent = e.message;
+        const msg = e.message || '';
+        document.getElementById('auth-status').textContent = '';
+        document.getElementById('auth-error').style.display = 'block';
+        if (msg.includes('invalid') || msg.includes('wrong') || msg.includes('denied') || msg.includes('PIN')) {
+          document.getElementById('auth-error-msg').textContent =
+            'The PIN you entered does not match. Check your BITOS device screen for the correct code. Default PIN is 0000.';
+        } else {
+          document.getElementById('auth-error-msg').textContent = msg;
+        }
       }
     }
 
@@ -304,17 +762,17 @@
         await companion.sendKeyboardInput(text);
         document.getElementById('kb-input').value = '';
       } catch (e) {
-        document.getElementById('paired').innerHTML =
-          '<span class="err">' + e.message + '</span>';
+        alert('Error: ' + e.message);
       }
     }
 
     function disconnect() {
       pairingActive = false;
       if (companion) companion.disconnect();
-      document.getElementById('connect-status').textContent = 'Disconnected';
-      document.getElementById('auth').textContent = '';
-      document.getElementById('paired').textContent = 'Authenticate to continue.';
+      companion = null;
+      hideConnectionHealth();
+      setStep(1);
+      resetConnect();
     }
   </script>
 </body>

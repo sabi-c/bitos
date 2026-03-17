@@ -9,14 +9,114 @@
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="/icon-192.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/shared.css">
+  <style>
+    /* Connection status bar */
+    .conn-status-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      width: 100%; max-width: 400px;
+      padding: 10px 14px; border: 1px solid #333;
+      margin-bottom: 12px; gap: 8px;
+    }
+    .conn-status-left {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .conn-info {
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .conn-label {
+      font-size: 11px; letter-spacing: .06em; color: #888;
+    }
+    .conn-via {
+      font-size: 9px; letter-spacing: .04em; color: #555;
+    }
+    .conn-status-right {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .conn-settings-link {
+      font-size: 9px; letter-spacing: .06em; color: #4af;
+      text-decoration: none; padding: 4px 8px;
+      border: 1px solid #4af;
+    }
+    .conn-settings-link:hover { background: #112; }
+
+    /* Device online badge */
+    .device-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 10px; letter-spacing: .06em; color: #4f4;
+      padding: 4px 12px; border: 1px solid #4f4;
+      margin-bottom: 12px;
+    }
+    .device-badge-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #4f4;
+    }
+    .device-badge-port {
+      color: #383; font-size: 9px;
+    }
+
+    /* Reconnect card */
+    .reconnect-card {
+      width: 100%; max-width: 400px;
+      border: 2px solid #f44; padding: 14px;
+      margin-bottom: 12px; text-align: center;
+    }
+    .reconnect-msg {
+      font-size: 12px; color: #f44;
+      letter-spacing: .04em; margin-bottom: 10px;
+    }
+    .reconnect-actions {
+      display: flex; gap: 8px; justify-content: center;
+    }
+    .reconnect-btn {
+      background: #f44; color: #000; border: none;
+      font-family: monospace; font-size: 12px;
+      font-weight: bold; letter-spacing: .06em;
+      padding: 10px 20px; cursor: pointer;
+      width: auto;
+    }
+    .reconnect-btn:disabled {
+      background: #633; color: #999; cursor: default;
+    }
+    .reconnect-help {
+      font-size: 11px; color: #888; text-decoration: none;
+      padding: 10px 12px; border: 1px solid #444;
+      display: flex; align-items: center;
+      letter-spacing: .04em;
+    }
+    .reconnect-help:hover { color: #fff; border-color: #888; }
+  </style>
 </head>
 <body>
   <h1>&#9678; BITOS</h1>
 
-  <!-- Connection badge -->
-  <div class="conn-badge" id="conn-badge">
-    <div class="conn-dot" id="conn-dot"></div>
-    <span id="conn-label">CHECKING...</span>
+  <!-- Connection status card -->
+  <div class="conn-status-bar" id="conn-status-bar">
+    <div class="conn-status-left">
+      <div class="conn-dot" id="conn-dot"></div>
+      <div class="conn-info">
+        <span class="conn-label" id="conn-label">CHECKING...</span>
+        <span class="conn-via" id="conn-via"></span>
+      </div>
+    </div>
+    <div class="conn-status-right" id="conn-actions">
+      <a href="settings.html#connection" class="conn-settings-link" id="conn-settings-link">SETTINGS</a>
+    </div>
+  </div>
+
+  <!-- Device online badge -->
+  <div class="device-badge" id="device-badge" style="display:none">
+    <div class="device-badge-dot"></div>
+    <span>DEVICE ONLINE</span>
+    <span class="device-badge-port">:8080</span>
+  </div>
+
+  <!-- Reconnect prompt (shown when disconnected) -->
+  <div class="reconnect-card" id="reconnect-card" style="display:none">
+    <div class="reconnect-msg">Device is not reachable</div>
+    <div class="reconnect-actions">
+      <button class="reconnect-btn" onclick="reconnectDevice()">RECONNECT</button>
+      <a href="bt-guide.html" class="reconnect-help">HELP</a>
+    </div>
   </div>
 
   <!-- Status hero -->
@@ -170,16 +270,62 @@
     function updateConnectionBadge(serverOk, deviceOk) {
       const dot = document.getElementById('conn-dot');
       const label = document.getElementById('conn-label');
+      const via = document.getElementById('conn-via');
+      const deviceBadge = document.getElementById('device-badge');
+      const reconnectCard = document.getElementById('reconnect-card');
       dot.className = 'conn-dot';
+
+      // Determine connection method
+      const transport = connMgr.transport;
+      let viaText = '';
+      if (transport === 'http') viaText = 'Connected via Wi-Fi';
+      else if (transport === 'ble') viaText = 'Connected via Bluetooth';
 
       if (serverOk && deviceOk) {
         dot.classList.add('online');
         label.textContent = 'ONLINE';
+        via.textContent = viaText || 'Wi-Fi + Device';
+        reconnectCard.style.display = 'none';
       } else if (serverOk || deviceOk) {
         dot.classList.add('partial');
         label.textContent = serverOk ? 'SERVER ONLY' : 'DEVICE ONLY';
+        via.textContent = serverOk ? 'AI server reachable' : 'Device reachable on local network';
+        reconnectCard.style.display = 'none';
       } else {
-        label.textContent = 'DEVICE OFFLINE';
+        label.textContent = 'DISCONNECTED';
+        via.textContent = 'Cannot reach device or server';
+        reconnectCard.style.display = 'block';
+      }
+
+      // Device online badge (port 8080 reachable)
+      if (deviceOk) {
+        deviceBadge.style.display = 'inline-flex';
+      } else {
+        deviceBadge.style.display = 'none';
+      }
+    }
+
+    // ── Reconnect from dashboard ──
+    async function reconnectDevice() {
+      const btn = document.querySelector('.reconnect-btn');
+      btn.disabled = true;
+      btn.textContent = 'CONNECTING...';
+      try {
+        const ok = await connMgr.autoConnect();
+        if (ok) {
+          btn.textContent = 'CONNECTED';
+          fetchStatus();
+          fetchContext();
+          fetchActivity();
+        } else {
+          btn.textContent = 'RECONNECT';
+          btn.disabled = false;
+          // Show manual connect card as fallback
+          document.getElementById('connect-card').style.display = 'block';
+        }
+      } catch (_) {
+        btn.textContent = 'RECONNECT';
+        btn.disabled = false;
       }
     }
 

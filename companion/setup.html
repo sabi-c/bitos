@@ -37,7 +37,7 @@
       font-weight: bold; padding: 12px; cursor: pointer;
       letter-spacing: .06em;
     }
-    button:disabled { background: #333; color: #666; }
+    button:disabled { background: #333; color: #666; cursor: default; }
     button.secondary {
       background: #000; color: #fff; border: 2px solid #444;
       margin-top: 8px;
@@ -47,9 +47,15 @@
       margin-top: 10px;
     }
     button.wifi-btn:disabled { border-color: #333; color: #666; }
+    button.test-btn {
+      background: #000; color: #4f4; border: 2px solid #4f4;
+      margin-top: 8px;
+    }
+    button.test-btn:disabled { border-color: #333; color: #666; }
     .status {
       font-size: 11px; letter-spacing: .06em; color: #888;
       text-align: center; padding: 8px; min-height: 20px;
+      line-height: 1.6;
     }
     .status.error { color: #f44; }
     .status.ok { color: #4f4; }
@@ -58,10 +64,20 @@
     .step.active { display: block; }
     .progress {
       display: flex; gap: 6px; justify-content: center;
-      margin-bottom: 24px;
+      margin-bottom: 8px;
     }
+    .progress-labels {
+      display: flex; gap: 0; justify-content: center;
+      margin-bottom: 24px; width: 100%; max-width: 360px;
+    }
+    .progress-label {
+      flex: 1; text-align: center;
+      font-size: 9px; letter-spacing: .04em; color: #333;
+    }
+    .progress-label.active { color: #aaa; }
+    .progress-label.done { color: #4f4; }
     .dot { width: 8px; height: 8px; background: #333; }
-    .dot.done { background: #fff; }
+    .dot.done { background: #4f4; }
     .dot.active { background: #aaa; }
     .conn-method {
       display: flex; gap: 8px; margin-bottom: 12px;
@@ -104,6 +120,169 @@
     }
     .ip-row input { flex: 1; margin-bottom: 0; }
     .ip-row button { width: auto; padding: 10px 16px; font-size: 12px; }
+
+    /* Connection diagram */
+    .conn-diagram {
+      display: flex; align-items: center; justify-content: center;
+      gap: 12px; padding: 16px 0; margin-bottom: 12px;
+    }
+    .conn-diagram .device-icon {
+      width: 48px; height: 48px;
+      border: 2px solid #fff; display: flex;
+      align-items: center; justify-content: center;
+      font-size: 9px; letter-spacing: .04em; color: #aaa;
+      text-align: center; line-height: 1.3;
+    }
+    .conn-diagram .link-line {
+      display: flex; align-items: center; gap: 4px;
+      color: #444; font-size: 10px;
+    }
+    .conn-diagram .link-line .dashes {
+      width: 32px; border-top: 1px dashed #444;
+    }
+    .conn-diagram .link-label {
+      font-size: 8px; letter-spacing: .06em; color: #4af;
+    }
+
+    /* Troubleshooting expandable */
+    .trouble-toggle {
+      width: 100%; max-width: 360px;
+      background: none; border: none; color: #555;
+      font-family: monospace; font-size: 11px;
+      letter-spacing: .04em; cursor: pointer;
+      padding: 8px 0; text-align: left;
+    }
+    .trouble-toggle:hover { color: #888; }
+    .trouble-toggle::before {
+      content: '+ ';
+    }
+    .trouble-toggle.open::before {
+      content: '- ';
+    }
+    .trouble-content {
+      display: none; width: 100%; max-width: 360px;
+      border: 1px solid #222; padding: 12px;
+      margin-bottom: 16px; font-size: 11px;
+      line-height: 1.8; color: #888;
+    }
+    .trouble-content.open { display: block; }
+    .trouble-content li {
+      margin-left: 16px; margin-bottom: 4px;
+    }
+
+    /* WiFi network list */
+    .wifi-network-list {
+      margin-bottom: 10px;
+    }
+    .wifi-network {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px; border: 1px solid #333; margin-bottom: 4px;
+      cursor: pointer; transition: border-color .15s;
+    }
+    .wifi-network:hover { border-color: #888; }
+    .wifi-network.selected { border-color: #fff; background: #111; }
+    .wifi-network-name { font-size: 13px; color: #ccc; }
+    .wifi-signal {
+      display: flex; align-items: flex-end; gap: 2px; height: 14px;
+    }
+    .wifi-signal .bar {
+      width: 3px; background: #333;
+    }
+    .wifi-signal .bar.active { background: #4f4; }
+    .wifi-signal .bar:nth-child(1) { height: 4px; }
+    .wifi-signal .bar:nth-child(2) { height: 7px; }
+    .wifi-signal .bar:nth-child(3) { height: 10px; }
+    .wifi-signal .bar:nth-child(4) { height: 14px; }
+    .scan-status {
+      font-size: 10px; color: #555; letter-spacing: .04em;
+      padding: 8px 0; text-align: center;
+    }
+    .or-divider {
+      display: flex; align-items: center; gap: 12px;
+      margin: 8px 0; color: #333; font-size: 10px; letter-spacing: .06em;
+    }
+    .or-divider::before, .or-divider::after {
+      content: ''; flex: 1; border-top: 1px solid #222;
+    }
+
+    /* PIN display hint */
+    .pin-hint {
+      font-size: 10px; color: #555; margin-top: -4px;
+      margin-bottom: 10px; line-height: 1.5;
+    }
+    .pin-device-mockup {
+      border: 1px solid #333; padding: 8px;
+      margin-bottom: 12px; text-align: center;
+    }
+    .pin-device-mockup .mockup-label {
+      font-size: 9px; color: #555; letter-spacing: .04em;
+      margin-bottom: 4px;
+    }
+    .pin-device-mockup .mockup-pin {
+      font-size: 20px; letter-spacing: 6px; color: #fff;
+    }
+
+    /* Test result */
+    .test-result {
+      display: none; padding: 10px; margin-top: 8px;
+      font-size: 11px; line-height: 1.6;
+      border: 1px solid #333;
+    }
+    .test-result.pass { border-color: #4f4; color: #4f4; }
+    .test-result.fail { border-color: #f44; color: #f44; }
+
+    /* Summary card */
+    .summary-row {
+      display: flex; justify-content: space-between;
+      padding: 6px 0; border-bottom: 1px solid #1a1a1a;
+      font-size: 12px;
+    }
+    .summary-row:last-child { border-bottom: none; }
+    .summary-key { color: #666; }
+    .summary-val { color: #ccc; }
+
+    /* Finish links */
+    .finish-links {
+      display: flex; flex-direction: column; gap: 8px;
+      margin-top: 12px;
+    }
+    .finish-links a {
+      display: block; text-align: center;
+      text-decoration: none; padding: 12px;
+      font-family: monospace; font-size: 13px;
+      font-weight: bold; letter-spacing: .06em;
+    }
+    .finish-links a.primary-link {
+      background: #fff; color: #000;
+    }
+    .finish-links a.secondary-link {
+      background: #000; color: #fff; border: 2px solid #444;
+    }
+    .bookmark-hint {
+      font-size: 10px; color: #444; text-align: center;
+      margin-top: 12px; line-height: 1.6;
+    }
+
+    /* Spinner for scanning */
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .spinner {
+      display: inline-block; width: 12px; height: 12px;
+      border: 2px solid #333; border-top-color: #888;
+      border-radius: 50%; margin-right: 6px;
+      animation: spin .6s linear infinite;
+      vertical-align: middle;
+    }
+
+    /* BT guide link */
+    .bt-guide-link {
+      display: block; width: 100%; max-width: 360px;
+      text-align: center; font-size: 10px;
+      color: #4af; letter-spacing: .04em;
+      margin-bottom: 16px; text-decoration: none;
+    }
+    .bt-guide-link:hover { color: #6cf; }
   </style>
 </head>
 <body>
@@ -116,6 +295,12 @@
     <div class="dot" id="d2"></div>
     <div class="dot" id="d3"></div>
   </div>
+  <div class="progress-labels">
+    <div class="progress-label active" id="pl0">CONNECT</div>
+    <div class="progress-label" id="pl1">AUTH</div>
+    <div class="progress-label" id="pl2">WI-FI</div>
+    <div class="progress-label" id="pl3">DONE</div>
+  </div>
 
   <!-- Step 0: Connect -->
   <div class="step active" id="s0">
@@ -124,6 +309,21 @@
       Web Bluetooth is not available in this browser.
       Use the WiFi connection method below instead — it works
       on all browsers including iOS Safari.
+    </div>
+
+    <!-- Connection diagram -->
+    <div class="conn-diagram">
+      <div class="device-icon">BITOS<br>DEVICE</div>
+      <div class="link-line">
+        <div class="dashes"></div>
+        <div class="link-label" id="diagram-label">WI-FI</div>
+        <div class="dashes"></div>
+      </div>
+      <div class="device-icon">YOUR<br>PHONE</div>
+    </div>
+
+    <div class="status info" style="margin-bottom:12px;font-size:11px;max-width:360px;width:100%">
+      Make sure your phone and BITOS are on the same Wi-Fi network
     </div>
 
     <div class="conn-method" id="conn-method-bar">
@@ -170,6 +370,24 @@
         </button>
       </div>
     </div>
+
+    <a href="bt-guide.html" class="bt-guide-link">HOW BLUETOOTH PAIRING WORKS &rarr;</a>
+
+    <!-- Troubleshooting -->
+    <button class="trouble-toggle" id="trouble-toggle" onclick="toggleTrouble()">
+      HAVING TROUBLE?
+    </button>
+    <div class="trouble-content" id="trouble-content">
+      <ul>
+        <li>Ensure your BITOS device is powered on and showing the home screen</li>
+        <li>Both devices must be on the same Wi-Fi network for Wi-Fi mode</li>
+        <li>Try entering the device IP directly (shown on BITOS Settings screen)</li>
+        <li>If using Bluetooth, make sure you are using Chrome on Android or desktop</li>
+        <li>iOS does not support Web Bluetooth — use Wi-Fi connection instead</li>
+        <li>Try restarting your BITOS device if connection keeps failing</li>
+        <li>Check that no firewall is blocking port 8080 on your network</li>
+      </ul>
+    </div>
   </div>
 
   <!-- Step 1: Authenticate -->
@@ -177,9 +395,17 @@
     <div class="card">
       <div class="transport-badge" id="auth-transport">--</div>
       <h2>STEP 2 — ENTER YOUR PIN</h2>
+      <div class="status" style="margin-bottom:12px;line-height:1.6">
+        Enter the 4-digit PIN shown on your BITOS device screen.
+      </div>
+      <div class="pin-device-mockup">
+        <div class="mockup-label">YOUR BITOS SCREEN SHOWS:</div>
+        <div class="mockup-pin">_ _ _ _</div>
+      </div>
       <input type="password" id="pin-input" maxlength="4"
-             placeholder="4-digit PIN (default: 0000)"
+             placeholder="Enter 4-digit PIN"
              inputmode="numeric" pattern="[0-9]*">
+      <div class="pin-hint">Default PIN is 0000 if you have not changed it.</div>
       <button onclick="authenticate()">AUTHENTICATE</button>
       <div class="status" id="auth-status"></div>
     </div>
@@ -190,6 +416,17 @@
     <div class="card">
       <div class="transport-badge" id="wifi-transport">--</div>
       <h2>STEP 3 — CONFIGURE WI-FI</h2>
+
+      <!-- Scanned networks -->
+      <div id="wifi-scan-section">
+        <div class="scan-status" id="scan-status">
+          <span class="spinner"></span> Scanning for networks...
+        </div>
+        <div class="wifi-network-list" id="wifi-network-list"></div>
+      </div>
+
+      <div class="or-divider">OR ENTER MANUALLY</div>
+
       <input type="text" id="ssid-input" placeholder="Network name (SSID)">
       <input type="password" id="pw-input" placeholder="Password">
       <select id="sec-input">
@@ -199,24 +436,60 @@
       </select>
       <button onclick="sendWifi()">SEND TO DEVICE</button>
       <div class="status" id="wifi-status"></div>
+
+      <!-- Test connection -->
+      <button class="test-btn" id="btn-test-conn" onclick="testConnection()" disabled>
+        TEST CONNECTION
+      </button>
+      <div class="test-result" id="test-result"></div>
     </div>
   </div>
 
   <!-- Step 3: Done -->
   <div class="step" id="s3">
     <div class="card">
-      <h2>ALL DONE</h2>
-      <div class="status ok" style="font-size:13px;padding:16px">
-        Wi-Fi configured.<br>
-        Your BITOS device is connecting...<br><br>
-        <span id="final-ssid"></span>
+      <h2>SETUP COMPLETE</h2>
+      <div class="status ok" style="font-size:14px;padding:12px 0;margin-bottom:12px">
+        Your BITOS device is configured.
       </div>
-      <button onclick="finishSetup()" style="margin-bottom:8px">
-        GO TO DASHBOARD
-      </button>
-      <button class="secondary" onclick="location.reload()">
+
+      <!-- Summary -->
+      <div id="setup-summary">
+        <div class="summary-row">
+          <span class="summary-key">Connection</span>
+          <span class="summary-val" id="sum-transport">--</span>
+        </div>
+        <div class="summary-row">
+          <span class="summary-key">Wi-Fi Network</span>
+          <span class="summary-val" id="sum-ssid">--</span>
+        </div>
+        <div class="summary-row">
+          <span class="summary-key">Device</span>
+          <span class="summary-val" id="sum-device">BITOS</span>
+        </div>
+      </div>
+
+      <!-- Navigation links -->
+      <div class="finish-links">
+        <a href="dashboard.html" class="primary-link" onclick="finishSetup()">
+          GO TO DASHBOARD
+        </a>
+        <a href="settings.html" class="secondary-link">
+          DEVICE SETTINGS
+        </a>
+        <a href="chat.html" class="secondary-link">
+          START CHATTING
+        </a>
+      </div>
+
+      <button class="secondary" onclick="location.reload()" style="margin-top:8px">
         CONFIGURE AGAIN
       </button>
+
+      <div class="bookmark-hint">
+        Tip: Bookmark this page or add it to your home screen
+        for quick access to your BITOS companion.
+      </div>
     </div>
   </div>
 
@@ -232,14 +505,26 @@
   <script>
     const bleAvailable = isBleAvailable();
     let activeMethod = 'wifi'; // default to wifi
+    let configuredSsid = '';
+
+    // Detect platform for recommendation
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isAndroid = /Android/.test(navigator.userAgent);
 
     // Detect iOS / no-BLE and show notice
     if (!bleAvailable) {
       document.getElementById('ios-notice').style.display = 'block';
       document.getElementById('method-ble').disabled = true;
       document.getElementById('method-ble').style.opacity = '0.3';
+    }
+
+    // Set recommended badge based on platform
+    if (isIOS || !bleAvailable) {
+      document.getElementById('method-wifi').classList.add('recommended');
+    } else if (isAndroid) {
+      document.getElementById('method-ble').classList.add('recommended');
     } else {
-      // If BLE is available, mark wifi as recommended still (faster)
+      // Desktop — WiFi is generally more reliable
       document.getElementById('method-wifi').classList.add('recommended');
     }
 
@@ -256,6 +541,10 @@
       document.getElementById('panel-wifi').style.display = method === 'wifi' ? 'block' : 'none';
       document.getElementById('panel-ble').style.display = method === 'ble' ? 'block' : 'none';
 
+      // Update diagram label
+      document.getElementById('diagram-label').textContent =
+        method === 'ble' ? 'BLE' : 'WI-FI';
+
       // Show BLE unavailable warning if needed
       if (method === 'ble' && !bleAvailable) {
         document.getElementById('ble-unavailable').style.display = 'block';
@@ -271,6 +560,16 @@
         if (i < n) d.classList.add('done');
         if (i === n) d.classList.add('active');
       });
+      document.querySelectorAll('.progress-label').forEach((l, i) => {
+        l.classList.remove('active', 'done');
+        if (i < n) l.classList.add('done');
+        if (i === n) l.classList.add('active');
+      });
+
+      // Auto-scan WiFi networks when reaching step 2
+      if (n === 2) {
+        scanWifiNetworks();
+      }
     }
 
     function setStatus(id, msg, type = '') {
@@ -287,6 +586,13 @@
         el.textContent = label;
         el.className = 'transport-badge ' + cls;
       });
+    }
+
+    function toggleTrouble() {
+      const btn = document.getElementById('trouble-toggle');
+      const content = document.getElementById('trouble-content');
+      btn.classList.toggle('open');
+      content.classList.toggle('open');
     }
 
     // ── WiFi (HTTP) connect ──
@@ -312,9 +618,15 @@
         updateTransportBadges();
         setTimeout(() => goStep(1), 800);
       } catch (e) {
-        setStatus('wifi-conn-status',
-          'Cannot reach device at ' + ip + ':' + port + ' — ' + e.message,
-          'error');
+        let errMsg = 'Cannot reach device at ' + ip + ':' + port;
+        if (e.message && e.message.includes('Failed to fetch')) {
+          errMsg += ' — Check that both devices are on the same Wi-Fi network';
+        } else if (e.name === 'AbortError' || e.name === 'TimeoutError') {
+          errMsg += ' — Connection timed out. Is the device powered on?';
+        } else {
+          errMsg += ' — ' + e.message;
+        }
+        setStatus('wifi-conn-status', errMsg, 'error');
       } finally {
         btn.disabled = false;
       }
@@ -334,7 +646,13 @@
         updateTransportBadges();
         setTimeout(() => goStep(1), 800);
       } catch (e) {
-        setStatus('conn-status', e.message, 'error');
+        let errMsg = e.message;
+        if (e.message.includes('User cancelled')) {
+          errMsg = 'Connection cancelled. Tap CONNECT to try again.';
+        } else if (e.message.includes('No device')) {
+          errMsg = 'Device not found. Make sure BITOS is powered on and nearby.';
+        }
+        setStatus('conn-status', errMsg, 'error');
         btn.disabled = false;
       }
     }
@@ -348,13 +666,82 @@
         setStatus('auth-status', 'Authenticated', 'ok');
         setTimeout(() => goStep(2), 600);
       } catch (e) {
-        setStatus('auth-status', e.message, 'error');
+        let errMsg = e.message;
+        if (errMsg.includes('invalid') || errMsg.includes('wrong') || errMsg.includes('denied')) {
+          errMsg = 'Incorrect PIN. Check the code on your BITOS device screen and try again.';
+        }
+        setStatus('auth-status', errMsg, 'error');
       }
     }
 
     function finishSetup() {
       localStorage.setItem('bitos_configured', '1');
-      location.href = 'dashboard.html';
+    }
+
+    // ── WiFi network scanning ──
+    async function scanWifiNetworks() {
+      const listEl = document.getElementById('wifi-network-list');
+      const statusEl = document.getElementById('scan-status');
+      listEl.innerHTML = '';
+      statusEl.innerHTML = '<span class="spinner"></span> Scanning for networks...';
+      statusEl.style.display = 'block';
+
+      try {
+        const networks = await connMgr.readWifiNetworks();
+        if (networks && networks.length > 0) {
+          statusEl.style.display = 'none';
+          // Sort by signal strength (strongest first)
+          networks.sort((a, b) => (b.rssi || 0) - (a.rssi || 0));
+          for (const net of networks) {
+            const div = document.createElement('div');
+            div.className = 'wifi-network';
+            div.onclick = () => selectNetwork(net.ssid, net.security, div);
+            const bars = signalBars(net.rssi || -70);
+            div.innerHTML =
+              '<span class="wifi-network-name">' + escHtml(net.ssid) + '</span>' +
+              '<div class="wifi-signal">' + bars + '</div>';
+            listEl.appendChild(div);
+          }
+        } else {
+          statusEl.textContent = 'No networks found. Enter details manually below.';
+        }
+      } catch (e) {
+        statusEl.textContent = 'Could not scan networks. Enter details manually below.';
+      }
+    }
+
+    function signalBars(rssi) {
+      // Convert RSSI to 1-4 bars
+      let level = 1;
+      if (rssi > -50) level = 4;
+      else if (rssi > -60) level = 3;
+      else if (rssi > -70) level = 2;
+      let html = '';
+      for (let i = 1; i <= 4; i++) {
+        html += '<div class="bar' + (i <= level ? ' active' : '') + '"></div>';
+      }
+      return html;
+    }
+
+    function selectNetwork(ssid, security, el) {
+      document.querySelectorAll('.wifi-network').forEach(n =>
+        n.classList.remove('selected'));
+      el.classList.add('selected');
+      document.getElementById('ssid-input').value = ssid;
+      if (security) {
+        const secSelect = document.getElementById('sec-input');
+        for (const opt of secSelect.options) {
+          if (opt.value === security) { secSelect.value = security; break; }
+        }
+      }
+      // Focus password field
+      document.getElementById('pw-input').focus();
+    }
+
+    function escHtml(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
     }
 
     // ── WiFi config ──
@@ -369,11 +756,50 @@
       setStatus('wifi-status', 'Sending credentials...');
       try {
         await connMgr.sendWifiConfig(ssid, pw, sec);
-        document.getElementById('final-ssid').textContent =
-          'Connected to: ' + ssid;
-        goStep(3);
+        configuredSsid = ssid;
+        document.getElementById('btn-test-conn').disabled = false;
+        setStatus('wifi-status', 'Wi-Fi configured for: ' + ssid, 'ok');
+
+        // Update summary and go to done
+        document.getElementById('sum-ssid').textContent = ssid;
+        const t = connMgr.transport === 'http' ? 'Wi-Fi' : 'Bluetooth';
+        document.getElementById('sum-transport').textContent = t;
+        try {
+          const info = connMgr.deviceInfo;
+          if (info && info.model) {
+            document.getElementById('sum-device').textContent = info.model;
+          }
+        } catch (_) {}
+
+        setTimeout(() => goStep(3), 1000);
       } catch (e) {
         setStatus('wifi-status', e.message, 'error');
+      }
+    }
+
+    // ── Test connection ──
+    async function testConnection() {
+      const resultEl = document.getElementById('test-result');
+      resultEl.style.display = 'block';
+      resultEl.className = 'test-result';
+      resultEl.textContent = 'Testing connection...';
+
+      try {
+        const status = await connMgr.readWifiStatus();
+        if (status && status.connected) {
+          resultEl.className = 'test-result pass';
+          resultEl.innerHTML =
+            'PASS: Connected to ' + escHtml(status.ssid || configuredSsid) +
+            (status.ip ? '<br>Device IP: ' + status.ip : '');
+        } else {
+          resultEl.className = 'test-result fail';
+          resultEl.textContent =
+            'FAIL: Device not yet connected to Wi-Fi. ' +
+            (status && status.last_error ? status.last_error : 'Check credentials and try again.');
+        }
+      } catch (e) {
+        resultEl.className = 'test-result fail';
+        resultEl.textContent = 'FAIL: Could not reach device — ' + e.message;
       }
     }
 

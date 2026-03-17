@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>BITOS — Bluetooth Guide</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/icon-192.svg" type="image/svg+xml">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <link rel="stylesheet" href="css/shared.css">
+  <style>
+    body { padding: 32px 16px 88px; }
+
+    .guide-card {
+      border: 2px solid #fff; padding: 20px;
+      width: 100%; max-width: 400px; margin-bottom: 16px;
+    }
+    .guide-card h2 {
+      font-size: 12px; letter-spacing: .08em;
+      color: #aaa; margin-bottom: 16px;
+    }
+
+    /* Step blocks */
+    .guide-step {
+      display: flex; gap: 14px; margin-bottom: 20px;
+      padding-bottom: 20px; border-bottom: 1px solid #1a1a1a;
+    }
+    .guide-step:last-child {
+      border-bottom: none; margin-bottom: 0; padding-bottom: 0;
+    }
+    .step-number {
+      flex-shrink: 0; width: 28px; height: 28px;
+      border: 2px solid #fff; display: flex;
+      align-items: center; justify-content: center;
+      font-size: 13px; font-weight: bold;
+    }
+    .step-body {
+      flex: 1;
+    }
+    .step-title {
+      font-size: 13px; color: #fff;
+      letter-spacing: .04em; margin-bottom: 6px;
+      font-weight: bold;
+    }
+    .step-desc {
+      font-size: 11px; color: #888; line-height: 1.7;
+    }
+
+    /* Device mockup */
+    .device-mockup {
+      border: 2px solid #333; padding: 12px;
+      margin-top: 10px; text-align: center;
+    }
+    .mockup-header {
+      font-size: 9px; letter-spacing: .06em;
+      color: #555; margin-bottom: 6px;
+    }
+    .mockup-screen {
+      background: #111; border: 1px solid #444;
+      padding: 12px 8px; font-size: 11px;
+      line-height: 1.8; color: #ccc;
+    }
+    .mockup-screen .highlight {
+      color: #fff; background: #333;
+      padding: 1px 4px;
+    }
+    .mockup-screen .arrow {
+      color: #4af;
+    }
+
+    /* Phone mockup */
+    .phone-mockup {
+      border: 2px solid #333; padding: 12px;
+      margin-top: 10px;
+    }
+    .phone-header {
+      font-size: 9px; letter-spacing: .06em;
+      color: #555; margin-bottom: 8px; text-align: center;
+    }
+    .phone-list-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px; border: 1px solid #333; margin-bottom: 4px;
+    }
+    .phone-list-item .device-name {
+      font-size: 12px; color: #fff;
+    }
+    .phone-list-item .device-type {
+      font-size: 9px; color: #4af; letter-spacing: .04em;
+    }
+    .phone-list-item.other .device-name { color: #555; }
+    .phone-list-item.other .device-type { color: #333; }
+
+    /* Connection diagram */
+    .conn-flow {
+      display: flex; align-items: center;
+      justify-content: center; gap: 8px;
+      padding: 16px 0; margin-top: 8px;
+    }
+    .conn-flow .node {
+      width: 56px; height: 56px;
+      border: 2px solid #fff; display: flex;
+      align-items: center; justify-content: center;
+      font-size: 8px; letter-spacing: .04em;
+      color: #aaa; text-align: center;
+      line-height: 1.3;
+    }
+    .conn-flow .node.success {
+      border-color: #4f4; color: #4f4;
+    }
+    .conn-flow .link {
+      font-size: 10px; color: #4f4;
+    }
+
+    /* FAQ section */
+    .faq-section {
+      width: 100%; max-width: 400px; margin-top: 8px;
+    }
+    .faq-item {
+      border: 1px solid #222; margin-bottom: 4px;
+    }
+    .faq-q {
+      display: block; width: 100%; text-align: left;
+      background: #000; color: #aaa; border: none;
+      font-family: monospace; font-size: 12px;
+      padding: 12px; cursor: pointer;
+      letter-spacing: .04em;
+    }
+    .faq-q:hover { color: #fff; }
+    .faq-q::before { content: '+ '; color: #555; }
+    .faq-q.open::before { content: '- '; }
+    .faq-a {
+      display: none; padding: 0 12px 12px;
+      font-size: 11px; color: #666; line-height: 1.7;
+    }
+    .faq-a.open { display: block; }
+
+    /* Action buttons */
+    .guide-actions {
+      display: flex; flex-direction: column; gap: 8px;
+      width: 100%; max-width: 400px; margin-top: 8px;
+    }
+    .guide-actions a {
+      display: block; text-align: center;
+      text-decoration: none; font-family: monospace;
+      font-size: 13px; font-weight: bold;
+      letter-spacing: .06em; padding: 12px;
+    }
+    .guide-actions a.primary-link {
+      background: #fff; color: #000;
+    }
+    .guide-actions a.secondary-link {
+      background: #000; color: #fff; border: 2px solid #444;
+    }
+
+    /* Platform notice */
+    .platform-notice {
+      width: 100%; max-width: 400px;
+      background: #1a1200; border: 1px solid #443300;
+      padding: 12px; margin-bottom: 16px;
+      font-size: 11px; line-height: 1.6; color: #fa0;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>&#9678; BITOS</h1>
+  <div class="page-title">BLUETOOTH PAIRING GUIDE</div>
+
+  <!-- iOS notice -->
+  <div class="platform-notice" id="ios-notice">
+    Your browser does not support Web Bluetooth.
+    Use the Wi-Fi connection method instead —
+    <a href="setup.html" style="color:#4af">go to setup</a>.
+  </div>
+
+  <!-- Step-by-step guide -->
+  <div class="guide-card">
+    <h2>HOW TO CONNECT YOUR BITOS</h2>
+
+    <div class="guide-step">
+      <div class="step-number">1</div>
+      <div class="step-body">
+        <div class="step-title">Enable Pairing Mode</div>
+        <div class="step-desc">
+          On your BITOS device, navigate to:<br>
+          Settings &rarr; Bluetooth &rarr; Pairing Mode
+        </div>
+        <div class="device-mockup">
+          <div class="mockup-header">BITOS DEVICE SCREEN</div>
+          <div class="mockup-screen">
+            <span class="arrow">&rarr;</span> Settings<br>
+            &nbsp;&nbsp;<span class="arrow">&rarr;</span> Bluetooth<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;<span class="highlight">Pairing Mode</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;Status: Discoverable
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="guide-step">
+      <div class="step-number">2</div>
+      <div class="step-body">
+        <div class="step-title">Find BITOS on Your Phone</div>
+        <div class="step-desc">
+          Open this companion app and tap "Connect via Bluetooth".
+          Your phone will scan for nearby devices. BITOS will appear
+          in the list.
+        </div>
+        <div class="phone-mockup">
+          <div class="phone-header">BLUETOOTH DEVICES NEARBY</div>
+          <div class="phone-list-item">
+            <span class="device-name">BITOS-A7F3</span>
+            <span class="device-type">BITOS DEVICE</span>
+          </div>
+          <div class="phone-list-item other">
+            <span class="device-name">Speaker-XY</span>
+            <span class="device-type">AUDIO</span>
+          </div>
+          <div class="phone-list-item other">
+            <span class="device-name">TV-Living-Room</span>
+            <span class="device-type">DISPLAY</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="guide-step">
+      <div class="step-number">3</div>
+      <div class="step-body">
+        <div class="step-title">Tap to Pair</div>
+        <div class="step-desc">
+          Select your BITOS device from the list. A pairing code
+          will appear on both screens — verify they match, then
+          confirm. The codes match automatically in most cases.
+        </div>
+        <div class="conn-flow">
+          <div class="node">BITOS<br>4 8 2 1</div>
+          <div class="link">= = =</div>
+          <div class="node">PHONE<br>4 8 2 1</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="guide-step">
+      <div class="step-number">4</div>
+      <div class="step-body">
+        <div class="step-title">You Are Connected</div>
+        <div class="step-desc">
+          Once paired, enter your device PIN (default: 0000)
+          to authenticate. Then set up Wi-Fi for full features
+          like AI chat, tasks, calendar, and remote access.
+        </div>
+        <div class="conn-flow">
+          <div class="node success">BITOS<br>PAIRED</div>
+          <div class="link">&#10003;</div>
+          <div class="node success">YOUR<br>PHONE</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Action buttons -->
+  <div class="guide-actions">
+    <a href="pair.html" class="primary-link">START PAIRING</a>
+    <a href="setup.html" class="secondary-link">USE WI-FI SETUP INSTEAD</a>
+  </div>
+
+  <!-- FAQ -->
+  <div class="faq-section">
+    <div class="guide-card" style="margin-top:16px">
+      <h2>TROUBLESHOOTING FAQ</h2>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          BITOS does not appear in the device list
+        </button>
+        <div class="faq-a">
+          Make sure your BITOS device is in Pairing Mode
+          (Settings &rarr; Bluetooth &rarr; Pairing Mode).
+          The device must be within Bluetooth range (about 10 meters).
+          Try restarting the device if it still does not appear.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          Pairing codes do not match
+        </button>
+        <div class="faq-a">
+          If the codes on your phone and BITOS device do not match,
+          cancel and retry. This can happen if another device is
+          interfering. Make sure you are connecting to the correct
+          BITOS device (check the serial number).
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          Connection drops after pairing
+        </button>
+        <div class="faq-a">
+          Bluetooth connections can be affected by distance and
+          interference. Stay within 5 meters of the device during
+          setup. If the connection drops, go back to the pairing
+          page and reconnect. Setting up Wi-Fi provides a more
+          stable connection for daily use.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          Bluetooth is not available in my browser
+        </button>
+        <div class="faq-a">
+          Web Bluetooth is supported in Chrome on Android and desktop,
+          and in some Chromium-based browsers. iOS Safari and Firefox
+          do not support Web Bluetooth. If you are on iOS, use the
+          Wi-Fi connection method instead — it works on all browsers.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          What is the default PIN?
+        </button>
+        <div class="faq-a">
+          The default device PIN is 0000. You can change it in
+          device settings after pairing. The PIN is shown on your
+          BITOS device screen during authentication.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          Should I use Bluetooth or Wi-Fi?
+        </button>
+        <div class="faq-a">
+          Wi-Fi is recommended for most users — it is faster, works
+          on all browsers including iOS, and provides a more stable
+          connection. Bluetooth is useful for initial setup when the
+          device is not yet on a Wi-Fi network, or for quick pairing
+          in the field.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          Can I use both Bluetooth and Wi-Fi?
+        </button>
+        <div class="faq-a">
+          Yes. You can pair via Bluetooth for the initial setup,
+          then configure Wi-Fi through the setup wizard. Once
+          Wi-Fi is configured, the companion app will prefer the
+          Wi-Fi connection for speed and reliability.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+
+    // Show iOS notice if no BLE
+    if (!navigator.bluetooth) {
+      document.getElementById('ios-notice').style.display = 'block';
+    }
+
+    function toggleFaq(btn) {
+      btn.classList.toggle('open');
+      const answer = btn.nextElementSibling;
+      answer.classList.toggle('open');
+    }
+  </script>
+  <script src="js/nav.js"></script>
+</body>
+</html>
