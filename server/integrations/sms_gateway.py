@@ -233,6 +233,7 @@ class SMSGateway:
                 lambda: bridge.complete_text(
                     message,
                     system_prompt=system_prompt,
+                    messages=history_messages if history_messages else None,
                 ),
             )
             if isinstance(result, tuple):

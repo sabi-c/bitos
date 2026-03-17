@@ -179,22 +179,39 @@ class GmailAdapter:
         ]
         return "\n".join(text_parts).strip()
 
-    def create_draft(self, thread_id: str, body: str) -> str:
-        """Tier 1: create Gmail draft and return draft_id."""
+    def create_draft(self, thread_id: str, body: str, *, to: str = "", subject: str = "") -> str:
+        """Tier 1: create Gmail draft and return draft_id.
+
+        For new emails, pass to and subject directly.
+        For replies, pass thread_id to look up the original sender/subject.
+        """
         if self._mock:
-            logger.info("mock_create_draft thread=%s", thread_id)
+            logger.info("mock_create_draft thread=%s to=%s", thread_id, to)
             return "mock_draft_001"
 
-        inbox = self.get_inbox(limit=25)
-        thread = next((item for item in inbox if item.get("thread_id") == thread_id), None)
-        subject = f"Re: {thread.get('subject', '')}" if thread else "Re:"
-        to = thread.get("sender_email", "") if thread else ""
+        # If replying to an existing thread, look up sender/subject
+        if thread_id and thread_id != "new" and (not to or not subject):
+            inbox = self.get_inbox(limit=25)
+            thread = next((item for item in inbox if item.get("thread_id") == thread_id), None)
+            if not subject:
+                subject = f"Re: {thread.get('subject', '')}" if thread else "Re:"
+            if not to:
+                to = thread.get("sender_email", "") if thread else ""
 
-        raw = self._call_gmail_mcp(
-            f"Create a Gmail draft reply to thread {thread_id}. "
-            f"To: {to}, Subject: {subject}, Body: {body}. "
-            "Return ONLY the draft_id."
-        )
+        if thread_id and thread_id != "new":
+            prompt = (
+                f"Create a Gmail draft reply to thread {thread_id}. "
+                f"To: {to}, Subject: {subject}, Body: {body}. "
+                "Return ONLY the draft_id."
+            )
+        else:
+            prompt = (
+                f"Create a new Gmail draft email. "
+                f"To: {to}, Subject: {subject}, Body: {body}. "
+                "Return ONLY the draft_id."
+            )
+
+        raw = self._call_gmail_mcp(prompt)
         draft_id = raw.strip()
         return draft_id or "draft_unknown"
 

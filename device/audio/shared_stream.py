@@ -32,6 +32,7 @@ class SharedAudioStream:
         self._frame_size = frame_size
         self._consumers: dict[str, collections.deque] = {}
         self._lock = threading.Lock()
+        self._start_lock = threading.Lock()
         self._running = False
         self._thread: threading.Thread | None = None
 
@@ -61,17 +62,20 @@ class SharedAudioStream:
         return self._frame_size
 
     def start(self) -> None:
-        if self._running:
-            return
-        self._running = True
-        self._thread = threading.Thread(target=self._read_loop, daemon=True, name="shared-audio")
-        self._thread.start()
+        with self._start_lock:
+            if self._running:
+                return
+            self._running = True
+            self._thread = threading.Thread(target=self._read_loop, daemon=True, name="shared-audio")
+            self._thread.start()
 
     def stop(self) -> None:
-        self._running = False
-        if self._thread:
-            self._thread.join(timeout=2.0)
+        with self._start_lock:
+            self._running = False
+            thread = self._thread
             self._thread = None
+        if thread:
+            thread.join(timeout=2.0)
 
     def _distribute(self, frame: np.ndarray) -> None:
         """Push a frame to all registered consumer buffers."""

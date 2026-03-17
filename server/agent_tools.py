@@ -863,9 +863,29 @@ def _handle_tool_call_inner(
     return json.dumps({"error": f"Unknown tool: {tool_name}"})
 
 
-# ── Integration adapter singletons ──────────────────────────────────────
+# ── AppleScript injection prevention ─────────────────────────────────────
 
+import re
 import subprocess
+
+
+def _sanitize_applescript(value: str) -> str:
+    """Sanitize a string for safe interpolation into AppleScript.
+
+    Strips characters that could break out of a quoted string context
+    or inject AppleScript commands. Only allows printable ASCII/Unicode
+    text characters, spaces, and basic punctuation.
+    """
+    # Remove backslashes and double quotes (the escape/delimiter chars in AppleScript strings)
+    value = value.replace("\\", "").replace('"', "")
+    # Remove any control characters (tabs, newlines, etc.)
+    value = re.sub(r"[\x00-\x1f\x7f]", "", value)
+    # Limit length to prevent abuse
+    value = value[:200]
+    return value
+
+
+# ── Integration adapter singletons ──────────────────────────────────────
 
 _bb: object | None = None
 _gmail: object | None = None
@@ -964,7 +984,7 @@ def _send_email(tool_input: dict) -> str:
 
     gmail = _get_gmail()
     try:
-        draft_id = gmail.create_draft("new", body)
+        draft_id = gmail.create_draft("new", body, to=to, subject=subject)
         logger.info("email_draft: to=%s subject=%s draft=%s", to, subject, draft_id)
         return json.dumps({"success": True, "to": to, "subject": subject, "draft_id": draft_id,
                            "note": "Created as draft — send manually or approve sending"})
@@ -993,7 +1013,7 @@ def _get_contacts(tool_input: dict) -> str:
     if not query:
         return json.dumps({"error": "query is required"})
 
-    safe_query = query.replace("\\", "\\\\").replace('"', '\\"')
+    safe_query = _sanitize_applescript(query)
     script = f'''
 tell application "Contacts"
     set matchedPeople to (every person whose name contains "{safe_query}")
@@ -1040,7 +1060,7 @@ end tell
 
 def _get_calendar_events(tool_input: dict) -> str:
     days_ahead = min(tool_input.get("days_ahead", 1), 14)
-    calendar_name = tool_input.get("calendar", "")
+    calendar_name = _sanitize_applescript(tool_input.get("calendar", ""))
     cal_filter = f'of calendar "{calendar_name}"' if calendar_name else ""
 
     script = f'''

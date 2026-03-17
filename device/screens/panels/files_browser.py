@@ -82,16 +82,20 @@ class FilesBrowserPanel(BaseScreen):
             elif action == "DOUBLE_PRESS":
                 selected = self._files[self._cursor]
                 if selected.get("type") == "dir":
-                    # Drill into directory
-                    self._path_stack.append(selected.get("path", ""))
-                    self._lock.release()
-                    try:
-                        self._fetch_files()
-                    finally:
-                        self._lock.acquire()
+                    # Drill into directory — copy path before releasing lock
+                    dir_path = selected.get("path", "")
+                    self._path_stack.append(dir_path)
+                    # NOTE: _fetch_files() must be called outside the lock
+                    # to avoid deadlock (it acquires the lock internally).
+                    # We break out and call it below.
                 else:
                     if self._on_open_file:
                         self._on_open_file(selected)
+                    return
+
+        # If we got here from a dir DOUBLE_PRESS, fetch the new directory
+        if action == "DOUBLE_PRESS":
+            self._fetch_files()
 
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)

@@ -13,16 +13,54 @@ Expected payload:
             "chats": [{"guid": "iMessage;+;+13105550001"}]
         }
     }
+
+Authentication:
+    Set BLUEBUBBLES_PASSWORD env var to match your BlueBubbles server password.
+    Requests must include it as ?password= query param or X-BlueBubbles-Password header.
+    If the env var is unset, auth is skipped (dev mode) with a warning on first request.
 """
 from __future__ import annotations
 
+import hmac
 import logging
+import os
 
 from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["webhooks"])
+
+_auth_warning_logged = False
+
+
+def _verify_webhook_auth(request: Request) -> bool | None:
+    """Check BlueBubbles password authentication.
+
+    Returns True if auth passes, False if it fails, None if auth is not configured.
+    """
+    global _auth_warning_logged
+    expected = os.environ.get("BLUEBUBBLES_PASSWORD", "")
+    if not expected:
+        if not _auth_warning_logged:
+            logger.warning(
+                "webhook_bluebubbles: BLUEBUBBLES_PASSWORD not set — "
+                "webhook authentication is DISABLED (dev mode)"
+            )
+            _auth_warning_logged = True
+        return None
+
+    # BlueBubbles sends the password as a query parameter or we accept it as a header
+    provided = (
+        request.query_params.get("password", "")
+        or request.headers.get("x-bluebubbles-password", "")
+    )
+    if not provided:
+        return False
+
+    # Constant-time comparison to prevent timing attacks
+    return hmac.compare_digest(expected, provided)
 
 
 def _get_gateway():
@@ -40,6 +78,12 @@ def _get_adapter():
 @router.post("/webhook/bluebubbles")
 async def webhook_bluebubbles(request: Request):
     """Receive BlueBubbles webhook for incoming iMessages."""
+    # ── Authentication ────────────────────────────────────────────
+    auth_result = _verify_webhook_auth(request)
+    if auth_result is False:
+        logger.warning("webhook_bluebubbles: authentication failed from %s", request.client.host if request.client else "unknown")
+        return JSONResponse(status_code=401, content={"ok": False, "error": "unauthorized"})
+
     try:
         body = await request.json()
     except Exception:

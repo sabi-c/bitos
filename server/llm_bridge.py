@@ -39,9 +39,9 @@ class LLMBridge:
     def stream_text(self, message: str, system_prompt: str | None = None, model_override: str | None = None, extended_thinking: bool = False, messages: list[dict] | None = None) -> Generator[str, None, None]:
         raise NotImplementedError
 
-    def complete_text(self, prompt: str, system_prompt: str | None = None, model_override: str | None = None) -> tuple[str, int, int]:
+    def complete_text(self, prompt: str, system_prompt: str | None = None, model_override: str | None = None, messages: list[dict] | None = None) -> tuple[str, int, int]:
         """Non-streaming completion. Returns (response_text, input_tokens, output_tokens)."""
-        text = "".join(self.stream_text(prompt, system_prompt=system_prompt, model_override=model_override))
+        text = "".join(self.stream_text(prompt, system_prompt=system_prompt, model_override=model_override, messages=messages))
         return text, 0, 0
 
 
@@ -194,17 +194,21 @@ class AnthropicBridge(LLMBridge):
             logger.error("anthropic_api_error_tools: status=%s error=%s", exc.status_code, exc)
             raise RuntimeError(f"Anthropic API error ({exc.status_code})") from exc
 
-    def complete_text(self, prompt: str, system_prompt: str | None = None, model_override: str | None = None) -> tuple[str, int, int]:
+    def complete_text(self, prompt: str, system_prompt: str | None = None, model_override: str | None = None, messages: list[dict] | None = None) -> tuple[str, int, int]:
         """Non-streaming completion. Returns (response_text, input_tokens, output_tokens)."""
         if not self._api_key:
             raise RuntimeError("ANTHROPIC_API_KEY not configured")
 
         active_model = model_override or self.model
         client = anthropic.Anthropic(api_key=self._api_key)
+        if messages:
+            conv_messages = messages + [{"role": "user", "content": prompt}]
+        else:
+            conv_messages = [{"role": "user", "content": prompt}]
         response = client.messages.create(
             model=active_model,
             max_tokens=1024,
-            messages=[{"role": "user", "content": prompt}],
+            messages=conv_messages,
             system=system_prompt or SYSTEM_PROMPT,
         )
         text = "".join(block.text for block in response.content if hasattr(block, "text"))
