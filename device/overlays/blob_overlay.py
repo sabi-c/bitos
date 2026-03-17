@@ -1,30 +1,30 @@
-"""Voice conversation overlay with animated blob feedback.
+"""Voice chat overlay with animated blob — full pipeline.
 
-Full-screen overlay that handles the complete voice conversation cycle:
-  IDLE -> LISTENING -> THINKING -> SPEAKING -> IDLE
+TRIPLE_PRESS from any screen opens this overlay. Flow:
 
-The blob provides real-time visual feedback:
-  - LISTENING: blob expands and reacts to mic amplitude
-  - THINKING: blob contracts with slow rotation
-  - SPEAKING: blob pulses with TTS audio amplitude
-  - Response text shown as preview at bottom
+1. Overlay opens -> SharedAudioStream starts -> VoiceRecorder begins
+2. Blob animates LISTENING state, pulses with mic amplitude
+3. VAD detects 2s silence (or user DOUBLE_PRESS to force-send)
+4. Blob transitions to THINKING while STT + /chat runs
+5. Response streams in -> TTS plays -> Blob SPEAKING with audio amplitude
+6. Response text shown below blob
+7. Auto-dismiss 2s after TTS completes
 
-Gestures while active:
-  SHORT_PRESS (IDLE)      -> start recording
-  SHORT_PRESS (LISTENING) -> stop recording, send to agent
-  SHORT_PRESS (SPEAKING)  -> stop TTS
-  SHORT_PRESS (DONE)      -> dismiss
-  DOUBLE_PRESS            -> cancel / dismiss
-  LONG_PRESS              -> dismiss
-  TRIPLE_PRESS            -> dismiss
+Gestures:
+  SHORT_PRESS  during RECORDING -> cancel
+  DOUBLE_PRESS during RECORDING -> force send now
+  SHORT_PRESS  during DONE      -> dismiss
+  LONG_PRESS   anytime          -> dismiss
+  TRIPLE_PRESS anytime          -> dismiss (toggle off)
 """
 
 from __future__ import annotations
 
+import io
 import logging
 import math
 import os
-import struct
+import tempfile
 import threading
 import time
 import wave
@@ -32,20 +32,27 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Callable
 
+import numpy as np
 import pygame
 
-from blob.renderer import BlobRendererLite, BlobState
 from display.tokens import (
-    BLACK, WHITE, DIM1, DIM2, DIM3, HAIRLINE,
-    PHYSICAL_W, PHYSICAL_H, SAFE_INSET,
-    FONT_PATH, FONT_SIZES,
+    BLACK,
+    WHITE,
+    DIM1,
+    DIM2,
+    DIM3,
+    HAIRLINE,
+    PHYSICAL_W,
+    PHYSICAL_H,
+    SAFE_INSET,
+    FONT_PATH,
+    FONT_SIZES,
 )
 
 logger = logging.getLogger(__name__)
 
 
-class VoiceOverlayState(Enum):
-    IDLE = auto()
+class BlobOverlayState(Enum):
     LISTENING = auto()
     THINKING = auto()
     SPEAKING = auto()
@@ -54,44 +61,37 @@ class VoiceOverlayState(Enum):
 
 @dataclass
 class BlobOverlay:
-    """Full-screen voice overlay with animated blob and response preview."""
+    """Full voice-to-agent overlay with animated blob and TTS response."""
 
-    audio_pipeline: object  # AudioPipeline
     client: object  # BackendClient
+    audio_pipeline: object  # AudioPipeline (for TTS speak/stop)
+    shared_stream: object | None = None  # SharedAudioStream (for mic)
     led: object | None = None
     on_dismiss: Callable[[], None] | None = None
-    timeout_ms: int = 15_000  # auto-dismiss after 15s in DONE state
+    auto_dismiss_ms: int = 3000  # dismiss 3s after DONE
 
-    # Internal state
-    _state: VoiceOverlayState = field(default=VoiceOverlayState.IDLE, init=False)
+    # Internal
+    _state: BlobOverlayState = field(default=BlobOverlayState.LISTENING, init=False)
     _dismissed: bool = field(default=False, init=False)
-    _elapsed_ms: int = field(default=0, init=False)
-    _done_elapsed_ms: int = field(default=0, init=False)
+    _amplitude: float = field(default=0.0, init=False)
     _transcript: str = field(default="", init=False)
     _response: str = field(default="", init=False)
     _error: str = field(default="", init=False)
-    _recording_start: float = field(default=0.0, init=False)
-    _voice_stop_event: threading.Event = field(default_factory=threading.Event, init=False)
-    _fonts: dict[str, pygame.font.Font] = field(default_factory=dict, init=False, repr=False)
+    _elapsed_ms: int = field(default=0, init=False)
+    _done_elapsed_ms: int = field(default=0, init=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
-    _amplitude: float = field(default=0.0, init=False)
-    _blob: BlobRendererLite = field(default=None, init=False)
-    _amplitude_thread: threading.Thread | None = field(default=None, init=False, repr=False)
-    _amplitude_stop: threading.Event = field(default_factory=threading.Event, init=False)
+    _recorder: object = field(default=None, init=False, repr=False)
+    _blob: object = field(default=None, init=False, repr=False)
+    _fonts: dict = field(default_factory=dict, init=False, repr=False)
+    _tts_thread: threading.Thread | None = field(default=None, init=False, repr=False)
+    _stream_started: bool = field(default=False, init=False)
 
     def __post_init__(self):
-        # Blob centered in top portion of screen
-        blob_cy = PHYSICAL_H // 3
-        self._blob = BlobRendererLite(cx=PHYSICAL_W // 2, cy=blob_cy, base_radius=36)
+        self._start_recording()
 
     @property
     def dismissed(self) -> bool:
         return self._dismissed
-
-    @property
-    def state(self) -> VoiceOverlayState:
-        with self._lock:
-            return self._state
 
     def tick(self, dt_ms: int) -> bool:
         """Returns True while overlay should stay alive."""
@@ -99,42 +99,38 @@ class BlobOverlay:
             return False
         self._elapsed_ms += max(0, int(dt_ms))
 
-        # Feed amplitude to blob
-        with self._lock:
-            amp = self._amplitude
-        self._blob.set_amplitude(amp)
-
-        # Auto-dismiss in DONE state
-        if self._state == VoiceOverlayState.DONE:
+        if self._state == BlobOverlayState.DONE:
             self._done_elapsed_ms += max(0, int(dt_ms))
-            if self._done_elapsed_ms >= self.timeout_ms:
+            if self._done_elapsed_ms >= self.auto_dismiss_ms:
                 self._dismiss()
                 return False
+
         return True
 
     def handle_action(self, action: str) -> bool:
-        """Intercept all gestures while overlay is active."""
+        """Intercept button gestures while overlay is active."""
         if self._dismissed:
             return False
 
         if action == "SHORT_PRESS":
-            if self._state == VoiceOverlayState.IDLE:
-                self._start_listening()
-                return True
-            if self._state == VoiceOverlayState.LISTENING:
-                self._stop_listening()
-                return True
-            if self._state == VoiceOverlayState.SPEAKING:
-                self._stop_speaking()
-                return True
-            if self._state == VoiceOverlayState.DONE:
+            if self._state == BlobOverlayState.LISTENING:
+                # Cancel recording
+                self._cancel_recording()
                 self._dismiss()
                 return True
-            return True  # consume during THINKING
+            if self._state == BlobOverlayState.DONE:
+                self._dismiss()
+                return True
+            return True  # consume during THINKING/SPEAKING
 
         if action == "DOUBLE_PRESS":
-            if self._state == VoiceOverlayState.SPEAKING:
-                self._stop_speaking()
+            if self._state == BlobOverlayState.LISTENING:
+                # Force send now
+                self._force_send()
+                return True
+            if self._state == BlobOverlayState.SPEAKING:
+                # Stop TTS
+                self._stop_tts()
                 return True
             self._dismiss()
             return True
@@ -148,93 +144,347 @@ class BlobOverlay:
 
         return False
 
-    # ── Voice Pipeline ──────────────────────────────────────────────
-
-    def _start_listening(self):
-        """Begin voice capture."""
-        if not self.audio_pipeline:
-            self._set_error("no mic")
+    def render(self, surface: pygame.Surface) -> None:
+        """Render blob overlay on top of current screen."""
+        if self._dismissed:
             return
 
         with self._lock:
-            self._state = VoiceOverlayState.LISTENING
-            self._recording_start = time.time()
-        self._voice_stop_event.clear()
-        self._amplitude_stop.clear()
-        self._transcript = ""
-        self._response = ""
-        self._error = ""
+            state = self._state
+            amplitude = self._amplitude
+            transcript = self._transcript
+            response = self._response
+            error = self._error
 
-        self._blob.set_state(BlobState.LISTENING)
+        # Full screen dim background
+        dim = pygame.Surface((PHYSICAL_W, PHYSICAL_H), pygame.SRCALPHA)
+        dim.fill((0, 0, 0, 220))
+        surface.blit(dim, (0, 0))
+
+        # Render blob centered in upper portion
+        blob_cx = PHYSICAL_W // 2
+        blob_cy = 80
+        self._render_blob(surface, blob_cx, blob_cy, state, amplitude)
+
+        # State label below blob
+        font_small = self._font("small")
+        font_body = self._font("body")
+        font_hint = self._font("hint")
+
+        label_y = blob_cy + 50
+
+        state_labels = {
+            BlobOverlayState.LISTENING: "LISTENING",
+            BlobOverlayState.THINKING: "THINKING",
+            BlobOverlayState.SPEAKING: "SPEAKING",
+            BlobOverlayState.DONE: "DONE" if not error else "ERROR",
+        }
+        label = state_labels.get(state, "")
+
+        # Animate dots for active states
+        if state in (BlobOverlayState.LISTENING, BlobOverlayState.THINKING):
+            dots = "." * (1 + (self._elapsed_ms // 400) % 3)
+            label += dots
+
+        label_color = WHITE if state in (BlobOverlayState.LISTENING, BlobOverlayState.SPEAKING) else DIM2
+        label_surf = font_small.render(label, False, label_color)
+        label_x = (PHYSICAL_W - label_surf.get_width()) // 2
+        surface.blit(label_surf, (label_x, label_y))
+
+        # Content area
+        content_y = label_y + label_surf.get_height() + 10
+        inner_x = SAFE_INSET + 4
+        max_w = PHYSICAL_W - (SAFE_INSET + 4) * 2
+
+        if state == BlobOverlayState.LISTENING:
+            # Show recording duration
+            dur = self._elapsed_ms / 1000.0
+            dur_text = f"{dur:.0f}s"
+            dur_surf = font_body.render(dur_text, False, DIM2)
+            dur_x = (PHYSICAL_W - dur_surf.get_width()) // 2
+            surface.blit(dur_surf, (dur_x, content_y))
+
+        elif state == BlobOverlayState.THINKING:
+            # Show transcript
+            if transcript:
+                trunc = transcript[:50] + ("..." if len(transcript) > 50 else "")
+                t_surf = font_hint.render(trunc, False, DIM3)
+                surface.blit(t_surf, (inner_x, content_y))
+
+        elif state == BlobOverlayState.SPEAKING:
+            # Show response text streaming in (max 4 lines)
+            if response:
+                lines = self._wrap_text(response, font_hint, max_w)[:4]
+                for i, line in enumerate(lines):
+                    line_surf = font_hint.render(line, False, DIM1)
+                    surface.blit(line_surf, (inner_x, content_y + i * (font_hint.get_height() + 2)))
+
+        elif state == BlobOverlayState.DONE:
+            if error:
+                err_surf = font_body.render(error, False, (255, 120, 120))
+                surface.blit(err_surf, (inner_x, content_y))
+            else:
+                # Show truncated response
+                if response:
+                    lines = self._wrap_text(response, font_hint, max_w)[:5]
+                    for i, line in enumerate(lines):
+                        line_surf = font_hint.render(line, False, WHITE if i == 0 else DIM1)
+                        surface.blit(line_surf, (inner_x, content_y + i * (font_hint.get_height() + 2)))
+
+        # Bottom hints
+        hint_y = PHYSICAL_H - SAFE_INSET - font_hint.get_height() - 4
+        hints = {
+            BlobOverlayState.LISTENING: "tap:cancel  dbl:send",
+            BlobOverlayState.THINKING: "hold:cancel",
+            BlobOverlayState.SPEAKING: "dbl:skip",
+            BlobOverlayState.DONE: "tap:close",
+        }.get(state, "")
+        if hints:
+            hints_surf = font_hint.render(hints, False, DIM3)
+            hints_x = (PHYSICAL_W - hints_surf.get_width()) // 2
+            surface.blit(hints_surf, (hints_x, hint_y))
+
+    # ── Blob rendering ──
+
+    def _render_blob(
+        self,
+        surface: pygame.Surface,
+        cx: int,
+        cy: int,
+        state: BlobOverlayState,
+        amplitude: float,
+    ) -> None:
+        """Draw animated blob at (cx, cy)."""
+        t = self._elapsed_ms / 1000.0
+
+        # State-dependent animation
+        if state == BlobOverlayState.LISTENING:
+            react = 0.15 * amplitude
+            breath = 1.12 + 0.04 * math.sin(t * 2.5) + react
+            wobble = 0.08 + 0.12 * amplitude
+            rot_speed = 0.6 + amplitude * 0.8
+            color = WHITE
+        elif state == BlobOverlayState.THINKING:
+            breath = 0.88 + 0.10 * math.sin(t * 1.2)
+            wobble = 0.04
+            rot_speed = 1.5
+            color = DIM2
+        elif state == BlobOverlayState.SPEAKING:
+            react = 0.18 * amplitude
+            breath = 1.0 + 0.05 * math.sin(t * 3.0) + react
+            wobble = 0.06 + 0.1 * amplitude
+            rot_speed = 0.8
+            color = WHITE
+        else:  # DONE
+            breath = 1.0 + 0.04 * math.sin(t * 1.5)
+            wobble = 0.02
+            rot_speed = 0.2
+            color = DIM1
+
+        base_r = 28 * breath
+
+        # Sub-blob definitions: (angle, dist_factor, radius_factor)
+        blobs = [
+            (0.0, 0.0, 1.0),
+            (0.0, 0.45, 0.55),
+            (math.pi * 0.5, 0.45, 0.55),
+            (math.pi, 0.45, 0.55),
+            (math.pi * 1.5, 0.45, 0.55),
+            (math.pi * 0.25, 0.35, 0.4),
+            (math.pi * 0.75, 0.35, 0.4),
+            (math.pi * 1.25, 0.35, 0.4),
+            (math.pi * 1.75, 0.35, 0.4),
+        ]
+
+        # Glow effect
+        glow_r = int(base_r * 1.6)
+        if glow_r > 2:
+            glow_surf = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
+            for ring in range(3):
+                r = glow_r - ring * (glow_r // 4)
+                alpha = max(5, 25 - ring * 8)
+                pygame.draw.circle(glow_surf, (*color, alpha), (glow_r, glow_r), max(1, r))
+            surface.blit(glow_surf, (cx - glow_r, cy - glow_r))
+
+        # Draw sub-blobs
+        for i, (angle, dist_f, r_f) in enumerate(blobs):
+            a = angle + t * rot_speed + wobble * math.sin(t * 3.7 + i * 1.3)
+            dist = base_r * dist_f
+            r = max(1, int(base_r * r_f))
+            bx = int(cx + dist * math.cos(a))
+            by = int(cy + dist * math.sin(a))
+            c = color if i == 0 else tuple(max(0, min(255, int(v * 0.85))) for v in color)
+            pygame.draw.circle(surface, c, (bx, by), r)
+
+    # ── Voice pipeline ──
+
+    def _start_recording(self) -> None:
+        """Begin voice capture via SharedAudioStream + VoiceRecorder."""
+        if not self.shared_stream:
+            # Fallback: use audio_pipeline directly (legacy path)
+            self._start_recording_legacy()
+            return
+
+        from audio.voice_recorder import VoiceRecorder
+
+        def on_amplitude(amp: float):
+            with self._lock:
+                self._amplitude = amp
+
+        def on_done(wav_bytes: bytes | None):
+            if self._dismissed:
+                return
+            if wav_bytes is None:
+                self._set_error("no speech")
+                return
+            # Save WAV to temp file for STT
+            threading.Thread(
+                target=self._process_audio,
+                args=(wav_bytes,),
+                daemon=True,
+                name="blob_overlay_process",
+            ).start()
+
+        self._recorder = VoiceRecorder(
+            shared_stream=self.shared_stream,
+            on_amplitude=on_amplitude,
+            on_done=on_done,
+            silence_timeout=2.0,
+            max_duration=30.0,
+        )
 
         if self.led:
             self.led.listening()
 
-        # Start recording in background
+        if not self._recorder.start():
+            self._set_error("mic unavailable")
+
+    def _start_recording_legacy(self) -> None:
+        """Fallback: use AudioPipeline.record() directly."""
+        if not self.audio_pipeline:
+            self._set_error("no audio")
+            return
+
+        if self.led:
+            self.led.listening()
+
         threading.Thread(
-            target=self._voice_flow, daemon=True, name="blob_overlay_voice",
+            target=self._legacy_voice_flow,
+            daemon=True,
+            name="blob_overlay_legacy",
         ).start()
 
-    def _stop_listening(self):
-        """Signal recording to stop and proceed to transcription."""
-        self._voice_stop_event.set()
-
-    def _stop_speaking(self):
-        """Stop TTS playback."""
-        if self.audio_pipeline:
-            try:
-                self.audio_pipeline.stop_speaking()
-            except Exception:
-                pass
-        with self._lock:
-            self._state = VoiceOverlayState.DONE
-            self._done_elapsed_ms = 0
-        self._blob.set_state(BlobState.IDLE)
-        self._amplitude_stop.set()
-
-    def _voice_flow(self):
-        """Background thread: record -> transcribe -> chat -> speak -> done."""
+    def _legacy_voice_flow(self) -> None:
+        """Legacy path using AudioPipeline for recording."""
         try:
-            # Record
-            audio_path = self.audio_pipeline.record(max_seconds=15)
+            audio_path = self.audio_pipeline.record(max_seconds=30)
             if not audio_path:
-                self._set_error("mic init failed")
+                self._set_error("mic failed")
                 return
 
-            # Wait for stop signal (user tap or timeout)
-            self._voice_stop_event.wait(timeout=15)
+            # Wait for force_send or timeout
+            # The user presses DOUBLE to force-send, which calls _force_send()
+            # For legacy path, we just wait a bit then stop
+            time.sleep(0.5)
+            while not self._dismissed and self._state == BlobOverlayState.LISTENING:
+                time.sleep(0.1)
+                if self._elapsed_ms > 30000:
+                    break
+
             self.audio_pipeline.stop_recording()
 
             if self._dismissed:
                 return
 
-            # Validate recording
             if not os.path.exists(audio_path) or os.path.getsize(audio_path) <= 44:
                 self._set_error("no audio")
                 return
 
-            # Transcribe
-            with self._lock:
-                self._state = VoiceOverlayState.THINKING
-            self._blob.set_state(BlobState.THINKING)
+            # Read WAV bytes
+            with open(audio_path, "rb") as f:
+                wav_bytes = f.read()
 
-            if self.led:
+            try:
+                os.unlink(audio_path)
+            except OSError:
+                pass
+
+            self._process_audio(wav_bytes)
+
+        except Exception as exc:
+            logger.error("blob_overlay_legacy_failed: %s", exc, exc_info=True)
+            self._set_error(str(exc)[:24])
+
+    def _force_send(self) -> None:
+        """Force-finish recording immediately."""
+        if self._recorder:
+            self._recorder.force_send()
+        elif self.audio_pipeline:
+            # Legacy: stop recording
+            try:
+                self.audio_pipeline.stop_recording()
+            except Exception:
+                pass
+
+    def _cancel_recording(self) -> None:
+        """Cancel recording without sending."""
+        if self._recorder:
+            self._recorder.stop()
+        elif self.audio_pipeline:
+            try:
+                self.audio_pipeline.stop_recording()
+            except Exception:
+                pass
+
+    def _process_audio(self, wav_bytes: bytes) -> None:
+        """Transcribe audio, send to agent, play TTS response."""
+        # Transition to THINKING
+        with self._lock:
+            self._state = BlobOverlayState.THINKING
+            self._amplitude = 0.0
+
+        if self.led:
+            try:
                 self.led.thinking()
+            except Exception:
+                pass
 
-            text = self.audio_pipeline.transcribe(audio_path).strip()
-            if not text:
+        try:
+            # Write WAV to temp file for STT
+            fd, tmp_path = tempfile.mkstemp(prefix="bitos_blob_", suffix=".wav")
+            os.close(fd)
+            with open(tmp_path, "wb") as f:
+                f.write(wav_bytes)
+
+            # Transcribe
+            transcript = ""
+            try:
+                transcript = self.audio_pipeline.transcribe(tmp_path).strip()
+            except Exception as exc:
+                logger.error("blob_overlay_transcribe_failed: %s", exc)
+            finally:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+
+            if not transcript:
                 self._set_error("no speech")
                 return
 
             with self._lock:
-                self._transcript = text
+                self._transcript = transcript
 
-            # Send to agent and stream response
-            result = self.client.chat(text)
+            if self._dismissed:
+                return
+
+            # Send to agent (streaming)
+            result = self.client.chat(transcript)
             if isinstance(result, dict) and result.get("error"):
                 self._set_error(str(result.get("error", "chat error"))[:30])
                 return
 
+            # Stream response chunks
             response_text = ""
             for chunk in result:
                 if self._dismissed:
@@ -250,216 +500,103 @@ class BlobOverlay:
             if self._dismissed:
                 return
 
-            # Speak the response
-            if response_text and self.audio_pipeline:
-                with self._lock:
-                    self._state = VoiceOverlayState.SPEAKING
-                self._blob.set_state(BlobState.SPEAKING)
+            if not response_text:
+                self._set_done()
+                return
 
-                if self.led:
-                    self.led.speaking()
-
-                # Start amplitude monitoring for speaking state
-                self._start_amplitude_monitor()
-
-                try:
-                    self.audio_pipeline.speak(response_text)
-                except Exception as exc:
-                    logger.warning("blob_overlay_speak_failed: %s", exc)
-                finally:
-                    self._amplitude_stop.set()
-
-            # Done
-            with self._lock:
-                self._state = VoiceOverlayState.DONE
-                self._done_elapsed_ms = 0
-            self._blob.set_state(BlobState.IDLE)
-
-            if self.led:
-                self.led.off()
+            # TTS playback
+            self._play_tts(response_text)
 
         except Exception as exc:
-            logger.error("blob_overlay_voice_failed: %s", exc, exc_info=True)
+            logger.error("blob_overlay_process_failed: %s", exc, exc_info=True)
             self._set_error(str(exc)[:24])
 
-    def _start_amplitude_monitor(self):
-        """Monitor speaking amplitude for blob animation.
+    def _play_tts(self, text: str) -> None:
+        """Play TTS response with SPEAKING blob animation."""
+        with self._lock:
+            self._state = BlobOverlayState.SPEAKING
 
-        During SPEAKING state, poll the audio pipeline's player for
-        playback activity and simulate amplitude from timing.
-        """
-        self._amplitude_stop.clear()
+        if self.led:
+            try:
+                self.led.speaking()
+            except Exception:
+                pass
 
-        def _monitor():
-            while not self._amplitude_stop.is_set():
-                if self.audio_pipeline and self.audio_pipeline.is_speaking():
-                    # Simulate amplitude with a sine wave while speaking
-                    t = time.monotonic()
-                    sim_amp = 0.4 + 0.3 * abs(math.sin(t * 4.5))
-                    with self._lock:
-                        self._amplitude = sim_amp
-                else:
-                    with self._lock:
-                        self._amplitude = 0.0
-                self._amplitude_stop.wait(timeout=0.05)
+        try:
+            if self.audio_pipeline:
+                self.audio_pipeline.speak(text)
+        except Exception as exc:
+            logger.warning("blob_overlay_tts_failed: %s", exc)
 
-            with self._lock:
-                self._amplitude = 0.0
+        self._set_done()
 
-        self._amplitude_thread = threading.Thread(
-            target=_monitor, daemon=True, name="blob_amplitude",
-        )
-        self._amplitude_thread.start()
+    def _stop_tts(self) -> None:
+        """Stop TTS playback immediately."""
+        if self.audio_pipeline:
+            try:
+                self.audio_pipeline.stop_speaking()
+            except Exception:
+                pass
+        self._set_done()
 
-    def _set_error(self, msg: str):
-        """Set error state from any thread."""
+    def _set_done(self) -> None:
+        """Transition to DONE state."""
+        with self._lock:
+            self._state = BlobOverlayState.DONE
+            self._done_elapsed_ms = 0
+            self._amplitude = 0.0
+        if self.led:
+            try:
+                self.led.off()
+            except Exception:
+                pass
+
+    def _set_error(self, msg: str) -> None:
+        """Set error and transition to DONE."""
         with self._lock:
             self._error = msg
-            self._state = VoiceOverlayState.DONE
+            self._state = BlobOverlayState.DONE
             self._done_elapsed_ms = 0
-        self._blob.set_state(BlobState.IDLE)
-        self._amplitude_stop.set()
+            self._amplitude = 0.0
         if self.led:
             try:
                 self.led.error()
             except Exception:
                 pass
 
-    def _dismiss(self):
-        """Dismiss the overlay and clean up."""
+    def _dismiss(self) -> None:
+        """Dismiss overlay, cleanup all resources."""
         self._dismissed = True
-        self._voice_stop_event.set()
-        self._amplitude_stop.set()
+
+        # Cancel any recording
+        self._cancel_recording()
+
+        # Stop any TTS
         if self.audio_pipeline:
             try:
-                self.audio_pipeline.stop_recording()
                 if self.audio_pipeline.is_speaking():
                     self.audio_pipeline.stop_speaking()
             except Exception:
                 pass
+
         if self.led:
             try:
                 self.led.off()
             except Exception:
                 pass
+
         if self.on_dismiss:
             self.on_dismiss()
 
-    # ── Rendering ───────────────────────────────────────────────────
-
-    def render(self, surface: pygame.Surface) -> None:
-        """Render the full-screen blob overlay."""
-        if self._dismissed:
-            return
-
-        with self._lock:
-            state = self._state
-            transcript = self._transcript
-            response = self._response
-            error = self._error
-
-        # Full-screen dim background
-        dim = pygame.Surface((PHYSICAL_W, PHYSICAL_H), pygame.SRCALPHA)
-        dim.fill((0, 0, 0, 220))
-        surface.blit(dim, (0, 0))
-
-        font = self._font("body")
-        font_small = self._font("small")
-        font_hint = self._font("hint")
-
-        # Draw blob with glow
-        self._blob.render_glow(surface, color=WHITE, glow_alpha=20)
-        self._blob.render(surface, color=WHITE)
-
-        # State label below blob
-        blob_bottom = self._blob.cy + self._blob.base_radius + 24
-
-        state_labels = {
-            VoiceOverlayState.IDLE: ("TAP TO SPEAK", DIM2),
-            VoiceOverlayState.LISTENING: ("LISTENING", WHITE),
-            VoiceOverlayState.THINKING: ("THINKING", DIM1),
-            VoiceOverlayState.SPEAKING: ("SPEAKING", DIM1),
-            VoiceOverlayState.DONE: ("DONE", DIM2),
-        }
-        label_text, label_color = state_labels.get(state, ("", DIM2))
-
-        # Animated dots for active states
-        if state in (VoiceOverlayState.THINKING,):
-            dots = "." * (1 + (self._elapsed_ms // 400) % 3)
-            label_text += dots
-
-        label_surf = font_small.render(label_text, False, label_color)
-        label_x = (PHYSICAL_W - label_surf.get_width()) // 2
-        surface.blit(label_surf, (label_x, blob_bottom))
-
-        # Recording duration
-        if state == VoiceOverlayState.LISTENING:
-            elapsed = time.time() - self._recording_start
-            dur_text = f"{elapsed:.0f}s"
-            dur_surf = font_hint.render(dur_text, False, DIM3)
-            dur_x = (PHYSICAL_W - dur_surf.get_width()) // 2
-            surface.blit(dur_surf, (dur_x, blob_bottom + label_surf.get_height() + 4))
-
-            # Pulsing recording indicator
-            pulse = 0.5 + 0.5 * math.sin(self._elapsed_ms / 200.0)
-            dot_r = int(3 + pulse * 2)
-            dot_color = (255, int(80 * pulse), int(80 * pulse))
-            pygame.draw.circle(surface, dot_color, (label_x - 10, blob_bottom + label_surf.get_height() // 2), dot_r)
-
-        # Content area (bottom half)
-        content_y = PHYSICAL_H // 2 + 10
-        content_x = SAFE_INSET
-        max_text_w = PHYSICAL_W - SAFE_INSET * 2
-
-        if state == VoiceOverlayState.DONE and error:
-            err_surf = font.render(error, False, (255, 120, 120))
-            surface.blit(err_surf, (content_x, content_y))
-
-        elif state in (VoiceOverlayState.THINKING, VoiceOverlayState.SPEAKING, VoiceOverlayState.DONE):
-            # Show transcript (dimmed, truncated)
-            if transcript:
-                trunc_t = transcript[:50] + ("..." if len(transcript) > 50 else "")
-                t_lines = self._wrap_text(trunc_t, font_hint, max_text_w)
-                y = content_y
-                for line in t_lines[:2]:
-                    t_surf = font_hint.render(line, False, DIM3)
-                    surface.blit(t_surf, (content_x, y))
-                    y += font_hint.get_height() + 2
-
-            # Show response (brighter, word-wrapped)
-            if response:
-                r_y = content_y + (font_hint.get_height() + 2) * min(2, len(transcript.split()) > 0 and 1 or 0) + 8
-                lines = self._wrap_text(response, font_hint, max_text_w)
-                # Show last N lines that fit (scroll to bottom)
-                max_lines = (PHYSICAL_H - r_y - 30) // (font_hint.get_height() + 2)
-                max_lines = max(1, max_lines)
-                visible = lines[-max_lines:] if len(lines) > max_lines else lines
-                for line in visible:
-                    line_surf = font_hint.render(line, False, DIM1)
-                    surface.blit(line_surf, (content_x, r_y))
-                    r_y += font_hint.get_height() + 2
-
-        # Bottom hints
-        hint_y = PHYSICAL_H - SAFE_INSET - font_hint.get_height() - 4
-        hints = {
-            VoiceOverlayState.IDLE: "TAP:speak  DBL:close",
-            VoiceOverlayState.LISTENING: "TAP:send  DBL:cancel",
-            VoiceOverlayState.THINKING: "DBL:cancel",
-            VoiceOverlayState.SPEAKING: "TAP:stop  DBL:close",
-            VoiceOverlayState.DONE: "TAP:close",
-        }
-        hint_text = hints.get(state, "")
-        hint_surf = font_hint.render(hint_text, False, DIM3)
-        hint_x = (PHYSICAL_W - hint_surf.get_width()) // 2
-        surface.blit(hint_surf, (hint_x, hint_y))
+    # ── Helpers ──
 
     def _font(self, key: str) -> pygame.font.Font:
         if key in self._fonts:
             return self._fonts[key]
         try:
             font = pygame.font.Font(FONT_PATH, FONT_SIZES[key])
-        except FileNotFoundError:
-            font = pygame.font.SysFont("monospace", FONT_SIZES[key])
+        except (FileNotFoundError, OSError):
+            font = pygame.font.SysFont("monospace", FONT_SIZES.get(key, 10))
         self._fonts[key] = font
         return font
 

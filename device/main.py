@@ -292,6 +292,15 @@ def main():
 
     audio_pipeline = get_audio_pipeline()
 
+    # SharedAudioStream for multi-consumer mic access (voice recorder, wake word)
+    shared_stream = None
+    try:
+        from audio.shared_stream import SharedAudioStream
+        shared_stream = SharedAudioStream()
+        logger.info("[Audio] SharedAudioStream created")
+    except Exception as exc:
+        logger.warning("[Audio] SharedAudioStream unavailable: %s", exc)
+
     # Soft-start ALSA speaker in background to prevent WM8960 pop/click
     def _alsa_soft_start():
         from audio.player import init_alsa_soft_start
@@ -1289,9 +1298,11 @@ def main():
             agent_overlay._dismiss()
             agent_overlay = None
             return
+        # Use BlobOverlay (voice pipeline with animated blob) for triple-press
         agent_overlay = BlobOverlay(
-            audio_pipeline=audio_pipeline,
             client=client,
+            audio_pipeline=audio_pipeline,
+            shared_stream=shared_stream,
             led=led,
             on_dismiss=lambda: _clear_agent_overlay(),
         )

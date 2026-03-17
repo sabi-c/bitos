@@ -1,4 +1,4 @@
-"""Tests for the voice blob overlay and blob renderer."""
+"""Tests for BlobOverlay — voice pipeline overlay lifecycle and state machine."""
 
 import os
 import sys
@@ -6,7 +6,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, PropertyMock
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
@@ -15,94 +15,45 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "device"))
 
 import pygame
 
-pygame.init()
-
-from blob.renderer import BlobRendererLite, BlobState
-from overlays.blob_overlay import BlobOverlay, VoiceOverlayState
+from overlays.blob_overlay import BlobOverlay, BlobOverlayState
 
 
-class TestBlobRendererLite(unittest.TestCase):
-    """Unit tests for the lightweight blob renderer."""
+class FakeClient:
+    """Mock BackendClient that returns a streaming response."""
 
-    def setUp(self):
-        self.surface = pygame.Surface((240, 280))
-        self.renderer = BlobRendererLite(cx=120, cy=90, base_radius=32)
+    def __init__(self, response_chunks=None, error=None):
+        self._chunks = response_chunks or ["Hello ", "world!"]
+        self._error = error
 
-    def test_initial_state_is_idle(self):
-        self.assertEqual(self.renderer.state, BlobState.IDLE)
-
-    def test_set_state(self):
-        for state in BlobState:
-            self.renderer.set_state(state)
-            self.assertEqual(self.renderer.state, state)
-
-    def test_set_amplitude_clamps(self):
-        self.renderer.set_amplitude(-0.5)
-        self.assertEqual(self.renderer.amplitude, 0.0)
-        self.renderer.set_amplitude(1.5)
-        self.assertEqual(self.renderer.amplitude, 1.0)
-        self.renderer.set_amplitude(0.7)
-        self.assertAlmostEqual(self.renderer.amplitude, 0.7)
-
-    def test_render_does_not_crash_any_state(self):
-        for state in BlobState:
-            self.renderer.set_state(state)
-            self.renderer.set_amplitude(0.5)
-            self.renderer.render(self.surface)
-
-    def test_render_glow_does_not_crash(self):
-        self.renderer.render_glow(self.surface)
-
-    def test_render_with_amplitude(self):
-        self.renderer.set_state(BlobState.LISTENING)
-        self.renderer.set_amplitude(0.8)
-        self.renderer.render(self.surface)  # Should not crash
-
-    def test_custom_position_and_radius(self):
-        r = BlobRendererLite(cx=50, cy=50, base_radius=20)
-        self.assertEqual(r.cx, 50)
-        self.assertEqual(r.cy, 50)
-        self.assertEqual(r.base_radius, 20)
-        r.render(self.surface)  # Should not crash
+    def chat(self, message):
+        if self._error:
+            return {"error": self._error}
+        return iter(self._chunks)
 
 
-class MockPipeline:
-    """Mock audio pipeline for testing."""
+class FakeAudioPipeline:
+    """Mock AudioPipeline."""
 
     def __init__(self):
-        self._recording = False
         self._speaking = False
-        self.transcript = "hello test"
+        self._stopped = threading.Event()
         self.speak_called = False
-        self._stop_event = threading.Event()
+        self.transcribe_result = "hello world"
 
     def record(self, max_seconds=60):
-        self._recording = True
-        import tempfile
-        fd, path = tempfile.mkstemp(suffix=".wav")
-        os.close(fd)
-        # Write a minimal WAV file (44-byte header + some data)
-        import struct
-        import wave
-        with wave.open(path, "wb") as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(16000)
-            # Write 0.1s of silence
-            wf.writeframes(b"\x00\x00" * 1600)
-        return path
+        return "/tmp/fake_rec.wav"
 
     def stop_recording(self):
-        self._recording = False
+        pass
 
-    def transcribe(self, audio_path):
-        return self.transcript
+    def transcribe(self, path):
+        return self.transcribe_result
 
     def speak(self, text):
         self.speak_called = True
         self._speaking = True
-        self._stop_event.clear()
-        self._stop_event.wait(timeout=0.1)
+        self._stopped.clear()
+        self._stopped.wait(timeout=1.0)
         self._speaking = False
 
     def is_speaking(self):
@@ -110,205 +61,269 @@ class MockPipeline:
 
     def stop_speaking(self):
         self._speaking = False
-        self._stop_event.set()
-
-    def is_available(self):
-        return True
+        self._stopped.set()
 
 
-class MockClient:
-    """Mock backend client for testing."""
+class FakeSharedStream:
+    """Mock SharedAudioStream."""
 
-    def __init__(self, response_chunks=None):
-        self.response_chunks = response_chunks or ["Hello ", "world!"]
-        self.last_message = None
+    def __init__(self):
+        self._running = False
 
-    def chat(self, message):
-        self.last_message = message
-        return iter(self.response_chunks)
+    @property
+    def is_running(self):
+        return self._running
+
+    def register(self, name, maxlen=100):
+        from collections import deque
+        return deque(maxlen=maxlen)
+
+    def unregister(self, name):
+        pass
+
+    def start(self):
+        self._running = True
 
 
-class TestBlobOverlay(unittest.TestCase):
-    """Integration tests for the blob voice overlay."""
+class BlobOverlayLifecycleTests(unittest.TestCase):
 
-    def _make_overlay(self, pipeline=None, client=None):
-        return BlobOverlay(
-            audio_pipeline=pipeline or MockPipeline(),
-            client=client or MockClient(),
-            led=MagicMock(),
-        )
+    @classmethod
+    def setUpClass(cls):
+        pygame.init()
+        cls.surface = pygame.Surface((240, 280))
 
-    def test_initial_state(self):
-        ov = self._make_overlay()
-        self.assertEqual(ov.state, VoiceOverlayState.IDLE)
-        self.assertFalse(ov.dismissed)
+    @classmethod
+    def tearDownClass(cls):
+        pygame.quit()
 
-    def test_tick_keeps_alive(self):
-        ov = self._make_overlay()
-        self.assertTrue(ov.tick(16))
-        self.assertTrue(ov.tick(16))
+    def _make_overlay(self, client=None, pipeline=None, stream=None):
+        """Create a BlobOverlay with __post_init__ recording disabled."""
+        c = client or FakeClient()
+        p = pipeline or FakeAudioPipeline()
+        s = stream or FakeSharedStream()
 
-    def test_dismiss_on_double_press(self):
-        ov = self._make_overlay()
-        ov.handle_action("DOUBLE_PRESS")
-        self.assertTrue(ov.dismissed)
+        # Temporarily disable __post_init__ to control start manually
+        with patch.object(BlobOverlay, '__post_init__', lambda self: None):
+            overlay = BlobOverlay(
+                client=c,
+                audio_pipeline=p,
+                shared_stream=s,
+            )
+        return overlay
 
-    def test_dismiss_on_long_press(self):
-        ov = self._make_overlay()
-        ov.handle_action("LONG_PRESS")
-        self.assertTrue(ov.dismissed)
+    def test_initial_state_is_listening(self):
+        overlay = self._make_overlay()
+        self.assertEqual(overlay._state, BlobOverlayState.LISTENING)
 
-    def test_dismiss_on_triple_press(self):
-        ov = self._make_overlay()
-        ov.handle_action("TRIPLE_PRESS")
-        self.assertTrue(ov.dismissed)
+    def test_tick_returns_true_while_active(self):
+        overlay = self._make_overlay()
+        self.assertTrue(overlay.tick(16))
 
-    def test_short_press_starts_listening(self):
-        ov = self._make_overlay()
-        ov.handle_action("SHORT_PRESS")
-        # Give thread a moment to start
-        time.sleep(0.05)
-        self.assertEqual(ov.state, VoiceOverlayState.LISTENING)
+    def test_dismiss_sets_dismissed(self):
+        overlay = self._make_overlay()
+        overlay._dismiss()
+        self.assertTrue(overlay.dismissed)
+        self.assertFalse(overlay.tick(16))
 
-    def test_short_press_while_listening_triggers_send(self):
-        pipeline = MockPipeline()
-        client = MockClient()
-        ov = self._make_overlay(pipeline=pipeline, client=client)
+    def test_short_press_during_listening_dismisses(self):
+        overlay = self._make_overlay()
+        consumed = overlay.handle_action("SHORT_PRESS")
+        self.assertTrue(consumed)
+        self.assertTrue(overlay.dismissed)
 
-        # Start listening
-        ov.handle_action("SHORT_PRESS")
-        time.sleep(0.05)
+    def test_double_press_during_listening_force_sends(self):
+        """DOUBLE_PRESS during LISTENING should trigger force send."""
+        overlay = self._make_overlay()
+        # Mock the recorder
+        mock_recorder = MagicMock()
+        overlay._recorder = mock_recorder
+        consumed = overlay.handle_action("DOUBLE_PRESS")
+        self.assertTrue(consumed)
+        mock_recorder.force_send.assert_called_once()
 
-        # Stop listening (send)
-        ov.handle_action("SHORT_PRESS")
-        # Wait for voice flow to complete
-        time.sleep(0.5)
+    def test_long_press_dismisses(self):
+        overlay = self._make_overlay()
+        overlay.handle_action("LONG_PRESS")
+        self.assertTrue(overlay.dismissed)
 
-        self.assertEqual(client.last_message, "hello test")
+    def test_triple_press_dismisses(self):
+        overlay = self._make_overlay()
+        overlay.handle_action("TRIPLE_PRESS")
+        self.assertTrue(overlay.dismissed)
 
-    def test_full_voice_cycle(self):
-        """Test the complete IDLE -> LISTENING -> THINKING -> SPEAKING -> DONE flow."""
-        pipeline = MockPipeline()
-        client = MockClient(response_chunks=["Test response"])
-        ov = self._make_overlay(pipeline=pipeline, client=client)
+    def test_auto_dismiss_after_done_timeout(self):
+        overlay = self._make_overlay()
+        overlay._state = BlobOverlayState.DONE
+        overlay._done_elapsed_ms = 0
 
-        # Start
-        self.assertEqual(ov.state, VoiceOverlayState.IDLE)
+        # Tick past the auto-dismiss threshold
+        overlay.tick(overlay.auto_dismiss_ms + 100)
+        self.assertTrue(overlay.dismissed)
 
-        # Tap to record
-        ov.handle_action("SHORT_PRESS")
-        time.sleep(0.05)
-        self.assertEqual(ov.state, VoiceOverlayState.LISTENING)
+    def test_done_state_does_not_dismiss_early(self):
+        overlay = self._make_overlay()
+        overlay._state = BlobOverlayState.DONE
+        overlay._done_elapsed_ms = 0
 
-        # Tap to send
-        ov.handle_action("SHORT_PRESS")
+        # Tick but not enough to trigger auto-dismiss
+        overlay.tick(100)
+        self.assertFalse(overlay.dismissed)
 
-        # Wait for full pipeline (transcribe + chat + speak)
-        for _ in range(100):
-            time.sleep(0.05)
-            if ov.state == VoiceOverlayState.DONE:
-                break
+    def test_double_press_during_speaking_stops_tts(self):
+        pipeline = FakeAudioPipeline()
+        overlay = self._make_overlay(pipeline=pipeline)
+        overlay._state = BlobOverlayState.SPEAKING
+        pipeline._speaking = True
 
-        self.assertEqual(ov.state, VoiceOverlayState.DONE)
+        consumed = overlay.handle_action("DOUBLE_PRESS")
+        self.assertTrue(consumed)
+        # Should have stopped TTS
+        self.assertFalse(pipeline.is_speaking())
+
+    def test_short_press_during_done_dismisses(self):
+        overlay = self._make_overlay()
+        overlay._state = BlobOverlayState.DONE
+        consumed = overlay.handle_action("SHORT_PRESS")
+        self.assertTrue(consumed)
+        self.assertTrue(overlay.dismissed)
+
+    def test_render_does_not_crash(self):
+        """Render in each state without crashing."""
+        overlay = self._make_overlay()
+
+        for state in BlobOverlayState:
+            overlay._state = state
+            overlay._dismissed = False
+            overlay._response = "Test response text"
+            overlay._transcript = "test transcript"
+            overlay._error = "test error" if state == BlobOverlayState.DONE else ""
+            try:
+                overlay.render(self.surface)
+            except Exception as exc:
+                self.fail(f"render() crashed in state {state}: {exc}")
+
+    def test_render_skips_when_dismissed(self):
+        overlay = self._make_overlay()
+        overlay._dismissed = True
+        # Should not crash, should be a no-op
+        overlay.render(self.surface)
+
+    def test_set_error_transitions_to_done(self):
+        overlay = self._make_overlay()
+        overlay._set_error("mic broken")
+        self.assertEqual(overlay._state, BlobOverlayState.DONE)
+        self.assertEqual(overlay._error, "mic broken")
+
+    def test_set_done_transitions_state(self):
+        overlay = self._make_overlay()
+        overlay._state = BlobOverlayState.SPEAKING
+        overlay._set_done()
+        self.assertEqual(overlay._state, BlobOverlayState.DONE)
+        self.assertEqual(overlay._done_elapsed_ms, 0)
+
+    def test_hold_actions_consumed(self):
+        overlay = self._make_overlay()
+        self.assertTrue(overlay.handle_action("HOLD_START"))
+        self.assertTrue(overlay.handle_action("HOLD_END"))
+
+    def test_handle_action_returns_false_when_dismissed(self):
+        overlay = self._make_overlay()
+        overlay._dismissed = True
+        self.assertFalse(overlay.handle_action("SHORT_PRESS"))
+
+
+class BlobOverlayPipelineTests(unittest.TestCase):
+    """Test the voice -> STT -> chat -> TTS pipeline."""
+
+    @classmethod
+    def setUpClass(cls):
+        pygame.init()
+
+    @classmethod
+    def tearDownClass(cls):
+        pygame.quit()
+
+    def test_process_audio_full_pipeline(self):
+        """process_audio transcribes, chats, and reaches DONE."""
+        client = FakeClient(response_chunks=["Hey ", "there!"])
+        pipeline = FakeAudioPipeline()
+
+        with patch.object(BlobOverlay, '__post_init__', lambda self: None):
+            overlay = BlobOverlay(
+                client=client,
+                audio_pipeline=pipeline,
+                shared_stream=FakeSharedStream(),
+            )
+
+        # Create minimal WAV bytes
+        import io
+        import wave
+        wav_buf = io.BytesIO()
+        with wave.open(wav_buf, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(16000)
+            wf.writeframes(b"\x00" * 3200)
+        wav_bytes = wav_buf.getvalue()
+
+        # Run _process_audio in a thread
+        t = threading.Thread(target=overlay._process_audio, args=(wav_bytes,))
+        t.start()
+        t.join(timeout=5.0)
+
+        self.assertEqual(overlay._state, BlobOverlayState.DONE)
+        self.assertEqual(overlay._transcript, "hello world")
+        self.assertIn("Hey there!", overlay._response)
         self.assertTrue(pipeline.speak_called)
 
-    def test_render_does_not_crash_all_states(self):
-        """Rendering should work in every state without crashing."""
-        # Re-init pygame in case a prior test class called pygame.quit()
-        if not pygame.get_init():
-            pygame.init()
-        surface = pygame.Surface((240, 280), pygame.SRCALPHA)
-        ov = self._make_overlay()
+    def test_process_audio_handles_chat_error(self):
+        """Chat error transitions to DONE with error message."""
+        client = FakeClient(error="Server offline")
+        pipeline = FakeAudioPipeline()
 
-        # Manually set states and render
-        for state in VoiceOverlayState:
-            with ov._lock:
-                ov._state = state
-            ov._transcript = "test transcript"
-            ov._response = "test response text"
-            ov.render(surface)
+        with patch.object(BlobOverlay, '__post_init__', lambda self: None):
+            overlay = BlobOverlay(
+                client=client,
+                audio_pipeline=pipeline,
+                shared_stream=FakeSharedStream(),
+            )
 
-    def test_render_with_error(self):
-        if not pygame.get_init():
-            pygame.init()
-        surface = pygame.Surface((240, 280), pygame.SRCALPHA)
-        ov = self._make_overlay()
-        with ov._lock:
-            ov._state = VoiceOverlayState.DONE
-            ov._error = "test error"
-        ov.render(surface)
+        import io, wave
+        wav_buf = io.BytesIO()
+        with wave.open(wav_buf, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(16000)
+            wf.writeframes(b"\x00" * 3200)
 
-    def test_auto_dismiss_after_timeout_in_done(self):
-        ov = self._make_overlay()
-        ov.timeout_ms = 100  # Short timeout for test
-        with ov._lock:
-            ov._state = VoiceOverlayState.DONE
-        # Tick past timeout
-        ov.tick(50)
-        self.assertFalse(ov.dismissed)
-        ov.tick(60)  # Total > 100ms
-        self.assertTrue(ov.dismissed)
+        overlay._process_audio(wav_buf.getvalue())
+        self.assertEqual(overlay._state, BlobOverlayState.DONE)
+        self.assertIn("Server offline", overlay._error)
 
-    def test_dismiss_callback_fires(self):
-        callback = MagicMock()
-        ov = self._make_overlay()
-        ov.on_dismiss = callback
-        ov._dismiss()
-        callback.assert_called_once()
+    def test_process_audio_empty_transcript(self):
+        """No transcript -> error."""
+        client = FakeClient()
+        pipeline = FakeAudioPipeline()
+        pipeline.transcribe_result = ""
 
-    def test_handles_no_pipeline_gracefully(self):
-        ov = BlobOverlay(
-            audio_pipeline=None,
-            client=MockClient(),
-        )
-        ov.handle_action("SHORT_PRESS")
-        time.sleep(0.05)
-        self.assertEqual(ov.state, VoiceOverlayState.DONE)
-        self.assertEqual(ov._error, "no mic")
+        with patch.object(BlobOverlay, '__post_init__', lambda self: None):
+            overlay = BlobOverlay(
+                client=client,
+                audio_pipeline=pipeline,
+                shared_stream=FakeSharedStream(),
+            )
 
-    def test_consume_hold_events(self):
-        ov = self._make_overlay()
-        self.assertTrue(ov.handle_action("HOLD_START"))
-        self.assertTrue(ov.handle_action("HOLD_END"))
+        import io, wave
+        wav_buf = io.BytesIO()
+        with wave.open(wav_buf, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(16000)
+            wf.writeframes(b"\x00" * 3200)
 
-    def test_does_not_handle_after_dismiss(self):
-        ov = self._make_overlay()
-        ov._dismiss()
-        self.assertFalse(ov.handle_action("SHORT_PRESS"))
-
-    def test_stop_speaking_transitions_to_done(self):
-        pipeline = MockPipeline()
-        ov = self._make_overlay(pipeline=pipeline)
-        with ov._lock:
-            ov._state = VoiceOverlayState.SPEAKING
-        ov.handle_action("SHORT_PRESS")
-        self.assertEqual(ov.state, VoiceOverlayState.DONE)
-
-
-class TestBlobOverlayStateTransitions(unittest.TestCase):
-    """Test state transitions map to correct blob states."""
-
-    def test_blob_state_follows_overlay_state(self):
-        pipeline = MockPipeline()
-        ov = BlobOverlay(
-            audio_pipeline=pipeline,
-            client=MockClient(),
-            led=MagicMock(),
-        )
-
-        # IDLE -> blob IDLE
-        self.assertEqual(ov._blob.state, BlobState.IDLE)
-
-        # Start listening -> blob LISTENING
-        ov.handle_action("SHORT_PRESS")
-        time.sleep(0.05)
-        self.assertEqual(ov._blob.state, BlobState.LISTENING)
-
-        # Stop listening -> blob THINKING (after transcription starts)
-        ov.handle_action("SHORT_PRESS")
-        time.sleep(0.2)
-        # Should be THINKING or beyond
-        self.assertIn(ov._blob.state, [BlobState.THINKING, BlobState.SPEAKING, BlobState.IDLE])
+        overlay._process_audio(wav_buf.getvalue())
+        self.assertEqual(overlay._state, BlobOverlayState.DONE)
+        self.assertEqual(overlay._error, "no speech")
 
 
 if __name__ == "__main__":
