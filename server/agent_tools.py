@@ -328,6 +328,25 @@ DEVICE_TOOLS = [
             "required": ["query"],
         },
     },
+    # ── Confirmation Dialogue Tool ────────────────────────────────────
+    {
+        "name": "request_confirmation",
+        "description": (
+            "Show a confirmation dialogue on the device. Use for destructive or "
+            "important actions that need user approval before proceeding."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Dialogue title (e.g. CONFIRM ACTION)"},
+                "message": {"type": "string", "description": "What action needs confirmation"},
+                "confirm_label": {"type": "string", "description": "Confirm button text", "default": "OK"},
+                "cancel_label": {"type": "string", "description": "Cancel button text", "default": "CANCEL"},
+                "destructive": {"type": "boolean", "description": "If true, uses red styling for confirm button", "default": False},
+            },
+            "required": ["title", "message"],
+        },
+    },
     # ── Task Management Tools ──────────────────────────────────────────
     {
         "name": "create_task",
@@ -772,6 +791,24 @@ def _handle_tool_call_inner(
         logger.info("approval_resolved: id=%s choice=%s", request_id, choice)
 
         return json.dumps({"choice": choice, "request_id": request_id})
+
+    if tool_name == "request_confirmation":
+        title = tool_input.get("title", "CONFIRM")
+        message = tool_input.get("message", "")
+        confirm_label = tool_input.get("confirm_label", "OK")
+        cancel_label = tool_input.get("cancel_label", "CANCEL")
+        destructive = bool(tool_input.get("destructive", False))
+        setting_changes.append({
+            "key": "_confirm_dialogue",
+            "value": {
+                "title": title,
+                "message": message,
+                "confirm_label": confirm_label,
+                "cancel_label": cancel_label,
+                "destructive": destructive,
+            },
+        })
+        return json.dumps({"success": True, "message": f"Confirmation dialogue shown: {title}"})
 
     # ── Messaging tools (macOS AppleScript bridge) ─────────────────────
     if tool_name == "send_imessage":

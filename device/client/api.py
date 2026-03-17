@@ -29,6 +29,7 @@ class BackendClient:
         self.base_url = base_url or os.environ.get("BITOS_SERVER_URL", DEFAULT_SERVER_URL)
         self.device_token = os.environ.get("BITOS_DEVICE_TOKEN", "")
         self.on_approval_request = None  # Callable[[str, str, list[str]], None] or None
+        self.on_confirm_dialogue = None  # Callable[[dict], None] or None
         self.on_test_typewriter: callable | None = None
         self.on_volume_change: callable | None = None  # Callable[[int], None] or None
         self._conversation_id: str | None = None  # Multi-turn conversation tracking
@@ -300,6 +301,9 @@ class BackendClient:
         if key == "_test_typewriter":
             self._handle_test_typewriter(value)
             return
+        if key == "_confirm_dialogue":
+            self._handle_confirm_dialogue(value)
+            return
 
         try:
             from storage.repository import DeviceRepository
@@ -358,6 +362,16 @@ class BackendClient:
                 self.on_test_typewriter(data.get("text", "Test"), data.get("config", {}))
         except Exception as exc:
             logging.warning("test_typewriter_failed: %s", exc)
+
+    def _handle_confirm_dialogue(self, value) -> None:
+        """Show a confirmation dialogue on the device."""
+        import json
+        try:
+            data = json.loads(value) if isinstance(value, str) else value
+            if self.on_confirm_dialogue:
+                self.on_confirm_dialogue(data)
+        except Exception as exc:
+            logging.warning("confirm_dialogue_failed: %s", exc)
 
     def get_integration_status(self) -> dict:
         """GET /status/integrations."""

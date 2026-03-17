@@ -169,8 +169,11 @@ class ScreenManager:
             if self._active_banner and self._active_banner.dismissed:
                 self._active_banner = None
             return
-        if self._active_overlay and self._active_overlay.handle_input(action):
-            return
+        if self._active_overlay:
+            # New components use handle_action(); legacy use handle_input()
+            handler = getattr(self._active_overlay, "handle_action", None) or getattr(self._active_overlay, "handle_input", None)
+            if handler and handler(action):
+                return
         if self._passkey_overlay and self._passkey_overlay.handle_input(action):
             return
         if self.notification_queue.handle_input(action):
@@ -201,7 +204,11 @@ class ScreenManager:
         if self._passkey_overlay:
             self._passkey_overlay.render(surface, tokens)
         if self._active_overlay:
-            self._active_overlay.render(surface, tokens)
+            # New components render(surface); legacy render(surface, tokens)
+            try:
+                self._active_overlay.render(surface)
+            except TypeError:
+                self._active_overlay.render(surface, tokens)
         self.notification_queue.render(surface, tokens)
 
     def render(self, surface: pygame.Surface):
