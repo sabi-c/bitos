@@ -107,6 +107,8 @@ from integrations.adapters import create_runtime_adapter
 from integrations.queue import OutboundCommandQueue
 from integrations.runtime import OutboundWorkerRuntimeLoop
 from integrations.worker import OutboundCommandWorker
+from device.notifications.router import NotificationRouter
+from device.notifications.ws_client import DeviceWSClient
 logger = logging.getLogger(__name__)
 
 
@@ -330,6 +332,58 @@ def main():
 
     # Expose to poller so it can trigger banners for high-priority notifications
     notification_poller.on_banner = show_proactive_notification
+
+    # ── Notification Router + WebSocket client ──
+    # Mutable ref so badge callback can reach the home screen once it's created
+    _home_screen_ref: list = []  # [CompositeScreen] when set
+
+    def _show_banner_from_event(event):
+        payload = event.get("payload", {})
+        was_sleeping = idle_mgr.state in ("dim", "sleep")
+        idle_mgr.wake()
+
+        def on_banner_reply(mode: str):
+            logger.info("[Router/Banner] reply mode=%s", mode)
+
+        def on_banner_dismiss():
+            logger.info("[Router/Banner] dismissed")
+
+        banner = NotificationBanner(
+            app=payload.get("app", event.get("category", "").upper()),
+            icon=payload.get("icon", "!"),
+            message=payload.get("body", ""),
+            time_str=payload.get("time_str", time.strftime("%H:%M")),
+            was_sleeping=was_sleeping,
+            category=event.get("category", "system"),
+            on_reply=on_banner_reply,
+            on_dismiss=on_banner_dismiss,
+        )
+        screen_mgr.show_banner(banner)
+
+    def _show_toast_from_event(event):
+        payload = event.get("payload", {})
+        notification_queue.push(NotificationToast(
+            app=payload.get("app", event.get("category", "").upper()),
+            icon=payload.get("icon", "!"),
+            message=payload.get("body", ""),
+            time_str=time.strftime("%H:%M"),
+            category=event.get("category", "system"),
+        ))
+
+    def _on_badge(count):
+        if _home_screen_ref:
+            _home_screen_ref[0].set_unread_count(count)
+
+    notification_router = NotificationRouter(
+        on_banner=_show_banner_from_event,
+        on_toast=_show_toast_from_event,
+        on_badge=_on_badge,
+    )
+
+    server_url = os.environ.get("BITOS_SERVER_URL", "ws://localhost:8000")
+    ws_client = DeviceWSClient(f"{server_url}/ws/device")
+    ws_client.on_event = notification_router.on_event
+    ws_client.start()
 
     # ── Agent approval overlay wiring ──
     from overlays.approval_overlay import ApprovalOverlay
@@ -707,6 +761,8 @@ def main():
             status_state=status_state,
             right_panels=right_panels,
         )
+        _home_screen_ref.clear()
+        _home_screen_ref.append(home)
         screen_mgr.replace(home)
 
     def open_chat():
@@ -1091,6 +1147,7 @@ def main():
         clock.tick(power_mgr.get_target_fps())
 
     notification_poller.stop()
+    ws_client.stop()
     status_poller.stop()
     monitor.stop()
     led.off()
