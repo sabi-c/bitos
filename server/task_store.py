@@ -80,7 +80,7 @@ def _get_db(db_path: str | Path | None = None) -> sqlite3.Connection:
     """Open task store database, creating schema if needed."""
     path = Path(db_path) if db_path else DB_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path))
+    conn = sqlite3.connect(str(path), check_same_thread=False)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=3000")
     conn.execute("PRAGMA foreign_keys=ON")
@@ -99,7 +99,10 @@ def set_db_path(path: str | Path | None) -> None:
     """Override the database path (for testing). Call before any operations."""
     global _db, _db_path_override
     if _db is not None:
-        _db.close()
+        try:
+            _db.close()
+        except Exception:
+            pass
         _db = None
     _db_path_override = path
 

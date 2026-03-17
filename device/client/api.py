@@ -484,6 +484,33 @@ class BackendClient:
             logging.warning("tasks_fetch_failed error=%s", exc)
             return []
 
+    def get_task(self, task_id: str) -> dict | None:
+        """GET /tasks/{id} — get single task with subtasks."""
+        try:
+            resp = httpx.get(
+                f"{self.base_url}/tasks/{task_id}",
+                timeout=5,
+                headers=self._request_headers(),
+            )
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as exc:
+            logging.warning("task_detail_failed id=%s error=%s", task_id[:12], exc)
+            return None
+
+    def complete_task(self, task_id: str) -> bool:
+        """POST /tasks/{id}/complete — mark task done on server."""
+        try:
+            resp = httpx.post(
+                f"{self.base_url}/tasks/{task_id}/complete",
+                timeout=5,
+                headers=self._request_headers(),
+            )
+            resp.raise_for_status()
+            return True
+        except Exception as exc:
+            logging.warning("task_complete_failed id=%s error=%s", task_id[:12], exc)
+            return False
 
     def get_activity(self, category: str | None = None) -> list[dict]:
         """GET /activity — unified activity feed."""
