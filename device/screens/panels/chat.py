@@ -129,6 +129,7 @@ class ChatPanel(BaseScreen):
 
         # Typewriter
         self._typewriter: TypewriterRenderer | None = None
+        self._user_typewriter: TypewriterRenderer | None = None  # types out user's sent text
 
         # Mode state
         self._mode = ChatMode.IDLE
@@ -263,6 +264,12 @@ class ChatPanel(BaseScreen):
                 self._hold_timer = None
                 self._quick_talk = True
                 self._start_recording()
+
+        # Tick user typewriter (sent message animation)
+        if self._user_typewriter and not self._user_typewriter.finished:
+            self._user_typewriter.update(dt)
+        elif self._user_typewriter and self._user_typewriter.finished:
+            self._user_typewriter = None
 
         # Tick typewriter
         if self._typewriter and not self._typewriter.finished:
@@ -676,6 +683,15 @@ class ChatPanel(BaseScreen):
             snapshot = list(snapshot)
             snapshot[-1] = {"role": "assistant", "text": self._typewriter.get_visible_text()}
 
+        # User message typewriter: show partially revealed text for latest user message
+        if self._user_typewriter and snapshot:
+            # Find the last user message and replace with typewriter text
+            snapshot = list(snapshot)
+            for i in range(len(snapshot) - 1, -1, -1):
+                if snapshot[i]["role"] == "user":
+                    snapshot[i] = {"role": "user", "text": self._user_typewriter.get_visible_text()}
+                    break
+
         visible_lines = []
         for msg in snapshot:
             prefix = "> " if msg["role"] == "user" else ""
@@ -952,11 +968,10 @@ class ChatPanel(BaseScreen):
             return
 
         # ── Step 5: Show transcription result briefly before sending ──
-        self._set_voice_step("TRANSCRIBED", text[:60])
-        time.sleep(1.0)  # let the user see what was heard
+        self._set_voice_step("SENDING", text[:60])
+        time.sleep(0.5)  # brief pause — user text typewriter provides the visual feedback
 
         # ── Step 6: Send to backend ──
-        self._set_voice_step("SENDING")
         if self._led:
             self._led.sending()
         self._input_text = text
@@ -1031,6 +1046,9 @@ class ChatPanel(BaseScreen):
 
         self._mode = ChatMode.STREAMING
 
+        # Start user text typewriter animation (fast — just enough for visual feedback)
+        self._user_typewriter = TypewriterRenderer(text, speed="fast")
+
         with self._messages_lock:
             self._messages.append({"role": "user", "text": text})
 
@@ -1057,6 +1075,14 @@ class ChatPanel(BaseScreen):
             self._led.responding()
         thread = threading.Thread(target=self._stream_response, args=(text,), daemon=True)
         thread.start()
+
+    def send_message(self, text: str) -> None:
+        """Public API: set input text and send immediately."""
+        text = (text or "").strip()
+        if not text:
+            return
+        self._input_text = text
+        self._send_message()
 
     def _send_template_message(self, template: dict) -> None:
         message = str(template.get("message", "")).strip()

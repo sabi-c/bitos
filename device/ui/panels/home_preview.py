@@ -15,16 +15,16 @@ from device.display.tokens import WHITE, DIM2, DIM3, DIM4, HAIRLINE
 from device.ui.panels.base import PreviewPanel
 
 
-TIME_FONT = 22
-GREETING_FONT = 9
-DATE_FONT = 8
-STATUS_FONT = 8
+TIME_FONT = 26
+GREETING_FONT = 10
+DATE_FONT = 9
+STATUS_FONT = 10
 PAD_X = 6
 PAD_Y = 6
-HEADER_H = 90
+HEADER_H = 110
 
-TICKER_INTERVAL = 4.0  # seconds between items
-TICKER_FADE_DUR = 0.5  # seconds for crossfade
+TICKER_INTERVAL = 8.0  # seconds between items — hang long enough to read
+TICKER_FADE_DUR = 0.6  # seconds for crossfade
 
 HOME_ITEMS = [
     {"label": "QUICK CHAT", "description": "Start a conversation", "action": "chat"},
@@ -120,7 +120,7 @@ class HomePreviewPanel(PreviewPanel):
 
         # Truncate each item to fit the panel pixel width
         status_font = get_font(STATUS_FONT)
-        max_width = 156 - PAD_X * 2  # panel width minus padding
+        max_width = 150 - PAD_X * 2  # panel width minus padding (conservative for larger font)
         for i, text in enumerate(items):
             if status_font.size(text)[0] > max_width:
                 while len(text) > 1 and status_font.size(text + "\u2026")[0] > max_width:

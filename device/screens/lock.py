@@ -78,6 +78,8 @@ class LockScreen(BaseScreen):
             self._cycling = True
             self._current_digit = (self._current_digit + 1) % 10
         elif action == "DOUBLE_PRESS":
+            if len(self._entered) >= 4:
+                return  # Already full — ignore extra presses
             self._entered.append(self._current_digit)
             self._current_digit = 0
             self._cycling = False
@@ -180,7 +182,7 @@ class LockScreen(BaseScreen):
 
     def _draw_pin_dots(self, surface: pygame.Surface, y: int, color, is_flashing: bool):
         """Draw confirmed dots + current cycling digit with inverted highlight."""
-        spacing = 10  # pixels between digit slots
+        spacing = 14  # pixels between digit slots
 
         # Build list of (text, is_active) tuples
         parts: list[tuple[str, bool]] = []
@@ -198,15 +200,18 @@ class LockScreen(BaseScreen):
         for _ in range(remaining):
             parts.append(("_", False))
 
+        # Use title font for larger, more readable PIN digits
+        pin_font = self._font_title
+
         # Pre-render to measure total width
         rendered: list[tuple[pygame.Surface, bool, int, int]] = []
         total_w = 0
         for text, active in parts:
             if active:
-                # Same font size, inverted colors for emphasis
-                surf = self._font_body.render(text, False, BLACK if not is_flashing else WHITE)
+                # Inverted colors for emphasis
+                surf = pin_font.render(text, False, BLACK if not is_flashing else WHITE)
             else:
-                surf = self._font_body.render(text, False, color)
+                surf = pin_font.render(text, False, color)
             rendered.append((surf, active, surf.get_width(), surf.get_height()))
             total_w += surf.get_width() + spacing
         total_w -= spacing  # remove trailing space

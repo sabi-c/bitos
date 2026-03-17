@@ -36,7 +36,7 @@ from enum import Enum
 import pygame
 
 from device.display.tokens import PHYSICAL_W, PHYSICAL_H, SIDEBAR_W, CONTENT_W, STATUS_BAR_H, SAFE_INSET
-from device.ui.components.sidebar import Sidebar, ITEMS
+from device.ui.components.sidebar import Sidebar, ITEMS, SIDEBAR_W_COLLAPSED
 from device.ui.components.status_bar import StatusBar
 from device.ui.components.action_bar import ActionBar
 from device.screens.base import BaseScreen
@@ -214,7 +214,10 @@ class CompositeScreen(BaseScreen):
         # Status bar at top (full width, 20px, below SAFE_INSET)
         self._status_bar.render(surface, y=SAFE_INSET, width=PHYSICAL_W)
 
-        # Sidebar on left (84px wide, from y=36 to y=244)
+        # Dynamic sidebar width based on collapsed state
+        sb_w = self._sidebar.current_width
+
+        # Sidebar on left
         scroll_offset = self._sidebar_highlight_y_offset()
         self._sidebar.render(surface, x=0, y=CONTENT_TOP, height=RIGHT_PANEL_H,
                              highlight_y_offset=scroll_offset)
@@ -224,22 +227,25 @@ class CompositeScreen(BaseScreen):
             from device.ui.components.sidebar import ITEM_H
             flash_alpha = int(80 * (self._flash_timer / FLASH_DURATION_S))
             flash_y = CONTENT_TOP + self._sidebar.selected_index * ITEM_H
-            flash_surf = pygame.Surface((SIDEBAR_W - 2, ITEM_H))
+            flash_surf = pygame.Surface((sb_w - 2, ITEM_H))
             flash_surf.fill(WHITE)
             flash_surf.set_alpha(flash_alpha)
             surface.blit(flash_surf, (0, flash_y))
 
-        # Right panel (156x208, positioned at x=84, y=36)
-        # Apply slide offset during transitions
+        # Right panel (dynamic width based on sidebar collapse)
         if not self._sidebar.items:
             return
         label = self._sidebar.items[self._sidebar.selected_index % len(self._sidebar.items)]
         panel = self._right_panels.get(label)
         if panel is not None:
+            panel_w = PHYSICAL_W - sb_w
+            # Resize right surface if needed
+            if self._right_surface.get_width() != panel_w or self._right_surface.get_height() != RIGHT_PANEL_H:
+                self._right_surface = pygame.Surface((panel_w, RIGHT_PANEL_H))
             self._right_surface.fill(BLACK)
             panel.render(self._right_surface)
             offset_x = self._slide_offset_x()
-            surface.blit(self._right_surface, (SIDEBAR_W + offset_x, CONTENT_TOP))
+            surface.blit(self._right_surface, (sb_w + offset_x, CONTENT_TOP))
 
         # Action bar at bottom (full width, 20px)
         self._action_bar.render(surface, y=CONTENT_BOTTOM, width=PHYSICAL_W)
@@ -283,6 +289,7 @@ class CompositeScreen(BaseScreen):
             panel = self._active_panel()
             if panel is not None and hasattr(panel, "handle_action"):
                 self._focus = _Focus.SUBMENU
+                self._sidebar.collapsed = True  # minimize to icons
                 self._update_action_bar_hint()
                 self._snap_slide()       # cancel any in-progress slide
                 self._start_slide("enter")
@@ -305,6 +312,7 @@ class CompositeScreen(BaseScreen):
         if panel is not None and hasattr(panel, "selected_index"):
             panel.selected_index = -1
         self._focus = _Focus.SIDEBAR
+        self._sidebar.collapsed = False  # expand back to full labels
         self._update_action_bar_hint()
         self._snap_slide()           # cancel any in-progress slide
         self._start_slide("exit")

@@ -47,6 +47,15 @@ class TextToSpeech:
         logger.info("tts_engine=%s", self.engine)
 
     @staticmethod
+    def _check_cartesia() -> bool:
+        """Return True if cartesia SDK is importable and API key is set."""
+        try:
+            from . import cartesia_provider
+            return cartesia_provider.is_available()
+        except Exception:
+            return False
+
+    @staticmethod
     def _check_edge_tts() -> bool:
         """Return True if edge-tts is importable."""
         try:
@@ -74,6 +83,7 @@ class TextToSpeech:
         except Exception:
             pass
 
+        has_cartesia = self._check_cartesia()
         has_edge_tts = self._check_edge_tts()
         has_speechify = bool(os.environ.get("SPEECHIFY_API_KEY"))
         has_chatterbox = self._check_chatterbox()
@@ -83,14 +93,15 @@ class TextToSpeech:
         )
         has_espeak = shutil.which("espeak") or shutil.which("espeak-ng")
         logger.info(
-            "tts_detect: preferred=%s edge_tts=%s speechify=%s chatterbox=%s piper=%s openai=%s espeak=%s",
-            preferred, has_edge_tts, has_speechify, has_chatterbox,
+            "tts_detect: preferred=%s cartesia=%s edge_tts=%s speechify=%s chatterbox=%s piper=%s openai=%s espeak=%s",
+            preferred, has_cartesia, has_edge_tts, has_speechify, has_chatterbox,
             bool(has_piper), has_openai_key, bool(has_espeak),
         )
 
         # If user picked a specific engine and it's available, use it
         if preferred and preferred != "auto":
             engine_checks = {
+                "cartesia": has_cartesia,
                 "edge_tts": has_edge_tts,
                 "speechify": has_speechify,
                 "chatterbox": has_chatterbox,
@@ -102,7 +113,9 @@ class TextToSpeech:
                 return preferred
             logger.warning("tts_preferred=%s not available, falling back to auto", preferred)
 
-        # Auto: best available (edge_tts first — free, fast, no key needed)
+        # Auto: best available (cartesia first when keyed — lowest latency)
+        if has_cartesia:
+            return "cartesia"
         if has_edge_tts:
             return "edge_tts"
         if has_speechify:
@@ -130,7 +143,9 @@ class TextToSpeech:
         t0 = time.monotonic()
         out = Path(tempfile.mkstemp(prefix="bitos_tts_", suffix=".wav")[1])
         try:
-            if self.engine == "edge_tts":
+            if self.engine == "cartesia":
+                self._run_cartesia(text, out)
+            elif self.engine == "edge_tts":
                 self._run_edge_tts(text, out)
             elif self.engine == "speechify":
                 self._run_speechify(text, out)
@@ -166,6 +181,20 @@ class TextToSpeech:
             if out.exists():
                 out.unlink(missing_ok=True)
 
+    def _run_cartesia(self, text: str, output_file: Path) -> None:
+        """Synthesize with Cartesia (~40-150ms TTFB, native WAV output)."""
+        t0 = time.monotonic()
+
+        from . import cartesia_provider
+
+        ok = cartesia_provider.synthesize(text, output_file)
+        if ok:
+            self.last_ttfb_ms = int((time.monotonic() - t0) * 1000)
+            logger.info("cartesia_ttfb: %dms", self.last_ttfb_ms)
+        else:
+            logger.warning("cartesia_fallback: trying next engine")
+            self._run_fallback(text, output_file, skip="cartesia")
+
     def _run_edge_tts(self, text: str, output_file: Path) -> None:
         """Synthesize with Edge TTS (free Microsoft TTS, ~200ms latency)."""
         t0 = time.monotonic()
@@ -190,6 +219,7 @@ class TextToSpeech:
     def _run_fallback(self, text: str, output_file: Path, skip: str = "") -> None:
         """Try fallback engines in order, skipping the one that already failed."""
         fallbacks = [
+            ("cartesia", lambda: self._check_cartesia(), self._run_cartesia),
             ("edge_tts", lambda: self._check_edge_tts(), self._run_edge_tts),
             ("speechify", lambda: bool(os.environ.get("SPEECHIFY_API_KEY")), self._run_speechify_direct),
             ("piper", lambda: bool(shutil.which("piper")), self._run_piper),

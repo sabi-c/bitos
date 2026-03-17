@@ -65,7 +65,7 @@ from notifications import NotificationPoller
 from overlays import AgentOverlay, NotificationQueue, NotificationToast, QROverlay
 from overlays.notification_banner import NotificationBanner
 from bluetooth import AuthManager, get_gatt_server
-from bluetooth.characteristics import DeviceInfoCharacteristic, DeviceStatusCharacteristic, KeyboardInputCharacteristic, WiFiConfigCharacteristic, WiFiStatusCharacteristic
+from bluetooth.characteristics import DeviceInfoCharacteristic, WiFiStatusCharacteristic
 from bluetooth.constants import build_setup_url
 from bluetooth.network_manager import NetworkPriorityManager
 from bluetooth.wifi_manager import WiFiManager
@@ -494,11 +494,7 @@ def main():
     def on_keyboard_input(target: str, text: str, cursor_pos: int) -> bool:
         return screen_mgr.set_compose_text(target=target, text=text, cursor=cursor_pos)
 
-    wifi_config_char = WiFiConfigCharacteristic(auth_manager=auth_manager, on_wifi_config=on_wifi_config, wifi_status=wifi_status_char)
-    keyboard_input_char = KeyboardInputCharacteristic(auth_manager=auth_manager, on_keyboard_input=on_keyboard_input)
-    device_status_char = DeviceStatusCharacteristic()
     device_info_char = DeviceInfoCharacteristic()
-    _ = (wifi_config_char, keyboard_input_char, device_info_char)
 
     startup_health = {"backend": None, "database": None, "api_key": bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY"))}
 
@@ -523,6 +519,8 @@ def main():
 
     gatt_server = get_gatt_server(
         auth_manager=auth_manager,
+        on_wifi_config=on_wifi_config,
+        on_keyboard_input=on_keyboard_input,
         on_show_passkey=on_show_passkey,
         on_pairing_complete=on_pairing_complete,
         device_info_characteristic=device_info_char,
@@ -806,19 +804,22 @@ def main():
             )
         )
 
-    def open_chat_greeting():
-        screen_mgr.push(
-            ChatPanel(
-                client=client,
-                ui_settings=ui_settings,
-                repository=repository,
-                audio_pipeline=audio_pipeline,
-                led=led,
-                on_back=lambda: screen_mgr.pop(),
-                on_settings=open_chat_settings,
-                mode="greeting",
-            )
+    def open_chat_greeting(**kwargs):
+        text = kwargs.get("text")
+        panel = ChatPanel(
+            client=client,
+            ui_settings=ui_settings,
+            repository=repository,
+            audio_pipeline=audio_pipeline,
+            led=led,
+            on_back=lambda: screen_mgr.pop(),
+            on_settings=open_chat_settings,
+            mode="greeting",
         )
+        screen_mgr.push(panel)
+        # If text was provided from inline recording, auto-send it
+        if text and hasattr(panel, "send_message"):
+            panel.send_message(text)
 
     def open_chat_history():
         def _open_session(session_id: int):
