@@ -16,8 +16,8 @@ import random
 # Speed presets: base milliseconds per character (lower = faster)
 SPEED_PRESETS: dict[str, float] = {
     "slow": 80.0,
-    "normal": 30.0,
-    "fast": 15.0,
+    "normal": 45.0,
+    "fast": 20.0,
     "instant": 0.0,
 }
 

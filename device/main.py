@@ -845,6 +845,13 @@ def main():
             status_state=status_state,
             right_panels=right_panels,
         )
+
+        # Wire full-screen launch banner overlay from chat preview → composite
+        chat_panel = right_panels.get("CHAT")
+        if chat_panel:
+            chat_panel._on_launch_banner = lambda text: home.show_launch_banner(text)
+            chat_panel._on_dismiss_launch_banner = lambda: home.dismiss_launch_banner()
+
         _home_screen_ref.clear()
         _home_screen_ref.append(home)
         screen_mgr.replace(home)
@@ -1197,6 +1204,7 @@ def main():
             on_shutdown=lambda: run_power_action("shutdown"),
             on_reboot=lambda: run_power_action("reboot"),
             on_cancel=close_power_overlay,
+            on_open_settings=open_settings,
         )
 
     def toggle_agent_overlay():

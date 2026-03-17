@@ -31,11 +31,13 @@ Navigation state machine:
 
 from __future__ import annotations
 
+import time
 from enum import Enum
 
 import pygame
 
 from display.tokens import PHYSICAL_W, PHYSICAL_H, SIDEBAR_W, CONTENT_W, STATUS_BAR_H, SAFE_INSET
+from display.theme import get_font
 from ui.components.sidebar import Sidebar, ITEMS, SIDEBAR_W_COLLAPSED
 from ui.components.status_bar import StatusBar
 from ui.components.action_bar import ActionBar
@@ -86,6 +88,11 @@ class CompositeScreen(BaseScreen):
 
         # Subsurface for right panel rendering (156x208)
         self._right_surface = pygame.Surface((CONTENT_W, RIGHT_PANEL_H))
+
+        # ── Launch banner overlay state ────────────────────────────
+        self._launch_banner_active = False
+        self._launch_banner_text: str = ""
+        self._launch_banner_start: float = 0.0
 
         # ── Transition state ──────────────────────────────────────
         # Panel slide: "enter" = slide-left into submenu, "exit" = slide-right back
@@ -249,6 +256,51 @@ class CompositeScreen(BaseScreen):
 
         # Action bar at bottom (full width, 20px)
         self._action_bar.render(surface, y=CONTENT_BOTTOM, width=PHYSICAL_W)
+
+        # Launch banner overlay — full-width white strip on top of everything
+        if self._launch_banner_active:
+            self._render_launch_banner(surface)
+
+    # ── Launch banner overlay ─────────────────────────────────────
+
+    def show_launch_banner(self, text: str = "") -> None:
+        """Activate the full-width 'STARTING CONVERSATION' overlay."""
+        self._launch_banner_active = True
+        self._launch_banner_text = text or ""
+        self._launch_banner_start = time.time()
+
+    def dismiss_launch_banner(self) -> None:
+        """Remove the launch banner overlay."""
+        self._launch_banner_active = False
+
+    def _render_launch_banner(self, surface: pygame.Surface) -> None:
+        """Render full-width white strip overlay centered on screen."""
+        elapsed = time.time() - self._launch_banner_start
+        # Ease-in: strip grows from 0 to full height over 0.3s
+        t = min(1.0, elapsed / 0.3)
+        eased = 1.0 - (1.0 - t) ** 3  # ease_out_cubic
+
+        font = get_font(11)
+        line_h = font.get_height()
+
+        # Strip dimensions
+        strip_h = int((line_h + 24) * eased)
+        if strip_h < 2:
+            return
+        strip_y = (PHYSICAL_H - strip_h) // 2
+
+        # White strip across full 240px width
+        pygame.draw.rect(surface, WHITE, pygame.Rect(0, strip_y, PHYSICAL_W, strip_h))
+
+        # Only draw text once strip is tall enough
+        if strip_h >= line_h + 8:
+            dot_count = int(time.time() * 3) % 4
+            dots = "." * dot_count
+            title_text = "STARTING CONVERSATION" + dots
+            title_surf = font.render(title_text, False, BLACK)
+            tx = (PHYSICAL_W - title_surf.get_width()) // 2
+            ty = strip_y + (strip_h - title_surf.get_height()) // 2
+            surface.blit(title_surf, (tx, ty))
 
     def draw(self, surface: pygame.Surface) -> None:
         """Alias for ScreenManager compatibility (calls render)."""
