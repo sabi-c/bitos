@@ -402,6 +402,138 @@ class SpotifyAdapter:
             logger.warning("spotify_recently_played_error: %s", exc)
             return []
 
+    # ── Seek ────────────────────────────────────────────────────────
+
+    def seek(self, position_ms: int) -> bool:
+        """Seek to position in currently playing track."""
+        if not self._ensure_client():
+            return False
+        try:
+            self._sp.seek_track(position_ms)
+            return True
+        except Exception as exc:
+            logger.warning("spotify_seek_error: %s", exc)
+            return False
+
+    # ── Recommendations ────────────────────────────────────────────
+
+    def get_recommendations(
+        self,
+        seed_tracks: list[str] | None = None,
+        seed_artists: list[str] | None = None,
+        seed_genres: list[str] | None = None,
+        limit: int = 10,
+        **kwargs,
+    ) -> list[dict]:
+        """Get Spotify recommendations based on seeds and audio feature targets.
+
+        Extra kwargs are passed as target_* parameters to the Spotify API
+        (e.g. target_energy=0.8, target_valence=0.5, target_tempo=120).
+        """
+        if not self._ensure_client():
+            return []
+        try:
+            results = self._sp.recommendations(
+                seed_tracks=seed_tracks or [],
+                seed_artists=seed_artists or [],
+                seed_genres=seed_genres or [],
+                limit=limit,
+                **kwargs,
+            )
+            tracks = results.get("tracks", [])
+            return [
+                {
+                    "name": t.get("name", ""),
+                    "artist": ", ".join(a["name"] for a in t.get("artists", [])),
+                    "album": t.get("album", {}).get("name", ""),
+                    "uri": t.get("uri", ""),
+                    "duration_ms": t.get("duration_ms", 0),
+                }
+                for t in tracks
+            ]
+        except Exception as exc:
+            logger.warning("spotify_recommendations_error: %s", exc)
+            return []
+
+    # ── User profile & top items ───────────────────────────────────
+
+    def get_user_profile(self) -> dict | None:
+        """Get the authenticated user's Spotify profile."""
+        if not self._ensure_client():
+            return None
+        try:
+            user = self._sp.current_user()
+            return {
+                "display_name": user.get("display_name", ""),
+                "id": user.get("id", ""),
+                "followers": user.get("followers", {}).get("total", 0),
+            }
+        except Exception as exc:
+            logger.warning("spotify_profile_error: %s", exc)
+            return None
+
+    def get_top_items(
+        self, item_type: str = "tracks", time_range: str = "medium_term", limit: int = 20
+    ) -> list[dict]:
+        """Get user's top tracks or artists.
+
+        Args:
+            item_type: 'tracks' or 'artists'
+            time_range: 'short_term' (4 weeks), 'medium_term' (6 months), 'long_term' (years)
+            limit: max items to return (1-50)
+        """
+        if not self._ensure_client():
+            return []
+        try:
+            if item_type == "artists":
+                results = self._sp.current_user_top_artists(
+                    time_range=time_range, limit=limit
+                )
+                return [
+                    {
+                        "name": a.get("name", ""),
+                        "uri": a.get("uri", ""),
+                        "genres": a.get("genres", [])[:3],
+                    }
+                    for a in results.get("items", [])
+                ]
+            else:
+                results = self._sp.current_user_top_tracks(
+                    time_range=time_range, limit=limit
+                )
+                return [
+                    {
+                        "name": t.get("name", ""),
+                        "artist": ", ".join(a["name"] for a in t.get("artists", [])),
+                        "uri": t.get("uri", ""),
+                    }
+                    for t in results.get("items", [])
+                ]
+        except Exception as exc:
+            logger.warning("spotify_top_items_error: %s", exc)
+            return []
+
+    # ── Queue inspection ───────────────────────────────────────────
+
+    def get_queue(self) -> list[dict]:
+        """Get the current playback queue."""
+        if not self._ensure_client():
+            return []
+        try:
+            results = self._sp.queue()
+            queue_items = results.get("queue", [])
+            return [
+                {
+                    "name": t.get("name", ""),
+                    "artist": ", ".join(a["name"] for a in t.get("artists", [])),
+                    "uri": t.get("uri", ""),
+                }
+                for t in queue_items[:20]
+            ]
+        except Exception as exc:
+            logger.warning("spotify_queue_error: %s", exc)
+            return []
+
     # ── Listening history persistence ───────────────────────────────
 
     def log_recently_played(self) -> int:

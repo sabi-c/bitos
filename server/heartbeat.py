@@ -507,6 +507,26 @@ class _HeartbeatEngine:
             elif atype == "task_reminders" and is_waking:
                 await self._check_interval(now, atype, last_run, action["interval_seconds"])
 
+        # Poll Spotify listening history (every tick, ~60s)
+        await self._poll_music_history()
+
+    async def _poll_music_history(self) -> None:
+        """Poll Spotify recently played and log new entries."""
+        try:
+            from integrations.music_logger import get_music_logger
+            from integrations.spotify_adapter import get_spotify
+
+            ml = get_music_logger()
+            sp = get_spotify()
+            if not sp.available:
+                return
+            ml.set_spotify(sp)
+            count = ml.poll_and_log()
+            if count > 0:
+                logger.debug("heartbeat_music_poll: logged %d new plays", count)
+        except Exception as exc:
+            logger.debug("heartbeat_music_poll_error: %s", exc)
+
     # ── Trigger Checkers ──────────────────────────────────────────────
 
     async def _check_time_trigger(

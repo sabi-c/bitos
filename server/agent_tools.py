@@ -652,6 +652,46 @@ MUSIC_TOOLS = [
             "required": ["level"],
         },
     },
+    {
+        "name": "music_recommend",
+        "description": (
+            "Get music recommendations based on current track, mood, or genre. "
+            "Uses Spotify's recommendation engine. Can seed from currently playing "
+            "track, specific genres, or mood descriptors."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "based_on": {
+                    "type": "string",
+                    "enum": ["current", "mood", "genre", "artist", "history"],
+                    "description": "What to base recommendations on.",
+                },
+                "mood": {
+                    "type": "string",
+                    "description": "Mood descriptor (e.g. 'chill', 'energetic', 'melancholic'). For based_on=mood.",
+                },
+                "genre": {
+                    "type": "string",
+                    "description": "Genre (e.g. 'jazz', 'electronic', 'indie'). For based_on=genre.",
+                },
+            },
+            "required": ["based_on"],
+        },
+    },
+    {
+        "name": "music_taste_profile",
+        "description": (
+            "Get the user's music taste profile. Returns top artists, genres, "
+            "listening patterns (time of day, day of week), and recent trends. "
+            "Use this to make informed recommendations or discuss music taste."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
 ]
 
 # Combine all tools — music tools are appended to DEVICE_TOOLS
@@ -896,6 +936,12 @@ def _handle_tool_call_inner(
 
     if tool_name == "set_music_volume":
         return _set_music_volume(tool_input)
+
+    if tool_name == "music_recommend":
+        return _music_recommend(tool_input)
+
+    if tool_name == "music_taste_profile":
+        return _music_taste_profile(tool_input)
 
     return json.dumps({"error": f"Unknown tool: {tool_name}"})
 
@@ -1509,3 +1555,123 @@ def _set_music_volume(tool_input: dict) -> str:
     if ok:
         return json.dumps({"success": True, "volume": level})
     return json.dumps({"error": f"Failed to set volume to {level}"})
+
+
+# ── Mood-to-Spotify audio feature mapping ────────────────────────────────
+
+MOOD_TO_SPOTIFY_PARAMS: dict[str, dict] = {
+    "chill": {"target_energy": 0.3, "target_valence": 0.5, "target_tempo": 90},
+    "energetic": {"target_energy": 0.9, "target_valence": 0.8, "target_tempo": 140},
+    "melancholic": {"target_energy": 0.2, "target_valence": 0.2, "target_tempo": 80},
+    "focused": {"target_energy": 0.5, "target_valence": 0.4, "target_tempo": 110,
+                "target_instrumentalness": 0.8},
+    "happy": {"target_energy": 0.7, "target_valence": 0.9, "target_tempo": 120},
+    "angry": {"target_energy": 0.95, "target_valence": 0.3, "target_tempo": 150},
+    "romantic": {"target_energy": 0.3, "target_valence": 0.6, "target_tempo": 85},
+    "sleepy": {"target_energy": 0.1, "target_valence": 0.4, "target_tempo": 70},
+    "workout": {"target_energy": 0.95, "target_valence": 0.7, "target_tempo": 145},
+    "study": {"target_energy": 0.3, "target_valence": 0.3, "target_tempo": 100,
+              "target_instrumentalness": 0.9},
+    "party": {"target_energy": 0.9, "target_valence": 0.9, "target_tempo": 128,
+              "target_danceability": 0.8},
+}
+
+
+def _music_recommend(tool_input: dict) -> str:
+    sp = _get_spotify()
+    if not sp.available:
+        return json.dumps({"error": "Spotify not connected"})
+
+    based_on = tool_input.get("based_on", "current")
+    kwargs: dict = {}
+
+    if based_on == "current":
+        # Seed from currently playing track
+        now = sp.get_now_playing()
+        if not now or not now.get("uri"):
+            return json.dumps({"error": "Nothing currently playing to base recommendations on"})
+        track_id = now["uri"].split(":")[-1]
+        recs = sp.get_recommendations(seed_tracks=[track_id], **kwargs)
+
+    elif based_on == "mood":
+        mood = tool_input.get("mood", "chill").lower()
+        params = MOOD_TO_SPOTIFY_PARAMS.get(mood, MOOD_TO_SPOTIFY_PARAMS["chill"])
+        # Need at least one seed — use top track or a genre seed
+        now = sp.get_now_playing()
+        if now and now.get("uri"):
+            track_id = now["uri"].split(":")[-1]
+            recs = sp.get_recommendations(seed_tracks=[track_id], **params)
+        else:
+            # Fall back to genre-based seeds for the mood
+            genre_map = {
+                "chill": ["chill"], "energetic": ["dance", "electronic"],
+                "melancholic": ["sad", "acoustic"], "focused": ["ambient", "study"],
+                "happy": ["happy", "pop"], "angry": ["metal", "punk"],
+                "romantic": ["romance", "r-n-b"], "sleepy": ["sleep", "ambient"],
+                "workout": ["work-out"], "study": ["study"], "party": ["party", "dance"],
+            }
+            genres = genre_map.get(mood, ["pop"])
+            recs = sp.get_recommendations(seed_genres=genres, **params)
+
+    elif based_on == "genre":
+        genre = tool_input.get("genre", "pop").lower().replace(" ", "-")
+        recs = sp.get_recommendations(seed_genres=[genre])
+
+    elif based_on == "artist":
+        # Search for the artist first
+        query = tool_input.get("genre", tool_input.get("mood", ""))
+        if query:
+            results = sp.search(query, search_type="artist", limit=1)
+            if results:
+                artist_id = results[0]["uri"].split(":")[-1]
+                recs = sp.get_recommendations(seed_artists=[artist_id])
+            else:
+                return json.dumps({"error": f"Artist not found: {query}"})
+        else:
+            return json.dumps({"error": "Specify a genre or mood field with the artist name"})
+
+    elif based_on == "history":
+        # Use top tracks as seeds
+        top = sp.get_top_items(item_type="tracks", time_range="short_term", limit=5)
+        if top:
+            track_ids = [t["uri"].split(":")[-1] for t in top[:5]]
+            recs = sp.get_recommendations(seed_tracks=track_ids)
+        else:
+            return json.dumps({"error": "No listening history available"})
+    else:
+        return json.dumps({"error": f"Unknown based_on value: {based_on}"})
+
+    if not recs:
+        return json.dumps({"recommendations": [], "count": 0, "message": "No recommendations found"})
+
+    return json.dumps({
+        "recommendations": recs[:10],
+        "count": len(recs[:10]),
+        "based_on": based_on,
+    })
+
+
+def _music_taste_profile(tool_input: dict) -> str:
+    from integrations.music_logger import get_music_logger
+    ml = get_music_logger()
+
+    # Try cached profile first, rebuild if empty
+    profile = ml.get_cached_profile()
+    if not profile:
+        profile = ml.build_taste_profile()
+
+    if not profile:
+        # Fall back to Spotify top items API
+        sp = _get_spotify()
+        if sp.available:
+            top_artists = sp.get_top_items(item_type="artists", time_range="medium_term", limit=10)
+            top_tracks = sp.get_top_items(item_type="tracks", time_range="medium_term", limit=10)
+            return json.dumps({
+                "source": "spotify_api",
+                "top_artists": top_artists,
+                "top_tracks": top_tracks,
+                "note": "Taste profile based on Spotify listening history (no local history yet)",
+            })
+        return json.dumps({"error": "No taste profile data available"})
+
+    return json.dumps(profile)

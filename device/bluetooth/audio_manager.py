@@ -58,6 +58,7 @@ class BluetoothAudioManager:
         set_auto_connect(address, enabled)  — enable/disable auto-reconnect
         is_audio_routed_to_bt() -> bool     — True if BT is the active sink
         auto_reconnect_last()               — reconnect to last device on boot
+        detect_device_type(address) -> str  — detect if device is AirPods/headphones/speaker
     """
 
     def __init__(self, repository=None):
@@ -68,6 +69,8 @@ class BluetoothAudioManager:
         self._connected_device: BTAudioDevice | None = None
         self._lock = threading.Lock()
         self._scan_lock = threading.Lock()
+        self._on_connect_callback = None
+        self._on_disconnect_callback = None
 
         # Check if bluetoothctl is available
         self._bt_available = self._check_bluetoothctl()
@@ -252,7 +255,15 @@ class BluetoothAudioManager:
             self._switch_audio_to_bt()
             self._save_last_device(address)
 
-            logger.info("[BT-AUDIO] connected to %s (%s)", name, address)
+            # Notify listeners (e.g. AudioRouter)
+            device_type = self.detect_device_type(address)
+            if self._on_connect_callback:
+                try:
+                    self._on_connect_callback(address, {"name": name, "type": device_type})
+                except Exception as cb_exc:
+                    logger.warning("[BT-AUDIO] on_connect callback error: %s", cb_exc)
+
+            logger.info("[BT-AUDIO] connected to %s (%s) type=%s", name, address, device_type)
             return True
 
         except Exception as exc:
@@ -285,6 +296,13 @@ class BluetoothAudioManager:
 
             # Route audio back to built-in speaker
             self._switch_audio_to_speaker()
+
+            # Notify listeners (e.g. AudioRouter)
+            if self._on_disconnect_callback:
+                try:
+                    self._on_disconnect_callback(address)
+                except Exception as cb_exc:
+                    logger.warning("[BT-AUDIO] on_disconnect callback error: %s", cb_exc)
 
             logger.info("[BT-AUDIO] disconnected from %s", address)
             return True
@@ -405,6 +423,28 @@ class BluetoothAudioManager:
             except Exception:
                 pass
             return False
+
+    def detect_device_type(self, address: str) -> str:
+        """Detect if connected device is AirPods, headphones, or speaker.
+
+        Returns 'airpods', 'headphones', or 'speaker'.
+        """
+        info = self._get_device_info(address)
+        if info:
+            name = info.get("Name", info.get("Alias", "")).lower()
+            if "airpods" in name:
+                return "airpods"
+            if any(kw in name for kw in ("speaker", "soundbar", "boombox", "jbl", "sonos", "echo")):
+                return "speaker"
+        return "headphones"
+
+    def set_on_connect(self, callback) -> None:
+        """Set callback for device connect events: callback(address, device_info)."""
+        self._on_connect_callback = callback
+
+    def set_on_disconnect(self, callback) -> None:
+        """Set callback for device disconnect events: callback(address)."""
+        self._on_disconnect_callback = callback
 
     def auto_reconnect_last(self) -> bool:
         """Try to reconnect to the last paired device (call at boot).
