@@ -42,11 +42,12 @@ class Sidebar:
 
         # Items
         iy = y
+        safe_selected = self.selected_index % len(self.items) if self.items else -1
         for idx, label in enumerate(self.items):
             if iy + ITEM_H > y + height:
                 break
 
-            selected = idx == self.selected_index
+            selected = idx == safe_selected
             if selected:
                 # Inverted: white bg, black text
                 pygame.draw.rect(surface, WHITE, (x, iy, SIDEBAR_W - 2, ITEM_H))

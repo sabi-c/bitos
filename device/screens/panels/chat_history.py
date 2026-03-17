@@ -63,7 +63,7 @@ class ChatHistoryPanel(BaseScreen):
                 self._cursor = (self._cursor - 1) % len(self._sessions)
             elif action == "DOUBLE_PRESS":
                 session = self._sessions[self._cursor]
-                if self._on_open_session:
+                if self._on_open_session and "id" in session:
                     self._on_open_session(session["id"])
 
     def update(self, dt: float):

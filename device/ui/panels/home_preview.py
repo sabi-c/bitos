@@ -187,7 +187,8 @@ class HomePreviewPanel(PreviewPanel):
 
         # ── Ticker (replaces static status line) ──
         if self._ticker_items:
-            text = self._ticker_items[self._ticker_index]
+            idx = self._ticker_index % len(self._ticker_items) if self._ticker_items else 0
+            text = self._ticker_items[idx]
             # Compute alpha from fade progress (map 0.0-1.0 to 0-255)
             alpha = int(self._ticker_fade * 255)
             # Blend color: DIM4 base, modulated by alpha

@@ -101,7 +101,8 @@ class AgentTasksPanel(BaseScreen):
         """Build paginated detail view for a task's result."""
         result = task.get("result") or task.get("error") or "No result yet"
         # Wrap to fit screen width (~28 chars at body font size)
-        chars_per_line = max(20, (PHYSICAL_W - 12) // max(1, self._font_body.size("M")[0]))
+        char_w = self._font_body.size("M")[0] if self._font_body.size("M")[0] > 0 else 8
+        chars_per_line = max(20, (PHYSICAL_W - 12) // char_w)
         wrapped_lines = []
         for paragraph in result.split("\n"):
             if not paragraph.strip():
@@ -139,7 +140,7 @@ class AgentTasksPanel(BaseScreen):
         with self._lock:
             state = self._state
             tasks = list(self._tasks)
-            cursor = self._cursor
+            cursor = min(self._cursor, len(tasks) - 1) if tasks else 0
             expanded = self._expanded
             detail_pages = self._detail_pages
             detail_page = self._detail_page

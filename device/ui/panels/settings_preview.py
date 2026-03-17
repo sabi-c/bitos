@@ -63,9 +63,12 @@ class SettingsPreviewPanel(PreviewPanel):
                 vol = int(self._repository.get_setting("volume", 75))
             except (ValueError, TypeError):
                 vol = 75
-            self.items[0]["label"] = f"VOICE: {voice.upper()}"
-            self.items[1]["label"] = f"MODE: {mode.upper()}"
-            self.items[2]["label"] = f"VOL: {vol}%"
+            if len(self.items) > 0:
+                self.items[0]["label"] = f"VOICE: {voice.upper()}"
+            if len(self.items) > 1:
+                self.items[1]["label"] = f"MODE: {mode.upper()}"
+            if len(self.items) > 2:
+                self.items[2]["label"] = f"VOL: {vol}%"
         except Exception:
             pass
 
@@ -103,7 +106,7 @@ class SettingsPreviewPanel(PreviewPanel):
 
     def handle_action(self, action: str) -> bool:
         """Intercept DOUBLE_PRESS on toggle items to cycle inline."""
-        if action == "DOUBLE_PRESS" and self.selected_index >= 0:
+        if action == "DOUBLE_PRESS" and 0 <= self.selected_index < len(self.items):
             item = self.items[self.selected_index]
             act = item["action"]
             if act in _TOGGLE_ACTIONS and self._repository:

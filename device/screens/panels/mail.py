@@ -200,7 +200,7 @@ class MailPanel(BaseScreen):
         with self._lock:
             loading = self._loading
             threads = list(self._threads)
-            focused_idx = self._focused_idx
+            focused_idx = min(self._focused_idx, len(threads) - 1) if threads else 0
         if loading:
             self._render_skeleton(surface, content_y)
         elif not threads:
@@ -208,7 +208,7 @@ class MailPanel(BaseScreen):
             surface.blit(txt, ((PHYSICAL_W - txt.get_width()) // 2, PHYSICAL_H // 2))
         else:
             row_h = ROW_H_MIN
-            visible = (PHYSICAL_H - STATUS_BAR_H - 18) // row_h
+            visible = max(1, (PHYSICAL_H - STATUS_BAR_H - 18) // row_h)
             start = min(focused_idx, max(0, len(threads) - visible))
             y = content_y
             for idx, thread in enumerate(threads[start : start + visible]):
@@ -241,7 +241,9 @@ class MailPanel(BaseScreen):
         with self._lock:
             messages = list(self._messages)
             thread_offset = self._thread_offset
-        shown = messages[max(0, len(messages) - 5 - thread_offset) : len(messages) - thread_offset]
+        end = max(0, len(messages) - thread_offset)
+        start = max(0, end - 5)
+        shown = messages[start:end]
         for message in shown:
             text = str(message.get("text", ""))[:34]
             if bool(message.get("from_me", False)):

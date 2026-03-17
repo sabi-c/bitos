@@ -215,7 +215,7 @@ class MessagesPanel(BaseScreen):
         with self._lock:
             loading = self._loading
             conversations = list(self._conversations)
-            focused_idx = self._focused_idx
+            focused_idx = min(self._focused_idx, len(conversations) - 1) if conversations else 0
         if loading:
             self._render_skeleton(surface, content_y)
         elif not conversations:
@@ -223,7 +223,7 @@ class MessagesPanel(BaseScreen):
             surface.blit(txt, ((PHYSICAL_W - txt.get_width()) // 2, PHYSICAL_H // 2))
         else:
             row_h = LIST_ROW_H
-            visible = (PHYSICAL_H - STATUS_BAR_H - STATUS_BAR_H) // row_h
+            visible = max(1, (PHYSICAL_H - STATUS_BAR_H - STATUS_BAR_H) // row_h)
             start = min(focused_idx, max(0, len(conversations) - visible))
             y = content_y
             for idx, convo in enumerate(conversations[start : start + visible]):
@@ -255,7 +255,9 @@ class MessagesPanel(BaseScreen):
         with self._lock:
             messages = list(self._messages)
             thread_offset = self._thread_offset
-        shown = messages[max(0, len(messages) - THREAD_VISIBLE_ROWS - thread_offset) : len(messages) - thread_offset]
+        end = max(0, len(messages) - thread_offset)
+        start = max(0, end - THREAD_VISIBLE_ROWS)
+        shown = messages[start:end]
         for message in shown:
             text = str(message.get("text", ""))[:THREAD_TEXT_MAX_CHARS]
             if bool(message.get("from_me", False)):

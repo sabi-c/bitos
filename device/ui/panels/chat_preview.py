@@ -65,7 +65,9 @@ class ChatPreviewPanel(PreviewPanel):
         self._greeting_session_id: int | None = None
         self._measured_greeting_h: int = GREETING_H_MIN
 
-        # Recording state machine
+        # Recording state machine (accessed from STT thread + render thread)
+        import threading as _threading
+        self._rec_lock = _threading.Lock()
         self._rec_state = RecState.READY
         self._rec_start_time: float = 0.0
         self._rec_error_msg: str = ""
@@ -339,21 +341,24 @@ class ChatPreviewPanel(PreviewPanel):
         try:
             text = self._stt_callable(self._cached_audio_path)
             if text and text.strip():
-                self._transcribed_text = text.strip()
-                self._rec_state = RecState.LAUNCHING
-                self._launch_anim_frame = 0
-                self._launch_current_h = ITEM_H
+                with self._rec_lock:
+                    self._transcribed_text = text.strip()
+                    self._rec_state = RecState.LAUNCHING
+                    self._launch_anim_frame = 0
+                    self._launch_current_h = ITEM_H
                 if self._led:
                     try:
                         self._led.success()
                     except Exception:
                         pass
             else:
-                self._rec_state = RecState.ERROR
-                self._rec_error_msg = "NO AUDIO DETECTED"
+                with self._rec_lock:
+                    self._rec_state = RecState.ERROR
+                    self._rec_error_msg = "NO AUDIO DETECTED"
         except Exception:
-            self._rec_state = RecState.ERROR
-            self._rec_error_msg = "DIDN'T CATCH THAT"
+            with self._rec_lock:
+                self._rec_state = RecState.ERROR
+                self._rec_error_msg = "DIDN'T CATCH THAT"
 
 
 def _wrap_text(text: str, font: pygame.font.Font, max_width: int) -> list[str]:

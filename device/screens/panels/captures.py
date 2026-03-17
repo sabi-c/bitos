@@ -47,9 +47,9 @@ class CapturesPanel(BaseScreen):
                 import sys
                 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "server"))
                 from integrations.vikunja_adapter import VikunjaAdapter  # type: ignore
-                created = VikunjaAdapter().create_task(item["text"])
+                created = VikunjaAdapter().create_task(item.get("text", ""))
                 if created is not None:
-                    self._repository.mark_capture_sent_to_vikunja(item["id"])
+                    self._repository.mark_capture_sent_to_vikunja(item.get("id", ""))
             except Exception as exc:
                 logger.warning("capture_send_failed id=%s error=%s", item.get("id"), exc)
 
@@ -73,7 +73,9 @@ class CapturesPanel(BaseScreen):
                 pygame.draw.rect(surface, WHITE, pygame.Rect(0, y, PHYSICAL_W, ROW_H_MIN))
             color = BLACK if focused else WHITE
             indicator = "> " if focused else "- "
-            meta = f"{item['created_at'][11:16]} {item['text'][:40]}"
+            created = str(item.get('created_at', ''))
+            text = str(item.get('text', ''))
+            meta = f"{created[11:16]} {text[:40]}"
             surface.blit(self._font_small.render(indicator + meta, False, color if focused else DIM2), (4, y + 2))
-            surface.blit(self._font_body.render(item['text'][:40], False, color), (4, y + self._font_small.get_height() + 4))
+            surface.blit(self._font_body.render(text[:40], False, color), (4, y + self._font_small.get_height() + 4))
             y += ROW_H_MIN

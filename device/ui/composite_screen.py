@@ -113,7 +113,10 @@ class CompositeScreen(BaseScreen):
         if self._flash_timer > 0.0:
             self._flash_timer = max(0.0, self._flash_timer - dt)
 
-        label = self._sidebar.items[self._sidebar.selected_index]
+        if not self._sidebar.items:
+            return
+        idx = self._sidebar.selected_index % len(self._sidebar.items)
+        label = self._sidebar.items[idx]
         panel = self._right_panels.get(label)
         if panel is not None and hasattr(panel, "update"):
             panel.update(dt)
@@ -166,7 +169,9 @@ class CompositeScreen(BaseScreen):
 
         # Right panel (156x208, positioned at x=84, y=36)
         # Apply slide offset during transitions
-        label = self._sidebar.items[self._sidebar.selected_index]
+        if not self._sidebar.items:
+            return
+        label = self._sidebar.items[self._sidebar.selected_index % len(self._sidebar.items)]
         panel = self._right_panels.get(label)
         if panel is not None:
             self._right_surface.fill(BLACK)
@@ -185,7 +190,10 @@ class CompositeScreen(BaseScreen):
 
     def _active_panel(self):
         """Return the preview panel for the currently selected sidebar item."""
-        label = self._sidebar.items[self._sidebar.selected_index]
+        if not self._sidebar.items:
+            return None
+        idx = self._sidebar.selected_index % len(self._sidebar.items)
+        label = self._sidebar.items[idx]
         return self._right_panels.get(label)
 
     def handle_action(self, action: str) -> None:
@@ -196,6 +204,8 @@ class CompositeScreen(BaseScreen):
 
     def _handle_sidebar_action(self, action: str) -> None:
         n = len(self._sidebar.items)
+        if n == 0:
+            return
         if action == "SHORT_PRESS":
             self._sidebar.selected_index = (self._sidebar.selected_index + 1) % n
             self._flash_timer = FLASH_DURATION_S
@@ -329,4 +339,6 @@ class CompositeScreen(BaseScreen):
         return " · ".join(label for _, label in self._action_bar.actions)
 
     def get_breadcrumb(self) -> str:
-        return self._sidebar.items[self._sidebar.selected_index]
+        if not self._sidebar.items:
+            return ""
+        return self._sidebar.items[self._sidebar.selected_index % len(self._sidebar.items)]

@@ -77,7 +77,8 @@ class TasksPanel(BaseScreen):
                 if not self._confirm_complete:
                     self._confirm_complete = True
                     return
-                self._tasks[self._cursor]["done"] = True
+                if 0 <= self._cursor < len(self._tasks):
+                    self._tasks[self._cursor]["done"] = True
                 self._confirm_complete = False
 
     def _render_skeleton(self, surface, y, count=4):
@@ -92,7 +93,7 @@ class TasksPanel(BaseScreen):
         with self._lock:
             state = self._state
             tasks = list(self._tasks)
-            cursor = self._cursor
+            cursor = min(self._cursor, len(tasks) - 1) if tasks else 0
             confirm_complete = self._confirm_complete
 
         if state == "loading":
