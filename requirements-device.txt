@@ -18,6 +18,9 @@ bluezero>=0.8.0      # BLE GATT server — requires: sudo apt install python3-gi
 # TTS
 edge-tts>=6.1.0      # Microsoft Edge TTS (free)
 
+# Input
+evdev>=1.7.0         # AVRCP media key capture from BT audio devices (Linux only)
+
 # System
 psutil>=5.9.0        # System monitoring (CPU, memory, temp)
 bcrypt>=4.1.0        # PIN hash generation

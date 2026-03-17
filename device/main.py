@@ -1308,6 +1308,18 @@ def main():
         daemon=True,
     ).start()
 
+    # AVRCP media key listener — captures AirPods tap gestures as device actions
+    from input.media_keys import MediaKeyListener
+    media_key_listener = MediaKeyListener(
+        on_play_pause=lambda: _on_button(ButtonEvent.DOUBLE_PRESS),
+        on_next=lambda: _on_button(ButtonEvent.SHORT_PRESS),
+        on_prev=lambda: _on_button(ButtonEvent.LONG_PRESS),
+    )
+    try:
+        media_key_listener.start()
+    except Exception as exc:
+        logger.error("[BITOS] Media key listener failed to start: %s", exc)
+
     try:
         provision_server.start()
     except Exception as exc:
