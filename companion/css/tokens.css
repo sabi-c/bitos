@@ -1,0 +1,81 @@
+/* ── BITOS Companion — Design Tokens ──
+   Mapped from device/display/tokens.py. Single source of truth for the companion app.
+   ────────────────────────────────────────────────────────────────── */
+
+/* ── Fonts ── */
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+@font-face {
+  font-family: 'Monocraft';
+  src: url('/fonts/Monocraft.ttf') format('truetype');
+  font-display: swap;
+}
+
+:root {
+  /* ── Core ── */
+  --black:    #000000;
+  --white:    #ffffff;
+
+  /* ── Gray scale (matches device tokens exactly) ── */
+  --dim1:     #cccccc;  /* 80% — primary text */
+  --dim2:     #999999;  /* 60% — secondary text */
+  --dim3:     #666666;  /* 40% — tertiary/disabled */
+  --dim4:     #333333;  /* 20% — borders, dividers */
+  --hairline: #1a1a1a;  /* Subtle separators */
+
+  /* ── Extended grays ── */
+  --gray-08:  #080808;  /* Deep background */
+  --gray-0a:  #0a0a0a;  /* Card background */
+  --gray-11:  #111111;  /* Elevated surface */
+  --gray-1a:  #1a1a1a;  /* Divider */
+  --gray-22:  #222222;  /* Border */
+  --gray-33:  #333333;  /* Stronger border */
+  --gray-44:  #444444;
+  --gray-55:  #555555;
+  --gray-66:  #666666;
+  --gray-aa:  #aaaaaa;
+
+  /* ── Semantic colors ── */
+  --accent-green:  #44ff44;  /* Online, success, confirm */
+  --accent-red:    #ff4444;  /* Error, offline, danger */
+  --accent-amber:  #ffaa00;  /* Warning, partial, today */
+  --accent-blue:   #44aaff;  /* Links, info, wifi */
+  --accent-purple: #aa44ff;  /* BLE badge */
+
+  /* ── Spacing (from device tokens) ── */
+  --safe-inset:    16px;
+  --corner-radius: 16px;
+  --corner-sm:     8px;
+  --pad-row:       4px;
+  --pad-widget:    6px;
+  --border-outer:  2px;
+  --border-inner:  1px;
+  --row-h-min:     28px;
+  --status-bar-h:  28px;
+  --tap-min:       44px;
+  --card-gap:      12px;
+  --max-w:         400px;
+
+  /* ── Typography ── */
+  --font-pixel:  'Press Start 2P', monospace;
+  --font-body:   'Monocraft', monospace;
+  --font-mono:   'Monocraft', monospace;
+
+  /* ── Font sizes ── */
+  --fs-title:    16px;
+  --fs-body:     14px;
+  --fs-small:    12px;
+  --fs-hint:     10px;
+  --fs-micro:    9px;
+  --fs-nav:      7px;
+  --fs-pixel-h1: 14px;
+  --fs-pixel-h2: 11px;
+  --fs-pixel-h3: 10px;
+  --fs-pixel-sm: 8px;
+
+  /* ── Transitions ── */
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast:    .15s;
+  --dur-med:     .25s;
+  --dur-slow:    .4s;
+}
