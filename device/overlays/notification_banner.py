@@ -27,6 +27,30 @@ from display.tokens import (
     FONT_PATH, FONT_SIZES,
 )
 
+# ── Animation & category constants ───────────────────────────────────
+
+ENTRANCE_MS = 200
+EXIT_MS = 150
+BANNER_H = 72
+PROGRESS_BAR_H = 2
+
+CATEGORY_COLORS: dict[str, tuple[int, int, int]] = {
+    "sms": (60, 130, 220),
+    "mail": (180, 140, 60),
+    "calendar": (80, 180, 120),
+    "task": (160, 100, 220),
+    "agent": (100, 200, 200),
+    "reminder": (220, 80, 80),
+    "tool": (100, 200, 200),
+    "system": (120, 120, 120),
+}
+
+
+def _ease_out_cubic(t: float) -> float:
+    """Ease-out cubic: decelerating curve (0→1)."""
+    t = max(0.0, min(1.0, t))
+    return 1.0 - (1.0 - t) ** 3
+
 
 @dataclass
 class NotificationBanner:
@@ -41,12 +65,52 @@ class NotificationBanner:
     on_dismiss: Callable[[], None] | None = None
     on_reply: Callable[[str], None] | None = None  # called with "record" or "quick_talk"
     elapsed_ms: int = 0
+    category: str = "system"
     _dismissed: bool = field(default=False, init=False)
     _fonts: dict[str, pygame.font.Font] = field(default_factory=dict, init=False, repr=False)
 
     @property
     def dismissed(self) -> bool:
         return self._dismissed
+
+    @property
+    def progress(self) -> float:
+        """Remaining time fraction: 1.0 → 0.0 over duration."""
+        return max(0.0, 1.0 - self.elapsed_ms / max(1, self.duration_ms))
+
+    @property
+    def category_color(self) -> tuple[int, int, int]:
+        """RGB colour for the current category."""
+        return CATEGORY_COLORS.get(self.category, CATEGORY_COLORS["system"])
+
+    @property
+    def slide_y_offset(self) -> float:
+        """Vertical offset for entrance/exit slide animation.
+
+        Entrance (0→ENTRANCE_MS): ease-out-cubic from -BANNER_H to 0
+        with a 2px overshoot bounce.
+        Exit (last EXIT_MS): slide up and fade out.
+        Middle: 0 (fully visible).
+        """
+        # Exit phase — last EXIT_MS of duration
+        remaining_ms = self.duration_ms - self.elapsed_ms
+        if remaining_ms <= EXIT_MS and self.elapsed_ms > ENTRANCE_MS:
+            t = 1.0 - (remaining_ms / max(1, EXIT_MS))  # 0→1 as we exit
+            return -BANNER_H * _ease_out_cubic(t)
+
+        # Entrance phase — first ENTRANCE_MS
+        if self.elapsed_ms < ENTRANCE_MS:
+            t = self.elapsed_ms / ENTRANCE_MS  # 0→1
+            eased = _ease_out_cubic(t)
+            # Overshoot: go 2px past target then settle
+            if eased < 1.0:
+                offset = -BANNER_H * (1.0 - eased * 1.028)
+            else:
+                offset = 0.0
+            return offset
+
+        # Settled
+        return 0.0
 
     def tick(self, dt_ms: int) -> bool:
         """Returns True while banner should stay alive."""
@@ -126,9 +190,12 @@ class NotificationBanner:
         hints = "○reply  ◉talk  ◎dismiss"
         surface.blit(hint_font.render(hints, False, DIM3), (4, 28))
 
-        # Progress bar
-        progress_w = int(PHYSICAL_W * min(1.0, self.elapsed_ms / max(1, self.duration_ms)))
-        pygame.draw.rect(surface, BLACK, pygame.Rect(0, strip_h - 2, progress_w, 2))
+        # Progress bar — shrinks left-to-right, colored by category
+        progress_w = int(PHYSICAL_W * self.progress)
+        pygame.draw.rect(
+            surface, self.category_color,
+            pygame.Rect(0, strip_h - PROGRESS_BAR_H, progress_w, PROGRESS_BAR_H),
+        )
 
     def _render_full_banner(self, surface: pygame.Surface) -> None:
         """Centered card for when screen was dark — formal notification."""
@@ -177,9 +244,12 @@ class NotificationBanner:
         hints_x = card_x + (card_w - hints_surf.get_width()) // 2
         surface.blit(hints_surf, (hints_x, div_y + 10))
 
-        # Progress bar at bottom of card
-        progress_w = int(card_w * min(1.0, self.elapsed_ms / max(1, self.duration_ms)))
-        pygame.draw.rect(surface, DIM3, pygame.Rect(card_x, card_y + card_h - 2, progress_w, 2))
+        # Progress bar at bottom of card — shrinks left-to-right, colored by category
+        progress_w = int(card_w * self.progress)
+        pygame.draw.rect(
+            surface, self.category_color,
+            pygame.Rect(card_x, card_y + card_h - PROGRESS_BAR_H, progress_w, PROGRESS_BAR_H),
+        )
 
     def _dismiss(self) -> None:
         self._dismissed = True
