@@ -230,13 +230,12 @@ end tell
 
 
 async def _gather_task_context() -> str:
-    """Pull tasks from Vikunja if available."""
+    """Pull today's tasks from BITOS task store."""
     try:
-        from integrations.vikunja_adapter import VikunjaAdapter
-        adapter = VikunjaAdapter()
-        tasks = adapter.get_today_tasks()
+        import task_store
+        tasks = task_store.get_today_tasks()
         if tasks:
-            items = [f"- {t}" for t in tasks[:5]]
+            items = [f"- {t['title']}" for t in tasks[:5]]
             return "Today's tasks:\n" + "\n".join(items)
     except Exception:
         pass
@@ -244,16 +243,19 @@ async def _gather_task_context() -> str:
 
 
 async def _gather_overdue_tasks() -> list[dict]:
-    """Return overdue tasks from Vikunja."""
+    """Return overdue tasks from BITOS task store."""
     try:
-        from integrations.vikunja_adapter import VikunjaAdapter
-        adapter = VikunjaAdapter()
-        all_tasks = adapter.list_tasks()
-        now_iso = datetime.now().isoformat()
-        return [
-            t for t in all_tasks
-            if t.get("due_date") and t["due_date"] < now_iso and not t.get("done")
-        ]
+        import task_store
+        from datetime import timezone
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        tasks = task_store.list_tasks(
+            status="todo",
+            due_before=today,
+            limit=20,
+        )
+        # Filter to truly overdue (due_date < today, not equal)
+        yesterday = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        return [t for t in tasks if t.get("due_date") and t["due_date"] < yesterday]
     except Exception:
         return []
 

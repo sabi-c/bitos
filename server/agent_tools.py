@@ -332,65 +332,182 @@ DEVICE_TOOLS = [
     {
         "name": "create_task",
         "description": (
-            "Create a new task in the task manager. Returns the created task "
-            "with its ID. Use this when the user wants to add a to-do, reminder, "
-            "or action item."
+            "Create a new task. The task will appear on the device, companion app, "
+            "and sync to Things 3 on the laptop. Set a reminder_at to get a "
+            "notification at a specific time. Priority: 1=critical, 2=high, "
+            "3=normal (default), 4=low."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "title": {
+                "title": {"type": "string", "description": "What needs to be done."},
+                "notes": {"type": "string", "description": "Additional context or details."},
+                "due_date": {"type": "string", "description": "Due date: YYYY-MM-DD."},
+                "due_time": {"type": "string", "description": "Due time: HH:MM (24h)."},
+                "reminder_at": {
                     "type": "string",
-                    "description": "The task title / what needs to be done.",
+                    "description": "When to send a reminder: ISO datetime YYYY-MM-DDTHH:MM:SS.",
                 },
-                "description": {
-                    "type": "string",
-                    "description": "Optional longer description or notes for the task.",
+                "priority": {
+                    "type": "integer",
+                    "enum": [1, 2, 3, 4],
+                    "description": "1=critical, 2=high, 3=normal, 4=low.",
                 },
-                "due_date": {
+                "project": {"type": "string", "description": "Project name (default INBOX)."},
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Tags for categorization.",
+                },
+                "parent_id": {
                     "type": "string",
-                    "description": "Optional due date in ISO format (e.g. 2026-03-17). Omit for no due date.",
+                    "description": "Parent task ID to create this as a subtask.",
                 },
             },
             "required": ["title"],
         },
     },
     {
+        "name": "update_task",
+        "description": (
+            "Update any field(s) on an existing task. Pass only the fields "
+            "you want to change."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string", "description": "The task ID (tsk_...)."},
+                "title": {"type": "string", "description": "New title."},
+                "notes": {"type": "string", "description": "New notes."},
+                "due_date": {"type": "string", "description": "New due date: YYYY-MM-DD."},
+                "due_time": {"type": "string", "description": "New due time: HH:MM."},
+                "reminder_at": {"type": "string", "description": "New reminder: ISO datetime."},
+                "priority": {"type": "integer", "enum": [1, 2, 3, 4], "description": "New priority."},
+                "status": {
+                    "type": "string",
+                    "enum": ["todo", "in_progress", "waiting", "done", "cancelled"],
+                    "description": "New status.",
+                },
+                "project": {"type": "string", "description": "New project."},
+                "tags": {"type": "array", "items": {"type": "string"}, "description": "New tags."},
+            },
+            "required": ["task_id"],
+        },
+    },
+    {
         "name": "complete_task",
         "description": (
-            "Mark a task as complete/done. Requires the task ID. "
+            "Mark a task as complete/done. Sets completed_at timestamp. "
             "Use get_tasks first to find the ID if the user refers to a task by name."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "task_id": {
-                    "type": "integer",
-                    "description": "The numeric ID of the task to complete.",
+                    "type": "string",
+                    "description": "The task ID (tsk_...).",
                 },
             },
             "required": ["task_id"],
         },
     },
     {
-        "name": "get_tasks",
+        "name": "delete_task",
         "description": (
-            "List tasks from the task manager. Returns task IDs, titles, "
-            "projects, and done status. Use filter to narrow results."
+            "Delete a task. By default soft-deletes (sets status to cancelled). "
+            "The task can still be found with status filter."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "filter": {
+                "task_id": {"type": "string", "description": "The task ID (tsk_...)."},
+            },
+            "required": ["task_id"],
+        },
+    },
+    {
+        "name": "add_subtask",
+        "description": (
+            "Add a subtask to an existing task. Creates a new task with parent_id set."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "parent_id": {"type": "string", "description": "Parent task ID (tsk_...)."},
+                "title": {"type": "string", "description": "Subtask title."},
+                "priority": {"type": "integer", "enum": [1, 2, 3, 4], "description": "Priority."},
+                "due_date": {"type": "string", "description": "Due date: YYYY-MM-DD."},
+            },
+            "required": ["parent_id", "title"],
+        },
+    },
+    {
+        "name": "get_tasks",
+        "description": (
+            "List tasks with flexible filtering. Returns task IDs, titles, "
+            "priorities, projects, due dates, and status."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "status": {
                     "type": "string",
-                    "enum": ["today", "all", "overdue"],
-                    "description": "Filter: 'today' (default) for today's tasks, 'all' for everything, 'overdue' for past-due.",
+                    "enum": ["todo", "in_progress", "waiting", "done", "cancelled"],
+                    "description": "Filter by status.",
                 },
-                "limit": {
+                "priority": {
                     "type": "integer",
-                    "description": "Max tasks to return (default 20, max 50).",
+                    "enum": [1, 2, 3, 4],
+                    "description": "Filter by priority.",
+                },
+                "project": {"type": "string", "description": "Filter by project name."},
+                "due_before": {"type": "string", "description": "Tasks due on or before YYYY-MM-DD."},
+                "due_after": {"type": "string", "description": "Tasks due on or after YYYY-MM-DD."},
+                "search": {"type": "string", "description": "Search in title and notes."},
+                "limit": {"type": "integer", "description": "Max tasks to return (default 20, max 50)."},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "get_task",
+        "description": (
+            "Get a single task by ID, including its subtasks."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string", "description": "The task ID (tsk_...)."},
+            },
+            "required": ["task_id"],
+        },
+    },
+    {
+        "name": "set_reminder",
+        "description": (
+            "Set or update the reminder time for a task. The device will receive "
+            "a notification at the specified time."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string", "description": "The task ID (tsk_...)."},
+                "reminder_at": {
+                    "type": "string",
+                    "description": "When to remind: ISO datetime YYYY-MM-DDTHH:MM:SS.",
                 },
             },
+            "required": ["task_id", "reminder_at"],
+        },
+    },
+    {
+        "name": "list_projects",
+        "description": (
+            "List all distinct project names from active tasks."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
             "required": [],
         },
     },
@@ -566,11 +683,29 @@ def _handle_tool_call_inner(
     if tool_name == "create_task":
         return _create_task(tool_input)
 
+    if tool_name == "update_task":
+        return _update_task(tool_input)
+
     if tool_name == "complete_task":
         return _complete_task(tool_input)
 
+    if tool_name == "delete_task":
+        return _delete_task(tool_input)
+
+    if tool_name == "add_subtask":
+        return _add_subtask(tool_input)
+
     if tool_name == "get_tasks":
         return _get_tasks(tool_input)
+
+    if tool_name == "get_task":
+        return _get_task_detail(tool_input)
+
+    if tool_name == "set_reminder":
+        return _set_reminder(tool_input)
+
+    if tool_name == "list_projects":
+        return _list_projects(tool_input)
 
     return json.dumps({"error": f"Unknown tool: {tool_name}"})
 
@@ -832,77 +967,174 @@ def _recall_facts(tool_input: dict) -> str:
         return json.dumps({"error": f"Failed to search facts: {exc}"})
 
 
-# ── Task management tool handlers ────────────────────────────────────────
+# ── Task management tool handlers (BITOS task store) ────────────────────
 
 def _create_task(tool_input: dict) -> str:
     title = tool_input.get("title", "").strip()
     if not title:
         return json.dumps({"error": "title is required"})
 
-    description = tool_input.get("description", "")
-    # due_date passed through as metadata (Vikunja adapter handles it in body)
-
-    vikunja = _get_vikunja()
+    import task_store
     try:
-        task = vikunja.create_task(title, details=description or None)
-        if task is None:
-            return json.dumps({"error": "Failed to create task"})
-
-        logger.info("task_created: id=%s title=%s", task.get("id"), title[:40])
-        return json.dumps({
-            "success": True,
-            "task": {
-                "id": task.get("id"),
-                "title": task.get("title", title),
-                "mock": task.get("mock", False),
-            },
-        })
+        task = task_store.create_task(
+            title=title,
+            notes=tool_input.get("notes", ""),
+            priority=tool_input.get("priority", 3),
+            due_date=tool_input.get("due_date"),
+            due_time=tool_input.get("due_time"),
+            reminder_at=tool_input.get("reminder_at"),
+            project=tool_input.get("project", "INBOX"),
+            tags=tool_input.get("tags"),
+            parent_id=tool_input.get("parent_id"),
+        )
+        logger.info("task_created: id=%s title=%s", task["id"], title[:40])
+        return json.dumps({"success": True, "task": task})
     except Exception as exc:
         logger.warning("create_task_error: %s", exc)
         return json.dumps({"error": f"Failed to create task: {exc}"})
 
 
-def _complete_task(tool_input: dict) -> str:
-    task_id = tool_input.get("task_id")
-    if task_id is None:
+def _update_task(tool_input: dict) -> str:
+    task_id = tool_input.get("task_id", "").strip()
+    if not task_id:
         return json.dumps({"error": "task_id is required"})
 
-    vikunja = _get_vikunja()
+    import task_store
+    fields = {k: v for k, v in tool_input.items() if k != "task_id"}
     try:
-        ok = vikunja.complete_task(int(task_id))
-        if ok:
-            logger.info("task_completed: id=%s", task_id)
-            return json.dumps({"success": True, "task_id": task_id, "status": "done"})
-        return json.dumps({"error": f"Failed to complete task {task_id}"})
+        task = task_store.update_task(task_id, **fields)
+        if task is None:
+            return json.dumps({"error": f"Task {task_id} not found"})
+        logger.info("task_updated: id=%s fields=%s", task_id, list(fields.keys()))
+        return json.dumps({"success": True, "task": task})
+    except Exception as exc:
+        logger.warning("update_task_error: %s", exc)
+        return json.dumps({"error": f"Failed to update task: {exc}"})
+
+
+def _complete_task(tool_input: dict) -> str:
+    task_id = tool_input.get("task_id", "")
+    if not task_id:
+        return json.dumps({"error": "task_id is required"})
+
+    import task_store
+    try:
+        task = task_store.complete_task(str(task_id))
+        if task is None:
+            return json.dumps({"error": f"Task {task_id} not found"})
+        logger.info("task_completed: id=%s", task_id)
+        return json.dumps({"success": True, "task": task})
     except Exception as exc:
         logger.warning("complete_task_error: %s", exc)
         return json.dumps({"error": f"Failed to complete task: {exc}"})
 
 
+def _delete_task(tool_input: dict) -> str:
+    task_id = tool_input.get("task_id", "")
+    if not task_id:
+        return json.dumps({"error": "task_id is required"})
+
+    import task_store
+    try:
+        ok = task_store.delete_task(task_id)
+        if not ok:
+            return json.dumps({"error": f"Task {task_id} not found"})
+        logger.info("task_deleted: id=%s", task_id)
+        return json.dumps({"success": True, "task_id": task_id, "status": "cancelled"})
+    except Exception as exc:
+        logger.warning("delete_task_error: %s", exc)
+        return json.dumps({"error": f"Failed to delete task: {exc}"})
+
+
+def _add_subtask(tool_input: dict) -> str:
+    parent_id = tool_input.get("parent_id", "").strip()
+    title = tool_input.get("title", "").strip()
+    if not parent_id or not title:
+        return json.dumps({"error": "parent_id and title are required"})
+
+    import task_store
+    try:
+        # Verify parent exists
+        parent = task_store.get_task(parent_id)
+        if parent is None:
+            return json.dumps({"error": f"Parent task {parent_id} not found"})
+
+        task = task_store.create_task(
+            title=title,
+            priority=tool_input.get("priority", 3),
+            due_date=tool_input.get("due_date"),
+            parent_id=parent_id,
+        )
+        logger.info("subtask_created: id=%s parent=%s title=%s", task["id"], parent_id, title[:40])
+        return json.dumps({"success": True, "subtask": task})
+    except Exception as exc:
+        logger.warning("add_subtask_error: %s", exc)
+        return json.dumps({"error": f"Failed to add subtask: {exc}"})
+
+
 def _get_tasks(tool_input: dict) -> str:
-    task_filter = tool_input.get("filter", "today")
     limit = min(tool_input.get("limit", 20), 50)
 
-    vikunja = _get_vikunja()
+    import task_store
     try:
-        if task_filter == "today":
-            tasks = vikunja.get_today_tasks()
-        elif task_filter == "all":
-            tasks = vikunja.list_tasks()
-        elif task_filter == "overdue":
-            # Vikunja list + client-side filter for overdue
-            all_tasks = vikunja.list_tasks()
-            import datetime
-            now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-            tasks = [
-                t for t in all_tasks
-                if t.get("due_date") and t["due_date"] < now and not t.get("done")
-            ]
-        else:
-            tasks = vikunja.get_today_tasks()
-
-        tasks = tasks[:limit]
-        return json.dumps({"tasks": tasks, "count": len(tasks), "filter": task_filter})
+        tasks = task_store.list_tasks(
+            status=tool_input.get("status"),
+            priority=tool_input.get("priority"),
+            project=tool_input.get("project"),
+            due_before=tool_input.get("due_before"),
+            due_after=tool_input.get("due_after"),
+            search=tool_input.get("search"),
+            limit=limit,
+        )
+        return json.dumps({"tasks": tasks, "count": len(tasks)})
     except Exception as exc:
         logger.warning("get_tasks_error: %s", exc)
         return json.dumps({"error": f"Failed to get tasks: {exc}"})
+
+
+def _get_task_detail(tool_input: dict) -> str:
+    task_id = tool_input.get("task_id", "")
+    if not task_id:
+        return json.dumps({"error": "task_id is required"})
+
+    import task_store
+    try:
+        task = task_store.get_task(task_id)
+        if task is None:
+            return json.dumps({"error": f"Task {task_id} not found"})
+        return json.dumps({"task": task})
+    except Exception as exc:
+        logger.warning("get_task_error: %s", exc)
+        return json.dumps({"error": f"Failed to get task: {exc}"})
+
+
+def _set_reminder(tool_input: dict) -> str:
+    task_id = tool_input.get("task_id", "")
+    reminder_at = tool_input.get("reminder_at", "")
+    if not task_id or not reminder_at:
+        return json.dumps({"error": "task_id and reminder_at are required"})
+
+    import task_store
+    try:
+        task = task_store.update_task(
+            task_id,
+            reminder_at=reminder_at,
+            reminder_fired=0,
+        )
+        if task is None:
+            return json.dumps({"error": f"Task {task_id} not found"})
+        logger.info("reminder_set: id=%s at=%s", task_id, reminder_at)
+        return json.dumps({"success": True, "task": task})
+    except Exception as exc:
+        logger.warning("set_reminder_error: %s", exc)
+        return json.dumps({"error": f"Failed to set reminder: {exc}"})
+
+
+def _list_projects(tool_input: dict) -> str:
+    import task_store
+    try:
+        projects = task_store.list_projects()
+        return json.dumps({"projects": projects, "count": len(projects)})
+    except Exception as exc:
+        logger.warning("list_projects_error: %s", exc)
+        return json.dumps({"error": f"Failed to list projects: {exc}"})

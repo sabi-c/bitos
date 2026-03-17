@@ -199,14 +199,18 @@ def _integration_status_payload() -> dict:
         except Exception:
             imessage_status = "offline"
 
-    vikunja_status = "mock" if vikunja.is_mock else "offline"
+    # Task store (BITOS-owned SQLite)
+    task_store_status = "offline"
     task_count = 0
-    if not vikunja.is_mock:
-        try:
-            task_count = len(vikunja.get_today_tasks())
-            vikunja_status = "online"
-        except Exception:
-            vikunja_status = "offline"
+    try:
+        import task_store
+        task_count = len(task_store.get_today_tasks())
+        task_store_status = "online"
+    except Exception:
+        task_store_status = "offline"
+
+    # Legacy Vikunja status (kept for reference)
+    vikunja_status = "mock" if vikunja.is_mock else "offline"
 
     anthropic = os.environ.get("ANTHROPIC_API_KEY", "")
     ai_status = "online" if _is_real_anthropic_key(anthropic) else "offline"
@@ -218,10 +222,14 @@ def _integration_status_payload() -> dict:
             "server_url": imessage.base_url,
             "last_checked": "just now",
         },
+        "tasks": {
+            "status": task_store_status,
+            "task_count": task_count,
+            "backend": "bitos_sqlite",
+        },
         "vikunja": {
             "status": vikunja_status,
-            "task_count": task_count,
-            "last_checked": "just now" if vikunja_status in {"online", "mock"} else "never",
+            "note": "legacy, being retired",
         },
         "ai": {
             "status": ai_status,
@@ -898,9 +906,10 @@ end tell
 
 @app.get("/tasks/today")
 async def get_today_tasks():
+    """Get tasks due today or overdue (backward-compatible endpoint)."""
     try:
-        adapter = VikunjaAdapter()
-        tasks = adapter.get_today_tasks()
+        import task_store
+        tasks = task_store.get_today_tasks()
         return {"tasks": tasks, "count": len(tasks)}
     except Exception as exc:
         logger.error("tasks_today_failed: %s", exc)
@@ -908,6 +917,110 @@ async def get_today_tasks():
             status_code=502,
             content={"error": "Tasks unavailable", "detail": str(exc)[:100]},
         )
+
+
+@app.get("/tasks")
+async def list_tasks(
+    status: str | None = None,
+    priority: int | None = None,
+    project: str | None = None,
+    due_before: str | None = None,
+    due_after: str | None = None,
+    search: str | None = None,
+    limit: int = 50,
+):
+    """List tasks with flexible filters."""
+    try:
+        import task_store
+        tasks = task_store.list_tasks(
+            status=status,
+            priority=priority,
+            project=project,
+            due_before=due_before,
+            due_after=due_after,
+            search=search,
+            limit=min(limit, 100),
+        )
+        return {"tasks": tasks, "count": len(tasks)}
+    except Exception as exc:
+        logger.error("tasks_list_failed: %s", exc)
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to list tasks", "detail": str(exc)[:100]},
+        )
+
+
+@app.get("/tasks/{task_id}")
+async def get_task(task_id: str):
+    """Get a single task by ID, including subtasks."""
+    import task_store
+    task = task_store.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    return {"task": task}
+
+
+@app.post("/tasks")
+async def create_task(request: Request):
+    """Create a new task."""
+    try:
+        body = await request.json()
+        title = body.get("title", "").strip()
+        if not title:
+            raise HTTPException(status_code=400, detail="title is required")
+
+        import task_store
+        task = task_store.create_task(
+            title=title,
+            notes=body.get("notes", ""),
+            priority=body.get("priority", 3),
+            due_date=body.get("due_date"),
+            due_time=body.get("due_time"),
+            reminder_at=body.get("reminder_at"),
+            project=body.get("project", "INBOX"),
+            tags=body.get("tags"),
+            parent_id=body.get("parent_id"),
+            source=body.get("source", "api"),
+        )
+        return {"task": task}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("task_create_failed: %s", exc)
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to create task", "detail": str(exc)[:100]},
+        )
+
+
+@app.put("/tasks/{task_id}")
+async def update_task(task_id: str, request: Request):
+    """Update a task."""
+    try:
+        body = await request.json()
+        import task_store
+        task = task_store.update_task(task_id, **body)
+        if task is None:
+            raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+        return {"task": task}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("task_update_failed: %s", exc)
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to update task", "detail": str(exc)[:100]},
+        )
+
+
+@app.delete("/tasks/{task_id}")
+async def delete_task(task_id: str):
+    """Soft-delete (cancel) a task."""
+    import task_store
+    ok = task_store.delete_task(task_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    return {"success": True, "task_id": task_id, "status": "cancelled"}
 
 
 @app.get("/messages")
@@ -1102,9 +1215,9 @@ async def get_dashboard():
     now = datetime.now(timezone.utc)
 
     # Tasks
-    vikunja = VikunjaAdapter()
     try:
-        tasks = vikunja.get_today_tasks()
+        import task_store
+        tasks = task_store.get_today_tasks()
     except Exception:
         tasks = []
 
@@ -1195,8 +1308,8 @@ async def get_activity_notifications():
 
     # Today's tasks
     try:
-        vikunja = VikunjaAdapter()
-        tasks = vikunja.get_today_tasks()
+        import task_store
+        tasks = task_store.get_today_tasks()
         for task in tasks[:3]:
             items.append({
                 "type": "TASK",
@@ -1380,10 +1493,10 @@ async def get_live_context():
         except Exception:
             pass
 
-    # Task count from Vikunja
+    # Task count from task store
     try:
-        vikunja = VikunjaAdapter()
-        tasks = vikunja.get_today_tasks()
+        import task_store
+        tasks = task_store.get_today_tasks()
         tasks_today = len(tasks)
     except Exception:
         pass
@@ -1415,9 +1528,9 @@ async def get_live_context():
 @app.get("/brief")
 async def get_brief():
     """Morning-brief summary: tasks, unread counts, weather-ready structure."""
-    vikunja = VikunjaAdapter()
     try:
-        tasks = vikunja.get_today_tasks()
+        import task_store
+        tasks = task_store.get_today_tasks()
     except Exception:
         tasks = []
 
