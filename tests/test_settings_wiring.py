@@ -38,6 +38,9 @@ class SettingsWiringTests(unittest.TestCase):
         self.assertTrue(self.repo.get_setting("web_search", default=True))
         self.assertTrue(self.repo.get_setting("memory", default=True))
 
+        # Navigate to web_search (index 6: bluetooth, bt_audio, companion, setup_wizard, ai_model, agent_mode, web_search)
+        for _ in range(6):
+            panel.handle_action("SHORT_PRESS")
         panel.handle_action("DOUBLE_PRESS")  # web_search toggle
         self.assertFalse(self.repo.get_setting("web_search", default=True))
 

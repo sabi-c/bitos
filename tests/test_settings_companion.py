@@ -34,7 +34,8 @@ class SettingsCompanionTests(unittest.TestCase):
 
     def test_companion_row_reachable_via_short_presses(self):
         panel = SettingsPanel(repository=self.repo)
-        for _ in range(9):
+        # Navigate to companion (index 2: bluetooth=0, bt_audio=1, companion=2)
+        for _ in range(2):
             panel.handle_action("SHORT_PRESS")
         self.assertEqual(panel._nav.focused_item.key, "companion")
 
@@ -46,7 +47,8 @@ class SettingsCompanionTests(unittest.TestCase):
             return "AA:BB"
 
         panel = SettingsPanel(repository=self.repo, get_ble_address=get_ble_address)
-        for _ in range(9):
+        # Navigate to companion (index 2)
+        for _ in range(2):
             panel.handle_action("SHORT_PRESS")
         panel.handle_action("DOUBLE_PRESS")
         self.assertEqual(calls["ble"], 1)
