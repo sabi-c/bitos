@@ -2368,34 +2368,46 @@
         return;
       }
 
-      // Try device provisioning endpoint first, then server
-      const endpoints = [
-        `${getDeviceUrl()}/api/wifi/config`,
-        `${SERVER}/wifi/config`,
-      ];
-
-      for (const url of endpoints) {
+      // Use the connection manager's companion if authenticated
+      // (handles session_token + password encryption correctly)
+      if (connMgr.connected && connMgr.companion && connMgr.companion.sessionToken) {
         try {
-          const r = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ssid, password, security: _wifiSecurity, priority }),
-            signal: AbortSignal.timeout(5000),
-          });
-          if (r.ok) {
-            const d = await r.json();
-            if (d.ok) {
-              statusEl.textContent = 'Added: ' + ssid;
-              statusEl.className = 'status ok';
-              document.getElementById('wifi-new-ssid').value = '';
-              document.getElementById('wifi-new-password').value = '';
-              refreshWifiNetworks();
-              return;
-            }
-          }
-        } catch (_) {}
+          await connMgr.sendWifiConfig(ssid, password, _wifiSecurity, priority);
+          statusEl.textContent = 'Added: ' + ssid;
+          statusEl.className = 'status ok';
+          document.getElementById('wifi-new-ssid').value = '';
+          document.getElementById('wifi-new-password').value = '';
+          refreshWifiNetworks();
+          return;
+        } catch (e) {
+          statusEl.textContent = 'Failed: ' + (e.message || 'unknown');
+          statusEl.className = 'status error';
+          return;
+        }
       }
-      statusEl.textContent = 'Failed to add network';
+
+      // Fallback: try server-side endpoint (server handles WiFi directly)
+      try {
+        const r = await fetch(`${SERVER}/wifi/config`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ssid, password, security: _wifiSecurity, priority }),
+          signal: AbortSignal.timeout(5000),
+        });
+        if (r.ok) {
+          const d = await r.json();
+          if (d.ok) {
+            statusEl.textContent = 'Added: ' + ssid;
+            statusEl.className = 'status ok';
+            document.getElementById('wifi-new-ssid').value = '';
+            document.getElementById('wifi-new-password').value = '';
+            refreshWifiNetworks();
+            return;
+          }
+        }
+      } catch (_) {}
+
+      statusEl.textContent = 'Not authenticated — connect and authenticate first';
       statusEl.className = 'status error';
     }
 
@@ -2449,8 +2461,11 @@
     }
 
     function getDeviceUrl() {
-      const ip = localStorage.getItem('bitos_device_ip') || 'bitos.local';
-      const port = localStorage.getItem('bitos_device_port') || '8080';
+      // Use connMgr settings (saved via saveDeviceIp/saveDevicePort)
+      // rather than separate localStorage keys that are never written.
+      const s = connMgr.settings;
+      const ip = s.deviceIp || 'bitos.local';
+      const port = s.port || 8080;
       return 'http://' + ip + ':' + port;
     }
 
