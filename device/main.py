@@ -541,6 +541,7 @@ def main():
         device_status_fn=_collect_device_status,
         device_info_fn=_device_info_for_http,
         on_keyboard_input=on_keyboard_input,
+        repository=repository,
     )
 
     outbound_queue = OutboundCommandQueue(repository)

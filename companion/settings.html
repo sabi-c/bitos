@@ -1223,7 +1223,14 @@
         label.textContent = 'BLE + HTTP';
       } else if (mgr.connectionMode === 'http') {
         dot.classList.add('http');
-        label.textContent = 'HTTP';
+        // Distinguish: server online vs device-only online
+        if (mgr.deviceStatus.server_online) {
+          label.textContent = 'HTTP';
+        } else if (mgr.deviceStatus.device_online) {
+          label.textContent = 'DEVICE ONLY';
+        } else {
+          label.textContent = 'HTTP';
+        }
       } else {
         label.textContent = 'OFFLINE';
       }

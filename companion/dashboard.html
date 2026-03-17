@@ -30,6 +30,10 @@
       <span class="info-key">Server</span>
       <span class="info-val" id="s-server">--</span>
     </div>
+    <div class="info-row">
+      <span class="info-key">Device Link</span>
+      <span class="info-val" id="s-device-link">--</span>
+    </div>
   </div>
 
   <!-- Agent mode -->
@@ -121,7 +125,7 @@
         }
       } catch (_) {}
 
-      // Server health
+      // Server health (backend on port 8000)
       try {
         const r = await fetch(`${SERVER}/health`, { signal: AbortSignal.timeout(3000) });
         if (r.ok) {
@@ -144,6 +148,33 @@
         document.getElementById('s-server').style.color = '#f44';
         document.getElementById('s-wifi').textContent = '--';
         document.getElementById('s-wifi').style.color = '';
+      }
+
+      // Device health (provisioning server on port 8080)
+      const deviceCheck = await checkDeviceHealth();
+      const linkEl = document.getElementById('s-device-link');
+      if (deviceCheck.online) {
+        linkEl.textContent = 'Online';
+        linkEl.style.color = '#4f4';
+        // If server is offline but device is reachable, update device name
+        if (document.getElementById('s-device').textContent === '--') {
+          document.getElementById('s-device').textContent = 'BITOS';
+        }
+        // Try to get richer status from device
+        const devStatus = await fetchDeviceStatus();
+        if (devStatus) {
+          if (devStatus.battery != null && document.getElementById('s-battery').textContent === '--') {
+            const chg = devStatus.charging ? ' +' : '';
+            document.getElementById('s-battery').textContent = devStatus.battery + '%' + chg;
+          }
+          if (devStatus.wifi_ssid && document.getElementById('s-wifi').textContent === '--') {
+            document.getElementById('s-wifi').textContent = devStatus.wifi_ssid;
+            document.getElementById('s-wifi').style.color = '#4f4';
+          }
+        }
+      } else {
+        linkEl.textContent = 'Offline';
+        linkEl.style.color = '#f44';
       }
     }
 

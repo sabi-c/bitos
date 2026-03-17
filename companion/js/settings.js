@@ -104,10 +104,35 @@ class BitosSettings {
       } catch (_) {}
     }
 
-    // Determine connection mode
+    // Check device provisioning server (port 8080) as additional signal
+    let deviceOk = false;
+    if (typeof checkDeviceHealth === 'function') {
+      try {
+        const deviceCheck = await checkDeviceHealth();
+        deviceOk = deviceCheck.online;
+        if (deviceOk) {
+          this.deviceStatus.device_online = true;
+          // Fetch richer status from device if server was unreachable
+          if (!httpOk && typeof fetchDeviceStatus === 'function') {
+            const devStatus = await fetchDeviceStatus();
+            if (devStatus) {
+              if (devStatus.battery != null) this.deviceStatus.battery = devStatus.battery;
+              if (devStatus.charging != null) this.deviceStatus.charging = devStatus.charging;
+              if (devStatus.wifi_ssid) {
+                this.deviceStatus.wifi_ssid = devStatus.wifi_ssid;
+                this.deviceStatus.wifi_connected = true;
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Determine connection mode — device is online if either server or device endpoint responds
     if (bleOk && httpOk) this.connectionMode = 'ble';
     else if (httpOk) this.connectionMode = 'http';
     else if (bleOk) this.connectionMode = 'ble';
+    else if (deviceOk) this.connectionMode = 'http';
     else this.connectionMode = 'offline';
 
     this._emit();
@@ -174,7 +199,6 @@ const SETTING_GROUPS = [
   {
     id: 'voice',
     label: 'VOICE',
-    icon: '🔊',
     settings: [
       { key: 'voice_mode', label: 'Voice mode', type: 'picker', options: ['off', 'on', 'auto'], default: 'auto' },
       { key: 'volume', label: 'Volume', type: 'slider', min: 0, max: 100, step: 5, default: 70 },
@@ -184,7 +208,6 @@ const SETTING_GROUPS = [
   {
     id: 'ai',
     label: 'AI',
-    icon: '◎',
     settings: [
       { key: 'agent_mode', label: 'Agent mode', type: 'picker', options: ['producer', 'hacker', 'clown', 'monk', 'storyteller', 'director'], default: 'producer' },
       { key: 'ai_model', label: 'AI model', type: 'picker', options: ['default', 'haiku', 'sonnet', 'opus'], default: 'default' },
@@ -196,11 +219,27 @@ const SETTING_GROUPS = [
   {
     id: 'display',
     label: 'DISPLAY',
-    icon: '▦',
     settings: [
       { key: 'text_speed', label: 'Text speed', type: 'picker', options: ['slow', 'normal', 'fast'], default: 'normal' },
       { key: 'font_family', label: 'Font', type: 'picker', options: ['press_start_2p', 'monocraft'], default: 'monocraft' },
       { key: 'font_scale', label: 'Font size', type: 'slider', min: 0.8, max: 1.5, step: 0.1, default: 1.0 },
+    ],
+  },
+  {
+    id: 'wakeword',
+    label: 'WAKE WORD',
+    settings: [
+      { key: 'wake_word_enabled', label: 'Wake word', type: 'toggle', default: false },
+      { key: 'wake_word_phrase', label: 'Phrase', type: 'picker', options: ['hey bitos', 'ok bitos', 'bitos'], default: 'hey bitos' },
+      { key: 'wake_word_sensitivity', label: 'Sensitivity', type: 'slider', min: 0.1, max: 1.0, step: 0.1, default: 0.5 },
+    ],
+  },
+  {
+    id: 'sleep',
+    label: 'SLEEP',
+    settings: [
+      { key: 'sleep_timeout_seconds', label: 'Sleep after', type: 'picker', options: ['30', '60', '120', '300', '600', 'never'], default: '60' },
+      { key: 'safe_shutdown_pct', label: 'Auto-shutdown at %', type: 'slider', min: 0, max: 20, step: 1, default: 5 },
     ],
   },
 ];

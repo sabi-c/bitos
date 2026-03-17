@@ -66,6 +66,49 @@ function getServerUrl() {
     || `http://${location.hostname}:8000`;
 }
 
+// ── Device provisioning URL helper ──
+function getDeviceUrl() {
+  const params = new URLSearchParams(location.search);
+  return params.get('device')
+    || sessionStorage.getItem('bitos_provision_url')
+    || `http://${location.hostname}:8080`;
+}
+
+/**
+ * Check if the device is reachable via its HTTP provisioning server.
+ * Returns {online: true, status: {...}} or {online: false, error: "..."}.
+ */
+async function checkDeviceHealth() {
+  const deviceUrl = getDeviceUrl();
+  try {
+    const resp = await fetch(`${deviceUrl}/api/health`, {
+      signal: AbortSignal.timeout(3000),
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      return { online: true, status: data };
+    }
+    return { online: false, error: `HTTP ${resp.status}` };
+  } catch (e) {
+    return { online: false, error: e.message || 'unreachable' };
+  }
+}
+
+/**
+ * Fetch device status from the provisioning server.
+ * Returns the status object or null on failure.
+ */
+async function fetchDeviceStatus() {
+  const deviceUrl = getDeviceUrl();
+  try {
+    const resp = await fetch(`${deviceUrl}/api/device/status`, {
+      signal: AbortSignal.timeout(3000),
+    });
+    if (resp.ok) return resp.json();
+  } catch (_) {}
+  return null;
+}
+
 // ── Shared toast helper ──
 let _navToastTimer = null;
 function showToast(msg) {

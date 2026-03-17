@@ -7,26 +7,31 @@
 </head>
 <body style="background:#000">
   <script>
-    // Always check server health — go to dashboard if reachable, setup if not
+    // Check server health — go to dashboard if reachable, setup if not
     const server = sessionStorage.getItem('bitos_server')
       || `http://${location.hostname}:8000`;
-    fetch(`${server}/health`, { signal: AbortSignal.timeout(3000) })
-      .then(r => {
-        if (r.ok) {
-          localStorage.setItem('bitos_configured', '1');
-          location.replace('dashboard.html');
-        } else {
-          throw new Error();
-        }
-      })
-      .catch(() => {
-        // If previously configured, still go to dashboard (may come back online)
-        if (localStorage.getItem('bitos_configured')) {
-          location.replace('dashboard.html');
-        } else {
-          location.replace('setup.html');
-        }
-      });
+    const deviceUrl = sessionStorage.getItem('bitos_provision_url')
+      || `http://${location.hostname}:8080`;
+
+    // Try both server and device endpoints in parallel
+    const serverOk = fetch(`${server}/health`, { signal: AbortSignal.timeout(3000) })
+      .then(r => r.ok)
+      .catch(() => false);
+    const deviceOk = fetch(`${deviceUrl}/api/health`, { signal: AbortSignal.timeout(3000) })
+      .then(r => r.ok)
+      .catch(() => false);
+
+    Promise.all([serverOk, deviceOk]).then(([sOk, dOk]) => {
+      if (sOk || dOk) {
+        localStorage.setItem('bitos_configured', '1');
+        location.replace('dashboard.html');
+      } else if (localStorage.getItem('bitos_configured')) {
+        // Previously configured — go to dashboard anyway (may come back online)
+        location.replace('dashboard.html');
+      } else {
+        location.replace('setup.html');
+      }
+    });
   </script>
 </body>
 </html>

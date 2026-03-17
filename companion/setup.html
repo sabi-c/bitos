@@ -19,10 +19,9 @@
       border: 2px solid #fff; padding: 20px;
       width: 100%; max-width: 360px; margin-bottom: 16px;
     }
-    .card.subtle { border-color: #333; }
     .card h2 { font-size: 12px; letter-spacing: .08em;
                margin-bottom: 16px; color: #aaa; }
-    input {
+    input, select {
       width: 100%; background: #111; border: 2px solid #444;
       color: #fff; font-family: monospace; font-size: 14px;
       padding: 10px; margin-bottom: 10px; outline: none;
@@ -39,12 +38,18 @@
       background: #000; color: #fff; border: 2px solid #444;
       margin-top: 8px;
     }
+    button.wifi-btn {
+      background: #000; color: #4af; border: 2px solid #4af;
+      margin-top: 10px;
+    }
+    button.wifi-btn:disabled { border-color: #333; color: #666; }
     .status {
       font-size: 11px; letter-spacing: .06em; color: #888;
       text-align: center; padding: 8px; min-height: 20px;
     }
     .status.error { color: #f44; }
     .status.ok { color: #4f4; }
+    .status.info { color: #4af; }
     .step { display: none; }
     .step.active { display: block; }
     .progress {
@@ -54,29 +59,47 @@
     .dot { width: 8px; height: 8px; background: #333; }
     .dot.done { background: #fff; }
     .dot.active { background: #aaa; }
-    .or-divider {
-      display: flex; align-items: center; gap: 12px;
-      width: 100%; max-width: 360px; margin: 4px 0 12px;
-      color: #555; font-size: 11px; letter-spacing: .08em;
-    }
-    .or-divider::before, .or-divider::after {
-      content: ''; flex: 1; border-top: 1px solid #333;
-    }
-    .conn-method-label {
-      font-size: 10px; letter-spacing: .06em; color: #666;
-      text-align: center; margin-bottom: 6px;
-    }
-    .ble-notice {
-      font-size: 11px; line-height: 1.6; color: #f44;
-      text-align: center; padding: 8px;
+    .conn-method {
+      display: flex; gap: 8px; margin-bottom: 12px;
       width: 100%; max-width: 360px;
     }
-    .ble-notice.warn { color: #f84; }
-    .transport-badge {
-      display: inline-block; font-size: 10px; letter-spacing: .06em;
-      color: #888; border: 1px solid #333; padding: 3px 8px;
-      margin-bottom: 12px;
+    .conn-method button {
+      flex: 1; padding: 10px 8px; font-size: 11px;
+      background: #111; color: #666; border: 2px solid #333;
+      letter-spacing: .04em;
     }
+    .conn-method button.active {
+      color: #fff; border-color: #fff;
+    }
+    .conn-method button.recommended {
+      position: relative;
+    }
+    .conn-method button.recommended::after {
+      content: 'RECOMMENDED';
+      position: absolute; top: -8px; right: -4px;
+      font-size: 7px; background: #4af; color: #000;
+      padding: 1px 4px; letter-spacing: .04em;
+    }
+    .ios-notice {
+      width: 100%; max-width: 360px;
+      background: #1a1200; border: 1px solid #443300;
+      padding: 12px; margin-bottom: 16px;
+      font-size: 11px; line-height: 1.6; color: #fa0;
+      display: none;
+    }
+    .transport-badge {
+      display: inline-block; font-size: 9px;
+      letter-spacing: .06em; padding: 2px 6px;
+      border: 1px solid #444; color: #888;
+      margin-bottom: 8px;
+    }
+    .transport-badge.http { border-color: #4af; color: #4af; }
+    .transport-badge.ble { border-color: #a4f; color: #a4f; }
+    .ip-row {
+      display: flex; gap: 8px; align-items: stretch;
+    }
+    .ip-row input { flex: 1; margin-bottom: 0; }
+    .ip-row button { width: auto; padding: 10px 16px; font-size: 12px; }
   </style>
 </head>
 <body>
@@ -92,46 +115,55 @@
 
   <!-- Step 0: Connect -->
   <div class="step active" id="s0">
-    <div class="card" id="ble-card">
-      <h2>STEP 1 &mdash; CONNECT TO DEVICE</h2>
-      <div class="status" id="conn-status">
-        Choose a connection method.
-      </div>
 
-      <!-- BLE option -->
-      <div id="ble-section">
-        <div class="conn-method-label">BLUETOOTH</div>
-        <button id="btn-connect" onclick="connectBLE()">
-          CONNECT VIA BLUETOOTH
-        </button>
-      </div>
-
-      <div class="or-divider">OR</div>
-
-      <!-- WiFi/HTTP option -->
-      <div id="wifi-section">
-        <div class="conn-method-label">WI-FI (SAME NETWORK)</div>
-        <input type="text" id="device-host" placeholder="Device IP or bitos.local"
-               value="bitos.local" style="margin-bottom:6px">
-        <input type="text" id="device-port" placeholder="Port (default: 8080)"
-               value="8080" style="margin-bottom:8px">
-        <button class="secondary" id="btn-connect-wifi" onclick="connectHTTP()">
-          CONNECT VIA WI-FI
-        </button>
-      </div>
+    <div class="ios-notice" id="ios-notice">
+      Web Bluetooth is not available in this browser.
+      Use the WiFi connection method below instead — it works
+      on all browsers including iOS Safari.
     </div>
 
-    <!-- BLE notices -->
-    <div id="ble-notice-area" style="width:100%;max-width:360px">
-      <div class="ble-notice warn" id="ble-warn" style="display:none">
-        Web Bluetooth is not supported on iOS Safari.<br>
-        Use "Connect via Wi-Fi" instead, or use<br>
-        Chrome on Android/desktop for Bluetooth.
+    <div class="conn-method" id="conn-method-bar">
+      <button id="method-wifi" class="active" onclick="setMethod('wifi')">
+        WIFI
+      </button>
+      <button id="method-ble" onclick="setMethod('ble')">
+        BLUETOOTH
+      </button>
+    </div>
+
+    <!-- WiFi connect panel -->
+    <div class="card" id="panel-wifi">
+      <h2>CONNECT VIA WI-FI</h2>
+      <div class="status" id="wifi-hint">
+        Enter the IP address shown on your BITOS device screen,
+        or try bitos.local if on the same network.
       </div>
-      <div class="ble-notice" id="ble-unavailable" style="display:none">
-        Web Bluetooth is not available in this browser.<br>
-        Use "Connect via Wi-Fi" below to set up your device<br>
-        over your local network.
+      <div class="ip-row">
+        <input type="text" id="device-ip" placeholder="bitos.local"
+               value="bitos.local">
+        <button onclick="connectHTTP()" id="btn-wifi-connect">CONNECT</button>
+      </div>
+      <div class="status" id="wifi-conn-status"></div>
+    </div>
+
+    <!-- BLE connect panel -->
+    <div class="card" id="panel-ble" style="display:none">
+      <h2>CONNECT VIA BLUETOOTH</h2>
+      <div class="status" id="conn-status">
+        Press connect to find your BITOS device.
+      </div>
+      <button id="btn-connect" onclick="connectBLE()">
+        CONNECT TO BITOS
+      </button>
+      <div id="ble-unavailable" style="display:none">
+        <div class="status error" style="line-height:1.6;padding:12px 0">
+          Web Bluetooth is not available in this browser.<br>
+          Use the WiFi connection method instead,<br>
+          or try Chrome on desktop/Android.
+        </div>
+        <button class="wifi-btn" onclick="setMethod('wifi')">
+          SWITCH TO WIFI
+        </button>
       </div>
     </div>
   </div>
@@ -139,8 +171,8 @@
   <!-- Step 1: Authenticate -->
   <div class="step" id="s1">
     <div class="card">
-      <h2>STEP 2 &mdash; ENTER YOUR PIN</h2>
-      <div class="transport-badge" id="transport-badge"></div>
+      <div class="transport-badge" id="auth-transport">--</div>
+      <h2>STEP 2 — ENTER YOUR PIN</h2>
       <input type="password" id="pin-input" maxlength="4"
              placeholder="4-digit PIN (default: 0000)"
              inputmode="numeric" pattern="[0-9]*">
@@ -149,15 +181,14 @@
     </div>
   </div>
 
-  <!-- Step 2: WiFi config -->
+  <!-- Step 2: WiFi -->
   <div class="step" id="s2">
     <div class="card">
-      <h2>STEP 3 &mdash; CONFIGURE WI-FI</h2>
+      <div class="transport-badge" id="wifi-transport">--</div>
+      <h2>STEP 3 — CONFIGURE WI-FI</h2>
       <input type="text" id="ssid-input" placeholder="Network name (SSID)">
       <input type="password" id="pw-input" placeholder="Password">
-      <select id="sec-input" style="width:100%;background:#111;color:#fff;
-              border:2px solid #444;font-family:monospace;font-size:14px;
-              padding:10px;margin-bottom:10px">
+      <select id="sec-input">
         <option value="WPA2">WPA2</option>
         <option value="WPA3">WPA3</option>
         <option value="OPEN">Open (no password)</option>
@@ -170,7 +201,7 @@
   <!-- Step 3: Done -->
   <div class="step" id="s3">
     <div class="card">
-      <h2>&#10003; ALL DONE</h2>
+      <h2>ALL DONE</h2>
       <div class="status ok" style="font-size:13px;padding:16px">
         Wi-Fi configured.<br>
         Your BITOS device is connecting...<br><br>
@@ -193,37 +224,40 @@
   <script src="js/auth.js"></script>
   <script src="js/crypto.js"></script>
   <script src="js/ble.js"></script>
+  <script src="js/connection.js"></script>
   <script>
-    const hasBLE = isBleAvailable();
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const bleAvailable = isBleAvailable();
+    let activeMethod = 'wifi'; // default to wifi
 
-    // -- BLE availability detection --
-    if (!hasBLE) {
-      // Disable BLE button, show WiFi prominently
-      document.getElementById('btn-connect').disabled = true;
-      document.getElementById('ble-unavailable').style.display = 'block';
-      if (isIOS) {
-        document.getElementById('ble-warn').style.display = 'block';
-        document.getElementById('ble-unavailable').style.display = 'none';
+    // Detect iOS / no-BLE and show notice
+    if (!bleAvailable) {
+      document.getElementById('ios-notice').style.display = 'block';
+      document.getElementById('method-ble').disabled = true;
+      document.getElementById('method-ble').style.opacity = '0.3';
+    } else {
+      // If BLE is available, mark wifi as recommended still (faster)
+      document.getElementById('method-wifi').classList.add('recommended');
+    }
+
+    // Load saved IP
+    const savedSettings = connMgr.settings;
+    if (savedSettings.deviceIp) {
+      document.getElementById('device-ip').value = savedSettings.deviceIp;
+    }
+
+    function setMethod(method) {
+      activeMethod = method;
+      document.getElementById('method-wifi').classList.toggle('active', method === 'wifi');
+      document.getElementById('method-ble').classList.toggle('active', method === 'ble');
+      document.getElementById('panel-wifi').style.display = method === 'wifi' ? 'block' : 'none';
+      document.getElementById('panel-ble').style.display = method === 'ble' ? 'block' : 'none';
+
+      // Show BLE unavailable warning if needed
+      if (method === 'ble' && !bleAvailable) {
+        document.getElementById('ble-unavailable').style.display = 'block';
+        document.getElementById('btn-connect').disabled = true;
       }
-      // Re-style: make WiFi the primary button
-      document.getElementById('btn-connect-wifi').className = '';
-      document.getElementById('btn-connect-wifi').style.cssText =
-        'width:100%;background:#fff;color:#000;border:none;font-family:monospace;font-size:14px;font-weight:bold;padding:12px;cursor:pointer;letter-spacing:.06em';
-      document.getElementById('conn-status').textContent =
-        'Connect to your BITOS device over Wi-Fi.';
     }
-
-    // Try to auto-detect device host from URL params
-    const _urlParams = new URLSearchParams(location.search);
-    if (_urlParams.get('host')) {
-      document.getElementById('device-host').value = _urlParams.get('host');
-    }
-    if (_urlParams.get('port')) {
-      document.getElementById('device-port').value = _urlParams.get('port');
-    }
-
-    let companion = null;
 
     function goStep(n) {
       document.querySelectorAll('.step').forEach((s, i) =>
@@ -241,33 +275,59 @@
       el.className = 'status ' + type;
     }
 
-    function updateTransportBadge() {
-      const badge = document.getElementById('transport-badge');
-      if (companion && companion.transport === 'http') {
-        badge.textContent = 'CONNECTED VIA WI-FI';
-      } else {
-        badge.textContent = 'CONNECTED VIA BLUETOOTH';
+    function updateTransportBadges() {
+      const t = connMgr.transport || '--';
+      const label = t === 'http' ? 'WIFI' : t === 'ble' ? 'BLE' : '--';
+      const cls = t === 'http' ? 'http' : t === 'ble' ? 'ble' : '';
+      document.querySelectorAll('.transport-badge').forEach(el => {
+        el.textContent = label;
+        el.className = 'transport-badge ' + cls;
+      });
+    }
+
+    // ── WiFi (HTTP) connect ──
+    async function connectHTTP() {
+      const btn = document.getElementById('btn-wifi-connect');
+      btn.disabled = true;
+      setStatus('wifi-conn-status', 'Connecting...', '');
+
+      const ipField = document.getElementById('device-ip').value.trim();
+      let ip = ipField || 'bitos.local';
+      let port = 8080;
+
+      // Parse port if included (e.g. "192.168.1.50:8080")
+      if (ip.includes(':')) {
+        const parts = ip.split(':');
+        ip = parts[0];
+        port = parseInt(parts[1]) || 8080;
+      }
+
+      try {
+        await connMgr.connectHTTP(ip, port);
+        setStatus('wifi-conn-status', 'Connected to device', 'ok');
+        updateTransportBadges();
+        setTimeout(() => goStep(1), 800);
+      } catch (e) {
+        setStatus('wifi-conn-status',
+          'Cannot reach device at ' + ip + ':' + port + ' — ' + e.message,
+          'error');
+      } finally {
+        btn.disabled = false;
       }
     }
 
-    // -- BLE connect --
+    // ── BLE connect ──
     async function connectBLE() {
       const btn = document.getElementById('btn-connect');
       btn.disabled = true;
       setStatus('conn-status', 'Scanning for BITOS...');
       try {
-        if (!navigator.bluetooth) {
-          throw new Error('Web Bluetooth not available.');
+        if (!bleAvailable) {
+          throw new Error('Web Bluetooth not available. Use WiFi connection instead.');
         }
-        companion = new BitosCompanion();
-        const bleAddr = _urlParams.get('ble');
-        if (!bleAddr) {
-          setStatus('conn-status',
-            'Scanning for any BITOS device...', '');
-        }
-        await companion.connect(bleAddr);
-        setStatus('conn-status', 'Connected to BITOS via Bluetooth', 'ok');
-        updateTransportBadge();
+        await connMgr.connectBLE();
+        setStatus('conn-status', 'Connected to BITOS', 'ok');
+        updateTransportBadges();
         setTimeout(() => goStep(1), 800);
       } catch (e) {
         setStatus('conn-status', e.message, 'error');
@@ -275,34 +335,12 @@
       }
     }
 
-    // -- HTTP/WiFi connect --
-    async function connectHTTP() {
-      const btn = document.getElementById('btn-connect-wifi');
-      btn.disabled = true;
-      const host = document.getElementById('device-host').value.trim() || 'bitos.local';
-      const port = document.getElementById('device-port').value.trim() || '8080';
-      const baseUrl = `http://${host}:${port}`;
-      setStatus('conn-status', 'Connecting to ' + baseUrl + '...');
-      try {
-        companion = new BitosHttpCompanion(baseUrl);
-        await companion.connect();
-        // Save for other pages
-        sessionStorage.setItem('bitos_provision_url', baseUrl);
-        setStatus('conn-status', 'Connected to BITOS via Wi-Fi', 'ok');
-        updateTransportBadge();
-        setTimeout(() => goStep(1), 800);
-      } catch (e) {
-        setStatus('conn-status', 'Could not reach device at ' + baseUrl + '. Check IP and that both devices are on the same network.', 'error');
-        btn.disabled = false;
-      }
-    }
-
-    // -- Auth --
+    // ── Auth ──
     async function authenticate() {
       const pin = document.getElementById('pin-input').value || '0000';
       setStatus('auth-status', 'Authenticating...');
       try {
-        await companion.authenticate(pin);
+        await connMgr.authenticate(pin);
         setStatus('auth-status', 'Authenticated', 'ok');
         setTimeout(() => goStep(2), 600);
       } catch (e) {
@@ -315,6 +353,7 @@
       location.href = 'dashboard.html';
     }
 
+    // ── WiFi config ──
     async function sendWifi() {
       const ssid = document.getElementById('ssid-input').value.trim();
       const pw = document.getElementById('pw-input').value;
@@ -325,7 +364,7 @@
       }
       setStatus('wifi-status', 'Sending credentials...');
       try {
-        await companion.sendWifiConfig(ssid, pw, sec);
+        await connMgr.sendWifiConfig(ssid, pw, sec);
         document.getElementById('final-ssid').textContent =
           'Connected to: ' + ssid;
         goStep(3);
@@ -333,6 +372,18 @@
         setStatus('wifi-status', e.message, 'error');
       }
     }
+
+    // ── Auto-try HTTP on load ──
+    (async () => {
+      try {
+        const ok = await connMgr.autoConnect();
+        if (ok) {
+          setStatus('wifi-conn-status', 'Device found automatically', 'ok');
+          updateTransportBadges();
+          setTimeout(() => goStep(1), 1200);
+        }
+      } catch (_) {}
+    })();
   </script>
 </body>
 </html>
