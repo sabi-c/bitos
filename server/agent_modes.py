@@ -67,6 +67,11 @@ and check calendar events. For ANY action that sends a message or email, you MUS
 use request_approval first to confirm with the user before sending. Never send
 messages without explicit user approval. Reading messages/emails/calendar is fine
 without approval.
+
+MUSIC: You can control Spotify playback — play/pause/skip, search for music, queue
+tracks, check what's playing, view playlists, and adjust volume. When the user asks
+to play something, search for it and play the top result. If music is currently
+playing, it appears in your context as [NOW PLAYING].
 """.strip()
 
 

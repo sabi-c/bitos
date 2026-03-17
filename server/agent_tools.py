@@ -396,6 +396,131 @@ DEVICE_TOOLS = [
     },
 ]
 
+# ── Music Tools (Spotify integration) ──────────────────────────────────
+
+MUSIC_TOOLS = [
+    {
+        "name": "play_music",
+        "description": (
+            "Play music on Spotify. Searches for the given query and plays the "
+            "top result. If no query given, resumes current playback."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Song name, artist, or description to search and play. Omit to resume.",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "pause_music",
+        "description": "Pause the currently playing music on Spotify.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
+        "name": "skip_track",
+        "description": "Skip to the next track on Spotify.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
+        "name": "previous_track",
+        "description": "Go back to the previous track on Spotify.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
+        "name": "get_now_playing",
+        "description": (
+            "Get what's currently playing on Spotify. Returns track name, "
+            "artist, album, progress, and duration."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
+        "name": "queue_track",
+        "description": (
+            "Search for a track and add it to the Spotify playback queue."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Song name or artist to search and queue.",
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "search_music",
+        "description": (
+            "Search Spotify for tracks, artists, albums, or playlists. "
+            "Returns up to 5 results with names and URIs."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query.",
+                },
+                "type": {
+                    "type": "string",
+                    "enum": ["track", "artist", "album", "playlist"],
+                    "description": "What to search for (default: track).",
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "get_playlists",
+        "description": "List the user's Spotify playlists.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
+        "name": "set_music_volume",
+        "description": "Set Spotify playback volume (0-100).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "level": {
+                    "type": "integer",
+                    "description": "Volume level 0-100.",
+                },
+            },
+            "required": ["level"],
+        },
+    },
+]
+
+# Combine all tools — music tools are appended to DEVICE_TOOLS
+DEVICE_TOOLS = DEVICE_TOOLS + MUSIC_TOOLS
+
 
 # ── Setting validation ───────────────────────────────────────────────────
 
@@ -572,6 +697,34 @@ def _handle_tool_call_inner(
     if tool_name == "get_tasks":
         return _get_tasks(tool_input)
 
+    # ── Music tools (Spotify) ────────────────────────────────────────
+    if tool_name == "play_music":
+        return _play_music(tool_input)
+
+    if tool_name == "pause_music":
+        return _pause_music(tool_input)
+
+    if tool_name == "skip_track":
+        return _skip_track(tool_input)
+
+    if tool_name == "previous_track":
+        return _previous_track(tool_input)
+
+    if tool_name == "get_now_playing":
+        return _get_now_playing(tool_input)
+
+    if tool_name == "queue_track":
+        return _queue_track(tool_input)
+
+    if tool_name == "search_music":
+        return _search_music(tool_input)
+
+    if tool_name == "get_playlists":
+        return _get_playlists_tool(tool_input)
+
+    if tool_name == "set_music_volume":
+        return _set_music_volume(tool_input)
+
     return json.dumps({"error": f"Unknown tool: {tool_name}"})
 
 
@@ -582,6 +735,7 @@ import subprocess
 _bb: object | None = None
 _gmail: object | None = None
 _vikunja: object | None = None
+_spotify: object | None = None
 
 
 def _get_bb():
@@ -606,6 +760,14 @@ def _get_vikunja():
         from integrations.vikunja_adapter import VikunjaAdapter
         _vikunja = VikunjaAdapter()
     return _vikunja
+
+
+def _get_spotify():
+    global _spotify
+    if _spotify is None:
+        from integrations.spotify_adapter import get_spotify
+        _spotify = get_spotify()
+    return _spotify
 
 
 # ── Messaging tool handlers ─────────────────────────────────────────────
@@ -906,3 +1068,155 @@ def _get_tasks(tool_input: dict) -> str:
     except Exception as exc:
         logger.warning("get_tasks_error: %s", exc)
         return json.dumps({"error": f"Failed to get tasks: {exc}"})
+
+
+# ── Music tool handlers (Spotify) ───────────────────────────────────────
+
+def _play_music(tool_input: dict) -> str:
+    sp = _get_spotify()
+    if not sp.available:
+        return json.dumps({"error": "Spotify not connected. Visit /spotify/auth to authenticate."})
+
+    query = tool_input.get("query", "").strip()
+    if not query:
+        # Resume playback
+        ok = sp.play()
+        if ok:
+            return json.dumps({"success": True, "action": "resumed"})
+        return json.dumps({"error": "Failed to resume playback"})
+
+    # Search and play top result
+    results = sp.search(query, search_type="track", limit=1)
+    if not results:
+        return json.dumps({"error": f"No results for '{query}'"})
+
+    track = results[0]
+    ok = sp.play(uri=track["uri"])
+    if ok:
+        logger.info("music_play: %s by %s", track["name"], track.get("artist", ""))
+        return json.dumps({
+            "success": True,
+            "action": "playing",
+            "track": track["name"],
+            "artist": track.get("artist", ""),
+            "uri": track["uri"],
+        })
+    return json.dumps({"error": f"Failed to play '{track['name']}'"})
+
+
+def _pause_music(tool_input: dict) -> str:
+    sp = _get_spotify()
+    if not sp.available:
+        return json.dumps({"error": "Spotify not connected"})
+
+    ok = sp.pause()
+    if ok:
+        return json.dumps({"success": True, "action": "paused"})
+    return json.dumps({"error": "Failed to pause"})
+
+
+def _skip_track(tool_input: dict) -> str:
+    sp = _get_spotify()
+    if not sp.available:
+        return json.dumps({"error": "Spotify not connected"})
+
+    ok = sp.skip()
+    if ok:
+        return json.dumps({"success": True, "action": "skipped"})
+    return json.dumps({"error": "Failed to skip"})
+
+
+def _previous_track(tool_input: dict) -> str:
+    sp = _get_spotify()
+    if not sp.available:
+        return json.dumps({"error": "Spotify not connected"})
+
+    ok = sp.previous()
+    if ok:
+        return json.dumps({"success": True, "action": "previous"})
+    return json.dumps({"error": "Failed to go to previous track"})
+
+
+def _get_now_playing(tool_input: dict) -> str:
+    sp = _get_spotify()
+    if not sp.available:
+        return json.dumps({"error": "Spotify not connected"})
+
+    now = sp.get_now_playing()
+    if not now:
+        return json.dumps({"playing": False, "message": "Nothing is currently playing"})
+
+    progress_s = now.get("progress_ms", 0) // 1000
+    duration_s = now.get("duration_ms", 0) // 1000
+    return json.dumps({
+        "playing": now.get("is_playing", False),
+        "track": now.get("track", ""),
+        "artist": now.get("artist", ""),
+        "album": now.get("album", ""),
+        "progress": f"{progress_s // 60}:{progress_s % 60:02d}",
+        "duration": f"{duration_s // 60}:{duration_s % 60:02d}",
+        "uri": now.get("uri", ""),
+    })
+
+
+def _queue_track(tool_input: dict) -> str:
+    sp = _get_spotify()
+    if not sp.available:
+        return json.dumps({"error": "Spotify not connected"})
+
+    query = tool_input.get("query", "").strip()
+    if not query:
+        return json.dumps({"error": "query is required"})
+
+    results = sp.search(query, search_type="track", limit=1)
+    if not results:
+        return json.dumps({"error": f"No results for '{query}'"})
+
+    track = results[0]
+    ok = sp.queue_track(track["uri"])
+    if ok:
+        return json.dumps({
+            "success": True,
+            "action": "queued",
+            "track": track["name"],
+            "artist": track.get("artist", ""),
+        })
+    return json.dumps({"error": f"Failed to queue '{track['name']}'"})
+
+
+def _search_music(tool_input: dict) -> str:
+    sp = _get_spotify()
+    if not sp.available:
+        return json.dumps({"error": "Spotify not connected"})
+
+    query = tool_input.get("query", "").strip()
+    search_type = tool_input.get("type", "track")
+    if not query:
+        return json.dumps({"error": "query is required"})
+
+    results = sp.search(query, search_type=search_type, limit=5)
+    return json.dumps({"results": results, "count": len(results), "type": search_type})
+
+
+def _get_playlists_tool(tool_input: dict) -> str:
+    sp = _get_spotify()
+    if not sp.available:
+        return json.dumps({"error": "Spotify not connected"})
+
+    playlists = sp.get_playlists(limit=20)
+    return json.dumps({"playlists": playlists, "count": len(playlists)})
+
+
+def _set_music_volume(tool_input: dict) -> str:
+    sp = _get_spotify()
+    if not sp.available:
+        return json.dumps({"error": "Spotify not connected"})
+
+    level = tool_input.get("level", 50)
+    if not isinstance(level, int) or level < 0 or level > 100:
+        return json.dumps({"error": "level must be an integer 0-100"})
+
+    ok = sp.set_volume(level)
+    if ok:
+        return json.dumps({"success": True, "volume": level})
+    return json.dumps({"error": f"Failed to set volume to {level}"})

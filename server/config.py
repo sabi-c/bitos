@@ -29,3 +29,8 @@ OPENCLAW_MODEL = os.environ.get("OPENCLAW_MODEL", "openclaw-default")
 NANOCLAW_API_KEY = os.environ.get("NANOCLAW_API_KEY", "")
 NANOCLAW_BASE_URL = os.environ.get("NANOCLAW_BASE_URL", "https://api.nanoclaw.example/v1")
 NANOCLAW_MODEL = os.environ.get("NANOCLAW_MODEL", "nanoclaw-default")
+
+# Spotify integration
+SPOTIFY_CLIENT_ID = os.environ.get("SPOTIFY_CLIENT_ID", "")
+SPOTIFY_CLIENT_SECRET = os.environ.get("SPOTIFY_CLIENT_SECRET", "")
+SPOTIFY_REDIRECT_URI = os.environ.get("SPOTIFY_REDIRECT_URI", "http://localhost:8000/callback/spotify")
