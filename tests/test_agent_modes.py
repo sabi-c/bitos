@@ -28,7 +28,7 @@ class _CapturingBridge:
     def __init__(self):
         self.calls = []
 
-    def stream_text(self, message: str, system_prompt: str | None = None, model_override: str | None = None, extended_thinking: bool = False):
+    def stream_text(self, message: str, system_prompt: str | None = None, model_override: str | None = None, extended_thinking: bool = False, messages: list | None = None):
         self.calls.append({"message": message, "system_prompt": system_prompt, "model_override": model_override})
         yield "ok"
 

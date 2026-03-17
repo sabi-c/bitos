@@ -28,17 +28,17 @@ class FocusPanelTests(unittest.TestCase):
         self.assertFalse(panel.is_running)
         self.assertEqual(panel.remaining_seconds, 120)
 
-        panel.handle_action("LONG_PRESS")  # activate START
+        panel.handle_action("DOUBLE_PRESS")  # activate START (focused item 0)
         self.assertTrue(panel.is_running)
 
         panel.update(1.2)
         self.assertEqual(panel.remaining_seconds, 119)
 
-        panel.handle_action("LONG_PRESS")  # activate PAUSE
+        panel.handle_action("DOUBLE_PRESS")  # activate PAUSE (still item 0)
         self.assertFalse(panel.is_running)
 
         panel.handle_action("SHORT_PRESS")  # move to RESET
-        panel.handle_action("LONG_PRESS")  # activate RESET
+        panel.handle_action("DOUBLE_PRESS")  # activate RESET
         self.assertEqual(panel.remaining_seconds, 120)
         self.assertFalse(panel.is_running)
 
@@ -49,13 +49,13 @@ class FocusPanelTests(unittest.TestCase):
             called["count"] += 1
 
         panel = FocusPanel(on_back=on_back)
-        panel.handle_action("DOUBLE_PRESS")  # DOUBLE_PRESS = back
+        panel.handle_action("LONG_PRESS")  # LONG_PRESS = back
 
         self.assertEqual(called["count"], 1)
 
     def test_timer_stops_at_zero(self):
         panel = FocusPanel(duration_seconds=61)
-        panel.handle_action("LONG_PRESS")  # activate START
+        panel.handle_action("DOUBLE_PRESS")  # activate START
 
         panel.update(70.0)
 

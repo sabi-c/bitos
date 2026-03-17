@@ -54,8 +54,9 @@ class CompositeScreenTests(unittest.TestCase):
         """Status bar renders white rectangle at top."""
         cs = CompositeScreen()
         cs.render(self.surface)
-        # Status bar is white bg — pixel at (120, 21) should be white (SAFE_INSET=16)
-        color = self.surface.get_at((120, 21))
+        # Status bar is white bg — pixel at (120, 18) should be white
+        # (bar starts at y=SAFE_INSET=16; avoid y>=20 where text glyphs land)
+        color = self.surface.get_at((120, 18))
         self.assertEqual((color.r, color.g, color.b), (255, 255, 255))
 
     def test_render_draws_sidebar(self):

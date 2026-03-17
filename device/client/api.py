@@ -148,11 +148,18 @@ class BackendClient:
             logging.debug("battery_read_failed error=%s", exc)
 
         try:
-            return self._stream_chat_sse(message, mode, tasks_today, battery_pct, web_search, memory, ai_model, location, volume, voice_enabled, voice_mode, extended_thinking)
+            gen = self._stream_chat_sse(message, mode, tasks_today, battery_pct, web_search, memory, ai_model, location, volume, voice_enabled, voice_mode, extended_thinking)
+            # Eagerly start the generator so connection errors are caught here
+            first = next(gen)
+        except StopIteration:
+            return iter([])  # type: ignore[return-value]
         except Exception as exc:
             kind, message_copy = self._http_error_message(exc)
             retryable = kind in {"offline", "timeout", "network", "server"}
             return {"error": message_copy, "kind": kind, "retryable": retryable}
+
+        import itertools
+        return itertools.chain([first], gen)
 
     def _stream_chat_sse(
         self,

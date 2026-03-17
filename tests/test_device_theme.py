@@ -24,7 +24,7 @@ class DeviceThemeTests(unittest.TestCase):
     def test_merge_runtime_ui_settings_defaults(self):
         merged = merge_runtime_ui_settings(None)
         self.assertEqual(merged["font_family"], "press_start_2p")
-        self.assertEqual(merged["font_size_overrides"]["body"], 12)
+        self.assertEqual(merged["font_size_overrides"]["body"], 17)
 
     def test_scaled_font_size(self):
         merged = merge_runtime_ui_settings({"font_scale": 1.5, "font_size_overrides": {"body": 10}})
