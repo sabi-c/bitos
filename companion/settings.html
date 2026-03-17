@@ -2345,6 +2345,225 @@
       setTimeout(() => setTestBtn('vk-test-btn', '', 'SAVE & TEST CONNECTION'), 3000);
     }
 
+    // ── WiFi network management ─────────────────────────────
+
+    let _wifiSecurity = 'WPA2';
+
+    function setWifiSecurity(val, btn) {
+      _wifiSecurity = val;
+      const picker = document.getElementById('wifi-security-picker');
+      picker.querySelectorAll('.picker-opt').forEach(b =>
+        b.classList.toggle('active', b.dataset.value === val));
+    }
+
+    async function addWifiNetwork() {
+      const ssid = document.getElementById('wifi-new-ssid').value.trim();
+      const password = document.getElementById('wifi-new-password').value;
+      const priority = parseInt(document.getElementById('wifi-priority').value) || 100;
+      const statusEl = document.getElementById('wifi-add-status');
+
+      if (!ssid) {
+        statusEl.textContent = 'SSID required';
+        statusEl.className = 'status error';
+        return;
+      }
+
+      // Try device provisioning endpoint first, then server
+      const endpoints = [
+        `${getDeviceUrl()}/api/wifi/config`,
+        `${SERVER}/wifi/config`,
+      ];
+
+      for (const url of endpoints) {
+        try {
+          const r = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ssid, password, security: _wifiSecurity, priority }),
+            signal: AbortSignal.timeout(5000),
+          });
+          if (r.ok) {
+            const d = await r.json();
+            if (d.ok) {
+              statusEl.textContent = 'Added: ' + ssid;
+              statusEl.className = 'status ok';
+              document.getElementById('wifi-new-ssid').value = '';
+              document.getElementById('wifi-new-password').value = '';
+              refreshWifiNetworks();
+              return;
+            }
+          }
+        } catch (_) {}
+      }
+      statusEl.textContent = 'Failed to add network';
+      statusEl.className = 'status error';
+    }
+
+    async function removeWifiNetwork(ssid) {
+      if (!confirm('Remove network: ' + ssid + '?')) return;
+      try {
+        const r = await fetch(`${getDeviceUrl()}/api/wifi/remove`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ssid }),
+          signal: AbortSignal.timeout(5000),
+        });
+        if (r.ok) {
+          showToast('REMOVED: ' + ssid);
+          refreshWifiNetworks();
+        }
+      } catch (_) {
+        showToast('FAILED TO REMOVE');
+      }
+    }
+
+    async function refreshWifiNetworks() {
+      const list = document.getElementById('wifi-saved-list');
+      try {
+        const r = await fetch(`${getDeviceUrl()}/api/wifi/networks`, { signal: AbortSignal.timeout(3000) });
+        if (r.ok) {
+          const d = await r.json();
+          list.textContent = '';
+          if (!d.networks || d.networks.length === 0) {
+            list.innerHTML = '<div style="font-size:11px;color:#555;padding:4px 0">No saved networks</div>';
+            return;
+          }
+          for (const net of d.networks) {
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #1a1a1a';
+            const info = document.createElement('span');
+            info.style.cssText = 'font-size:12px;color:#ccc';
+            info.textContent = net.ssid + (net.priority ? ' (pri:' + net.priority + ')' : '');
+            const rmBtn = document.createElement('button');
+            rmBtn.style.cssText = 'background:none;border:1px solid #444;color:#888;font-size:9px;padding:3px 8px;cursor:pointer;font-family:monospace';
+            rmBtn.textContent = 'REMOVE';
+            rmBtn.onclick = () => removeWifiNetwork(net.ssid);
+            row.appendChild(info);
+            row.appendChild(rmBtn);
+            list.appendChild(row);
+          }
+        }
+      } catch (_) {
+        list.innerHTML = '<div style="font-size:11px;color:#555;padding:4px 0">Cannot reach device</div>';
+      }
+    }
+
+    function getDeviceUrl() {
+      const ip = localStorage.getItem('bitos_device_ip') || 'bitos.local';
+      const port = localStorage.getItem('bitos_device_port') || '8080';
+      return 'http://' + ip + ':' + port;
+    }
+
+    // ── Location management ─────────────────────────────────
+
+    async function saveLocation() {
+      const city = document.getElementById('location-city').value.trim();
+      const tz = document.getElementById('location-timezone-input').value.trim();
+
+      if (city) {
+        const geoData = JSON.stringify({ city: city, region: '', country: '' });
+        mgr.setSetting('geolocation', geoData);
+      }
+      if (tz) {
+        mgr.setSetting('timezone', tz);
+      }
+      showToast('LOCATION SAVED');
+    }
+
+    // ── PIN change ─────────────────────────────────────────
+
+    function showPinChange() {
+      const fields = document.getElementById('pin-change-fields');
+      fields.style.display = fields.style.display === 'none' ? 'block' : 'none';
+    }
+
+    async function submitPinChange() {
+      const current = document.getElementById('pin-current').value;
+      const newPin = document.getElementById('pin-new').value;
+      const confirm = document.getElementById('pin-confirm').value;
+      const statusEl = document.getElementById('pin-status');
+
+      if (!current || current.length !== 4) {
+        statusEl.textContent = 'Enter current 4-digit PIN';
+        statusEl.className = 'status error';
+        return;
+      }
+      if (!newPin || newPin.length !== 4) {
+        statusEl.textContent = 'New PIN must be 4 digits';
+        statusEl.className = 'status error';
+        return;
+      }
+      if (newPin !== confirm) {
+        statusEl.textContent = 'PINs do not match';
+        statusEl.className = 'status error';
+        return;
+      }
+
+      try {
+        const r = await fetch(`${SERVER}/settings/device`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: 'device_pin', value: newPin, current_pin: current }),
+          signal: AbortSignal.timeout(5000),
+        });
+        if (r.ok) {
+          statusEl.textContent = 'PIN changed';
+          statusEl.className = 'status ok';
+          document.getElementById('pin-current').value = '';
+          document.getElementById('pin-new').value = '';
+          document.getElementById('pin-confirm').value = '';
+          setTimeout(() => { document.getElementById('pin-change-fields').style.display = 'none'; }, 2000);
+        } else {
+          const err = await r.json().catch(() => ({}));
+          statusEl.textContent = err.detail || 'Failed';
+          statusEl.className = 'status error';
+        }
+      } catch (_) {
+        statusEl.textContent = 'Server unreachable';
+        statusEl.className = 'status error';
+      }
+    }
+
+    // ── Generic API key save ────────────────────────────────
+
+    async function saveApiKey(integration, inputId, envKey, btnId, statusId) {
+      const key = document.getElementById(inputId).value.trim();
+      if (!key) {
+        document.getElementById(statusId).textContent = 'API key required';
+        document.getElementById(statusId).className = 'setup-status err';
+        return;
+      }
+      setTestBtn(btnId, 'testing', 'SAVING...');
+      try {
+        const r = await fetch(`${SERVER}/settings/integrations`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ integration, config: { api_key: key, env_key: envKey } }),
+          signal: AbortSignal.timeout(10000),
+        });
+        if (r.ok) {
+          const d = await r.json();
+          if (d.ok) {
+            setTestBtn(btnId, 'pass', 'SAVED');
+            document.getElementById(inputId).value = '';
+            document.getElementById(statusId).textContent = 'CONFIGURED';
+            document.getElementById(statusId).className = 'setup-status ok';
+          } else {
+            setTestBtn(btnId, 'fail', 'FAILED');
+            document.getElementById(statusId).textContent = d.error || 'Unknown error';
+            document.getElementById(statusId).className = 'setup-status err';
+          }
+        } else {
+          setTestBtn(btnId, 'fail', 'ERROR');
+        }
+      } catch (e) {
+        setTestBtn(btnId, 'fail', 'ERROR');
+        document.getElementById(statusId).textContent = e.message || 'Unreachable';
+        document.getElementById(statusId).className = 'setup-status err';
+      }
+      setTimeout(() => setTestBtn(btnId, '', integration === 'openai' ? 'SAVE & TEST CONNECTION' : 'SAVE KEY'), 3000);
+    }
+
     // ── BLE availability check ─────────────────────────────
     if (!isBleAvailable()) {
       document.getElementById('btn-ble-connect').style.display = 'none';
