@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pygame
 
-from device.display.theme import get_font
-from device.display.tokens import WHITE, BLACK, DIM2, DIM3, DIM4, HAIRLINE
+from display.theme import get_font
+from display.tokens import WHITE, BLACK, DIM2, DIM3, DIM4, HAIRLINE
 
 
 ITEM_H = 22

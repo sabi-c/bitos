@@ -35,11 +35,11 @@ from enum import Enum
 
 import pygame
 
-from device.display.tokens import PHYSICAL_W, PHYSICAL_H, SIDEBAR_W, CONTENT_W, STATUS_BAR_H, SAFE_INSET
-from device.ui.components.sidebar import Sidebar, ITEMS, SIDEBAR_W_COLLAPSED
-from device.ui.components.status_bar import StatusBar
-from device.ui.components.action_bar import ActionBar
-from device.screens.base import BaseScreen
+from display.tokens import PHYSICAL_W, PHYSICAL_H, SIDEBAR_W, CONTENT_W, STATUS_BAR_H, SAFE_INSET
+from ui.components.sidebar import Sidebar, ITEMS, SIDEBAR_W_COLLAPSED
+from ui.components.status_bar import StatusBar
+from ui.components.action_bar import ActionBar
+from screens.base import BaseScreen
 
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
@@ -184,7 +184,7 @@ class CompositeScreen(BaseScreen):
         # Ease-out: fast start, gentle settle
         t = self._sidebar_scroll_progress
         eased = 1.0 - (1.0 - t) ** 2
-        from device.ui.components.sidebar import ITEM_H
+        from ui.components.sidebar import ITEM_H
         from_y = self._sidebar_scroll_from * ITEM_H
         to_y = self._sidebar_scroll_to * ITEM_H
         return from_y + (to_y - from_y) * eased - to_y  # delta from target
@@ -224,7 +224,7 @@ class CompositeScreen(BaseScreen):
 
         # Sidebar flash overlay: brief white highlight fading on newly selected item
         if self._flash_timer > 0.0:
-            from device.ui.components.sidebar import ITEM_H
+            from ui.components.sidebar import ITEM_H
             flash_alpha = int(80 * (self._flash_timer / FLASH_DURATION_S))
             flash_y = CONTENT_TOP + self._sidebar.selected_index * ITEM_H
             flash_surf = pygame.Surface((sb_w - 2, ITEM_H))
@@ -322,7 +322,7 @@ class CompositeScreen(BaseScreen):
             # If panel is in a recording state, route LONG to panel (cancel), not exit
             panel = self._active_panel()
             if panel and hasattr(panel, '_rec_state'):
-                from device.ui.panels.chat_preview import RecState
+                from ui.panels.chat_preview import RecState
                 if panel._rec_state in (RecState.RECORDING, RecState.ERROR):
                     panel.handle_action(action)
                     self._update_rec_action_hints(panel)
@@ -395,7 +395,7 @@ class CompositeScreen(BaseScreen):
 
     def _update_rec_action_hints(self, panel) -> None:
         """Update action bar for recording states."""
-        from device.ui.panels.chat_preview import RecState
+        from ui.panels.chat_preview import RecState
         if panel._rec_state == RecState.RECORDING:
             self._action_bar.set_actions(self._REC_ACTIONS)
         elif panel._rec_state in (RecState.TRANSCRIBING, RecState.LAUNCHING):

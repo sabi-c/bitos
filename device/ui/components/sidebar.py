@@ -5,8 +5,8 @@ Matches bitos-nav-v2.html .sidebar specification.
 
 import pygame
 
-from device.display.theme import get_font
-from device.display.tokens import (
+from display.theme import get_font
+from display.tokens import (
     WHITE, BLACK,
     GRAY_44, GRAY_AA, GRAY_08, GRAY_0A,
 )

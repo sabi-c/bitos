@@ -9,8 +9,8 @@ from datetime import datetime
 
 import pygame
 
-from device.display.theme import get_font
-from device.display.tokens import FONT_SIZE_STATUS_BAR, WHITE, BLACK, HAIRLINE
+from display.theme import get_font
+from display.tokens import FONT_SIZE_STATUS_BAR, WHITE, BLACK, HAIRLINE
 
 BAR_H = 20
 FONT_SIZE = FONT_SIZE_STATUS_BAR

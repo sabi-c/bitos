@@ -89,7 +89,7 @@ class BootDiagnostics:
         if mode == "mock":
             return True
         try:
-            from device.power import BatteryMonitor
+            from power import BatteryMonitor
 
             status = BatteryMonitor().get_status()
             return bool(status)

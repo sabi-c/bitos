@@ -7,9 +7,9 @@ from __future__ import annotations
 
 import pygame
 
-from device.display.theme import get_font
-from device.display.tokens import WHITE, HAIRLINE
-from device.ui.panels.base import PreviewPanel
+from display.theme import get_font
+from display.tokens import WHITE, HAIRLINE
+from ui.panels.base import PreviewPanel
 
 
 TITLE_FONT_SIZE = 10

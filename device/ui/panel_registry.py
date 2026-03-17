@@ -6,14 +6,14 @@ action callbacks from main.py.
 Sidebar items: HOME, CHAT, TASKS, ACTIVITY, COMMS, FILES, RECORD, SETTINGS, FOCUS
 """
 
-from device.ui.panels.chat_preview import ChatPreviewPanel
-from device.ui.panels.tasks_preview import TasksPreviewPanel
-from device.ui.panels.home_preview import HomePreviewPanel
-from device.ui.panels.activity_preview import ActivityPreviewPanel
-from device.ui.panels.comms_preview import CommsPreviewPanel
-from device.ui.panels.settings_preview import SettingsPreviewPanel
-from device.ui.panels.field_recording_panel import FieldRecordingPanel
-from device.ui.panels.generic_preview import GenericPreviewPanel
+from ui.panels.chat_preview import ChatPreviewPanel
+from ui.panels.tasks_preview import TasksPreviewPanel
+from ui.panels.home_preview import HomePreviewPanel
+from ui.panels.activity_preview import ActivityPreviewPanel
+from ui.panels.comms_preview import CommsPreviewPanel
+from ui.panels.settings_preview import SettingsPreviewPanel
+from ui.panels.field_recording_panel import FieldRecordingPanel
+from ui.panels.generic_preview import GenericPreviewPanel
 
 
 # Generic configs for items that don't have custom panels yet.

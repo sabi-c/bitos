@@ -14,10 +14,10 @@ from enum import Enum, auto
 
 import pygame
 
-from device.display.theme import get_font
-from device.display.tokens import DIM2, DIM3, HAIRLINE, WHITE
-from device.ui.panels.base import PreviewPanel, ITEM_H, PAD_X, PAD_Y, FONT_SIZE
-from device.recordings import RecordingStore, Recording
+from display.theme import get_font
+from display.tokens import DIM2, DIM3, HAIRLINE, WHITE
+from ui.panels.base import PreviewPanel, ITEM_H, PAD_X, PAD_Y, FONT_SIZE
+from recordings import RecordingStore, Recording
 
 
 TITLE_FONT_SIZE = 10

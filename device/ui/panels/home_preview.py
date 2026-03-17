@@ -10,9 +10,9 @@ from datetime import datetime
 
 import pygame
 
-from device.display.theme import get_font
-from device.display.tokens import WHITE, DIM2, DIM3, DIM4, HAIRLINE
-from device.ui.panels.base import PreviewPanel
+from display.theme import get_font
+from display.tokens import WHITE, DIM2, DIM3, DIM4, HAIRLINE
+from ui.panels.base import PreviewPanel
 
 
 TIME_FONT = 26

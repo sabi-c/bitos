@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pygame
 
-from device.display.theme import get_font
-from device.display.tokens import DIM3, WHITE
+from display.theme import get_font
+from display.tokens import DIM3, WHITE
 
 ACCENT_W = 4
 PAD_X = 6

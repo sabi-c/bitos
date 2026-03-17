@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import pygame
 
-from device.display.theme import get_font
-from device.display.tokens import WHITE, DIM2, DIM3, HAIRLINE
-from device.ui.panels.base import PreviewPanel
+from display.theme import get_font
+from display.tokens import WHITE, DIM2, DIM3, HAIRLINE
+from ui.panels.base import PreviewPanel
 
 
 HEADER_H = 44

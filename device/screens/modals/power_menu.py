@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pygame
 
-from device.screens.base import Screen
+from screens.base import Screen
 
 
 class PowerMenuModal(Screen):

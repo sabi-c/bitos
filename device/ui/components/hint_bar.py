@@ -5,8 +5,8 @@ Matches bitos-nav-v2.html .kh specification.
 
 import pygame
 
-from device.display.theme import get_font
-from device.display.tokens import FONT_SIZE_HINT, GRAY_11, GRAY_0A
+from display.theme import get_font
+from display.tokens import FONT_SIZE_HINT, GRAY_11, GRAY_0A
 
 SEP_COLOR = GRAY_0A
 
