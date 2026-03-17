@@ -58,6 +58,8 @@ from integrations.gmail_adapter import GmailAdapter
 from notifications.dispatcher import NotificationDispatcher
 from notifications.integration_bridge import IntegrationBridge
 from notifications.queue_store import QueueStore
+from notifications.router import DeliveryRouter
+from notifications.voice_summary import build_summary, build_detail
 from notifications.ws_handler import DeviceWSHandler
 
 from agent_modes import get_system_prompt
@@ -423,6 +425,7 @@ _notif_db_path = str(SERVER_DIR / "data" / "notifications.db")
 os.makedirs(os.path.dirname(_notif_db_path), exist_ok=True)
 _notif_store = QueueStore(_notif_db_path)
 _notif_dispatcher = NotificationDispatcher(_notif_store)
+_delivery_router = DeliveryRouter()
 _device_ws = DeviceWSHandler(_notif_dispatcher)
 
 # ── Heartbeat (proactive agent) ──
@@ -1276,6 +1279,22 @@ async def get_dashboard():
             "provider": llm_bridge.provider,
             "model": llm_bridge.model,
         },
+    }
+
+
+@app.get("/notifications/summary")
+async def get_notifications_summary():
+    """'What did I miss?' — voice-friendly summary of pending notifications.
+
+    Returns a summary string suitable for TTS readout plus per-item details.
+    """
+    pending = _notif_store.get_pending()
+    summary = build_summary(pending)
+    details = build_detail(pending, max_items=5)
+    return {
+        "count": len(pending),
+        "summary": summary,
+        "details": details,
     }
 
 
