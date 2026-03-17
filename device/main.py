@@ -63,7 +63,7 @@ import display.tokens as tokens
 from display.tokens import FPS
 from input.handler import ButtonEvent, create_button_handler
 from notifications import NotificationPoller
-from overlays import AgentOverlay, NotificationQueue, NotificationToast, QROverlay
+from overlays import AgentOverlay, BlobOverlay, NotificationQueue, NotificationToast, QROverlay
 from overlays.notification_banner import NotificationBanner
 from bluetooth import AuthManager, get_gatt_server
 from bluetooth.characteristics import DeviceInfoCharacteristic, DeviceStatusCharacteristic, WiFiStatusCharacteristic
@@ -291,6 +291,15 @@ def main():
     corner_mask = CornerMask()
 
     audio_pipeline = get_audio_pipeline()
+
+    # SharedAudioStream for multi-consumer mic access (voice recorder, wake word)
+    shared_stream = None
+    try:
+        from audio.shared_stream import SharedAudioStream
+        shared_stream = SharedAudioStream()
+        logger.info("[Audio] SharedAudioStream created")
+    except Exception as exc:
+        logger.warning("[Audio] SharedAudioStream unavailable: %s", exc)
 
     # Soft-start ALSA speaker in background to prevent WM8960 pop/click
     def _alsa_soft_start():
@@ -1266,9 +1275,11 @@ def main():
             agent_overlay._dismiss()
             agent_overlay = None
             return
-        agent_overlay = AgentOverlay(
-            audio_pipeline=audio_pipeline,
+        # Use BlobOverlay (voice pipeline with animated blob) for triple-press
+        agent_overlay = BlobOverlay(
             client=client,
+            audio_pipeline=audio_pipeline,
+            shared_stream=shared_stream,
             led=led,
             on_dismiss=lambda: _clear_agent_overlay(),
         )
