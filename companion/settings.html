@@ -1419,7 +1419,7 @@
 
     async function loadVoiceCatalog() {
       try {
-        const resp = await fetch(`${serverUrl}/settings/voices`, { signal: AbortSignal.timeout(5000) });
+        const resp = await fetch(`${SERVER}/settings/voices`, { signal: AbortSignal.timeout(5000) });
         if (resp.ok) {
           voiceCatalog = await resp.json();
           renderVoicePicker();
@@ -1517,7 +1517,7 @@
       let params = {};
       try { params = JSON.parse(mgr.settings.voice_params || '{}'); } catch (_) {}
       try {
-        await fetch(`${serverUrl}/settings/device/test-voice`, {
+        await fetch(`${SERVER}/settings/device/test-voice`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: 'Hello! This is how I sound.', engine, voice_id, params }),
@@ -1536,7 +1536,7 @@
       };
       mgr.setSetting('typewriter_config', JSON.stringify(config));
       try {
-        await fetch(`${serverUrl}/settings/device/test-typewriter`, {
+        await fetch(`${SERVER}/settings/device/test-typewriter`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: 'The quick brown fox jumps over the lazy dog.', config }),
@@ -2933,6 +2933,8 @@
     renderSubAgents();
     applyDefaults();
     syncControls(mgr.settings, mgr.deviceStatus);
+    loadVoiceCatalog();
+    updateTypewriterVisibility();
 
     mgr.onChange((settings, status) => {
       syncControls(settings, status);
