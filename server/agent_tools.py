@@ -389,18 +389,18 @@ DEVICE_TOOLS = [
     {
         "name": "update_task",
         "description": (
-            "Update any field(s) on an existing task. Pass only the fields "
-            "you want to change."
+            "Update any field(s) on an existing task. Use get_tasks or get_task "
+            "first to find the task ID. Pass only the fields you want to change."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "task_id": {"type": "string", "description": "The task ID (tsk_...)."},
+                "task_id": {"type": "string", "description": "The task ID (tsk_... format)."},
                 "title": {"type": "string", "description": "New title."},
                 "notes": {"type": "string", "description": "New notes."},
-                "due_date": {"type": "string", "description": "New due date: YYYY-MM-DD."},
-                "due_time": {"type": "string", "description": "New due time: HH:MM."},
-                "reminder_at": {"type": "string", "description": "New reminder: ISO datetime."},
+                "due_date": {"type": "string", "description": "New due date: YYYY-MM-DD or null to clear."},
+                "due_time": {"type": "string", "description": "New due time: HH:MM or null to clear."},
+                "reminder_at": {"type": "string", "description": "New reminder: ISO datetime or null to clear."},
                 "priority": {"type": "integer", "enum": [1, 2, 3, 4], "description": "New priority."},
                 "status": {
                     "type": "string",
@@ -416,7 +416,7 @@ DEVICE_TOOLS = [
     {
         "name": "complete_task",
         "description": (
-            "Mark a task as complete/done. Sets completed_at timestamp. "
+            "Mark a task as complete/done. Requires the task ID (tsk_... format). "
             "Use get_tasks first to find the ID if the user refers to a task by name."
         ),
         "input_schema": {
@@ -424,7 +424,7 @@ DEVICE_TOOLS = [
             "properties": {
                 "task_id": {
                     "type": "string",
-                    "description": "The task ID (tsk_...).",
+                    "description": "The task ID (tsk_... format).",
                 },
             },
             "required": ["task_id"],
@@ -433,13 +433,13 @@ DEVICE_TOOLS = [
     {
         "name": "delete_task",
         "description": (
-            "Delete a task. By default soft-deletes (sets status to cancelled). "
-            "The task can still be found with status filter."
+            "Delete (cancel) a task. By default soft-deletes (marks cancelled). "
+            "Use get_tasks first to find the task ID."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "task_id": {"type": "string", "description": "The task ID (tsk_...)."},
+                "task_id": {"type": "string", "description": "The task ID to delete."},
             },
             "required": ["task_id"],
         },
@@ -447,15 +447,16 @@ DEVICE_TOOLS = [
     {
         "name": "add_subtask",
         "description": (
-            "Add a subtask to an existing task. Creates a new task with parent_id set."
+            "Add a subtask to an existing task. The subtask inherits the parent's project."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "parent_id": {"type": "string", "description": "Parent task ID (tsk_...)."},
+                "parent_id": {"type": "string", "description": "Parent task ID."},
                 "title": {"type": "string", "description": "Subtask title."},
-                "priority": {"type": "integer", "enum": [1, 2, 3, 4], "description": "Priority."},
-                "due_date": {"type": "string", "description": "Due date: YYYY-MM-DD."},
+                "notes": {"type": "string"},
+                "due_date": {"type": "string", "description": "YYYY-MM-DD."},
+                "priority": {"type": "integer", "enum": [1, 2, 3, 4]},
             },
             "required": ["parent_id", "title"],
         },
@@ -464,26 +465,23 @@ DEVICE_TOOLS = [
         "name": "get_tasks",
         "description": (
             "List tasks with flexible filtering. Returns task IDs, titles, "
-            "priorities, projects, due dates, and status."
+            "priority, due dates, projects, and status."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "status": {
+                "filter": {
                     "type": "string",
-                    "enum": ["todo", "in_progress", "waiting", "done", "cancelled"],
-                    "description": "Filter by status.",
+                    "enum": ["today", "all", "overdue", "project", "search"],
+                    "description": "Filter: 'today' (default), 'all', 'overdue', 'project', 'search'.",
                 },
-                "priority": {
+                "project": {"type": "string", "description": "Project name (for filter=project)."},
+                "query": {"type": "string", "description": "Search text (for filter=search)."},
+                "status": {"type": "string", "description": "Filter by status: todo, in_progress, waiting, done."},
+                "limit": {
                     "type": "integer",
-                    "enum": [1, 2, 3, 4],
-                    "description": "Filter by priority.",
+                    "description": "Max tasks to return (default 20, max 50).",
                 },
-                "project": {"type": "string", "description": "Filter by project name."},
-                "due_before": {"type": "string", "description": "Tasks due on or before YYYY-MM-DD."},
-                "due_after": {"type": "string", "description": "Tasks due on or after YYYY-MM-DD."},
-                "search": {"type": "string", "description": "Search in title and notes."},
-                "limit": {"type": "integer", "description": "Max tasks to return (default 20, max 50)."},
             },
             "required": [],
         },
@@ -511,12 +509,12 @@ DEVICE_TOOLS = [
             "type": "object",
             "properties": {
                 "task_id": {"type": "string", "description": "The task ID (tsk_...)."},
-                "reminder_at": {
+                "remind_at": {
                     "type": "string",
                     "description": "When to remind: ISO datetime YYYY-MM-DDTHH:MM:SS.",
                 },
             },
-            "required": ["task_id", "reminder_at"],
+            "required": ["task_id", "remind_at"],
         },
     },
     {
@@ -528,6 +526,22 @@ DEVICE_TOOLS = [
             "type": "object",
             "properties": {},
             "required": [],
+        },
+    },
+    {
+        "name": "update_living_doc",
+        "description": (
+            "Write or update the user's living document (weekly plan, daily log). "
+            "Read current content first, then edit as needed — add items, check off "
+            "completed tasks, add notes. Content is markdown."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "content": {"type": "string", "description": "Full markdown content for the document."},
+                "title": {"type": "string", "description": "Document title (default: 'Weekly Plan')."},
+            },
+            "required": ["content"],
         },
     },
 ]
@@ -901,13 +915,16 @@ def _handle_tool_call_inner(
         return _get_tasks(tool_input)
 
     if tool_name == "get_task":
-        return _get_task_detail(tool_input)
+        return _get_task(tool_input)
 
     if tool_name == "set_reminder":
         return _set_reminder(tool_input)
 
     if tool_name == "list_projects":
         return _list_projects(tool_input)
+
+    if tool_name == "update_living_doc":
+        return _update_living_doc(tool_input)
 
     # ── Music tools (Spotify) ────────────────────────────────────────
     if tool_name == "play_music":
@@ -972,7 +989,6 @@ def _sanitize_applescript(value: str) -> str:
 
 _bb: object | None = None
 _gmail: object | None = None
-_vikunja: object | None = None
 _spotify: object | None = None
 
 
@@ -990,14 +1006,6 @@ def _get_gmail():
         from integrations.gmail_adapter import GmailAdapter
         _gmail = GmailAdapter()
     return _gmail
-
-
-def _get_vikunja():
-    global _vikunja
-    if _vikunja is None:
-        from integrations.vikunja_adapter import VikunjaAdapter
-        _vikunja = VikunjaAdapter()
-    return _vikunja
 
 
 def _get_spotify():
@@ -1239,8 +1247,8 @@ def _create_task(tool_input: dict) -> str:
     if not title:
         return json.dumps({"error": "title is required"})
 
-    import task_store
     try:
+        import task_store
         task = task_store.create_task(
             title=title,
             notes=tool_input.get("notes", ""),
@@ -1251,8 +1259,8 @@ def _create_task(tool_input: dict) -> str:
             project=tool_input.get("project", "INBOX"),
             tags=tool_input.get("tags"),
             parent_id=tool_input.get("parent_id"),
+            source="agent",
         )
-        logger.info("task_created: id=%s title=%s", task["id"], title[:40])
         return json.dumps({"success": True, "task": task})
     except Exception as exc:
         logger.warning("create_task_error: %s", exc)
@@ -1264,13 +1272,12 @@ def _update_task(tool_input: dict) -> str:
     if not task_id:
         return json.dumps({"error": "task_id is required"})
 
-    import task_store
-    fields = {k: v for k, v in tool_input.items() if k != "task_id"}
+    fields = {k: v for k, v in tool_input.items() if k != "task_id" and v is not None}
     try:
+        import task_store
         task = task_store.update_task(task_id, **fields)
-        if task is None:
+        if not task:
             return json.dumps({"error": f"Task {task_id} not found"})
-        logger.info("task_updated: id=%s fields=%s", task_id, list(fields.keys()))
         return json.dumps({"success": True, "task": task})
     except Exception as exc:
         logger.warning("update_task_error: %s", exc)
@@ -1282,10 +1289,10 @@ def _complete_task(tool_input: dict) -> str:
     if not task_id:
         return json.dumps({"error": "task_id is required"})
 
-    import task_store
     try:
+        import task_store
         task = task_store.complete_task(str(task_id))
-        if task is None:
+        if not task:
             return json.dumps({"error": f"Task {task_id} not found"})
         logger.info("task_completed: id=%s", task_id)
         return json.dumps({"success": True, "task": task})
@@ -1299,9 +1306,9 @@ def _delete_task(tool_input: dict) -> str:
     if not task_id:
         return json.dumps({"error": "task_id is required"})
 
-    import task_store
     try:
-        ok = task_store.delete_task(task_id)
+        import task_store
+        ok = task_store.delete_task(str(task_id))
         if not ok:
             return json.dumps({"error": f"Task {task_id} not found"})
         logger.info("task_deleted: id=%s", task_id)
@@ -1317,21 +1324,20 @@ def _add_subtask(tool_input: dict) -> str:
     if not parent_id or not title:
         return json.dumps({"error": "parent_id and title are required"})
 
-    import task_store
     try:
-        # Verify parent exists
-        parent = task_store.get_task(parent_id)
-        if parent is None:
-            return json.dumps({"error": f"Parent task {parent_id} not found"})
-
-        task = task_store.create_task(
-            title=title,
-            priority=tool_input.get("priority", 3),
-            due_date=tool_input.get("due_date"),
+        import task_store
+        task = task_store.add_subtask(
             parent_id=parent_id,
+            title=title,
+            notes=tool_input.get("notes", ""),
+            due_date=tool_input.get("due_date"),
+            priority=tool_input.get("priority", 3),
+            source="agent",
         )
         logger.info("subtask_created: id=%s parent=%s title=%s", task["id"], parent_id, title[:40])
-        return json.dumps({"success": True, "subtask": task})
+        return json.dumps({"success": True, "task": task})
+    except ValueError as exc:
+        return json.dumps({"error": str(exc)})
     except Exception as exc:
         logger.warning("add_subtask_error: %s", exc)
         return json.dumps({"error": f"Failed to add subtask: {exc}"})
@@ -1339,35 +1345,43 @@ def _add_subtask(tool_input: dict) -> str:
 
 def _get_tasks(tool_input: dict) -> str:
     limit = min(tool_input.get("limit", 20), 50)
+    task_filter = tool_input.get("filter", "today")
 
-    import task_store
     try:
-        tasks = task_store.list_tasks(
-            status=tool_input.get("status"),
-            priority=tool_input.get("priority"),
-            project=tool_input.get("project"),
-            due_before=tool_input.get("due_before"),
-            due_after=tool_input.get("due_after"),
-            search=tool_input.get("search"),
-            limit=limit,
-        )
-        return json.dumps({"tasks": tasks, "count": len(tasks)})
+        import task_store
+        if task_filter == "today":
+            tasks = task_store.get_today_tasks()
+        elif task_filter == "all":
+            tasks = task_store.list_tasks(status=tool_input.get("status"), limit=limit)
+        elif task_filter == "overdue":
+            tasks = task_store.get_overdue_tasks()
+        elif task_filter == "project":
+            project = tool_input.get("project", "INBOX")
+            tasks = task_store.list_tasks(project=project, status=tool_input.get("status"), limit=limit)
+        elif task_filter == "search":
+            query = tool_input.get("query", "")
+            tasks = task_store.list_tasks(query=query, status=tool_input.get("status"), limit=limit)
+        else:
+            tasks = task_store.get_today_tasks()
+
+        tasks = tasks[:limit]
+        return json.dumps({"tasks": tasks, "count": len(tasks), "filter": task_filter})
     except Exception as exc:
         logger.warning("get_tasks_error: %s", exc)
         return json.dumps({"error": f"Failed to get tasks: {exc}"})
 
 
-def _get_task_detail(tool_input: dict) -> str:
+def _get_task(tool_input: dict) -> str:
     task_id = tool_input.get("task_id", "")
     if not task_id:
         return json.dumps({"error": "task_id is required"})
 
-    import task_store
     try:
-        task = task_store.get_task(task_id)
-        if task is None:
+        import task_store
+        task = task_store.get_task(str(task_id))
+        if not task:
             return json.dumps({"error": f"Task {task_id} not found"})
-        return json.dumps({"task": task})
+        return json.dumps({"success": True, "task": task})
     except Exception as exc:
         logger.warning("get_task_error: %s", exc)
         return json.dumps({"error": f"Failed to get task: {exc}"})
@@ -1375,20 +1389,16 @@ def _get_task_detail(tool_input: dict) -> str:
 
 def _set_reminder(tool_input: dict) -> str:
     task_id = tool_input.get("task_id", "")
-    reminder_at = tool_input.get("reminder_at", "")
-    if not task_id or not reminder_at:
-        return json.dumps({"error": "task_id and reminder_at are required"})
+    remind_at = tool_input.get("remind_at", "")
+    if not task_id or not remind_at:
+        return json.dumps({"error": "task_id and remind_at are required"})
 
-    import task_store
     try:
-        task = task_store.update_task(
-            task_id,
-            reminder_at=reminder_at,
-            reminder_fired=0,
-        )
-        if task is None:
+        import task_store
+        task = task_store.set_reminder(str(task_id), remind_at)
+        if not task:
             return json.dumps({"error": f"Task {task_id} not found"})
-        logger.info("reminder_set: id=%s at=%s", task_id, reminder_at)
+        logger.info("reminder_set: id=%s at=%s", task_id, remind_at)
         return json.dumps({"success": True, "task": task})
     except Exception as exc:
         logger.warning("set_reminder_error: %s", exc)
@@ -1396,13 +1406,30 @@ def _set_reminder(tool_input: dict) -> str:
 
 
 def _list_projects(tool_input: dict) -> str:
-    import task_store
     try:
+        import task_store
         projects = task_store.list_projects()
         return json.dumps({"projects": projects, "count": len(projects)})
     except Exception as exc:
         logger.warning("list_projects_error: %s", exc)
         return json.dumps({"error": f"Failed to list projects: {exc}"})
+
+
+def _update_living_doc(tool_input: dict) -> str:
+    content = tool_input.get("content", "")
+    if not content:
+        return json.dumps({"error": "content is required"})
+
+    try:
+        import task_store
+        doc = task_store.update_living_doc(
+            content=content,
+            title=tool_input.get("title", "Weekly Plan"),
+        )
+        return json.dumps({"success": True, "document": doc})
+    except Exception as exc:
+        logger.warning("update_living_doc_error: %s", exc)
+        return json.dumps({"error": f"Failed to update living doc: {exc}"})
 
 
 # ── Music tool handlers (Spotify) ───────────────────────────────────────

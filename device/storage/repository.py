@@ -10,7 +10,7 @@ from contextlib import closing
 
 
 DEFAULT_DB_PATH = "device/data/bitos.db"
-LATEST_SCHEMA_VERSION = 6
+LATEST_SCHEMA_VERSION = 7
 
 
 MIGRATIONS: dict[int, str] = {
@@ -113,6 +113,7 @@ MIGRATIONS: dict[int, str] = {
     CREATE INDEX IF NOT EXISTS idx_sessions_type_created
       ON sessions(session_type, created_at);
     """,
+    7: "",  # Handled by _ensure_tasks_enriched_columns below
 }
 
 
@@ -136,9 +137,13 @@ class DeviceRepository:
             self._ensure_version_table(conn)
             current = self.get_schema_version(conn)
             for version in range(current + 1, LATEST_SCHEMA_VERSION + 1):
-                conn.executescript(MIGRATIONS[version])
+                migration_sql = MIGRATIONS[version]
+                if migration_sql:
+                    conn.executescript(migration_sql)
                 if version >= 3:
                     self._ensure_tasks_due_date_column(conn)
+                if version >= 7:
+                    self._ensure_tasks_enriched_columns(conn)
                 conn.execute("UPDATE schema_version SET version = ?", (version,))
             conn.commit()
 
@@ -166,6 +171,34 @@ class DeviceRepository:
         if "due_date" not in col_names:
             conn.execute("ALTER TABLE tasks ADD COLUMN due_date TEXT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_due_completed ON tasks(completed, due_date)")
+
+    def _ensure_tasks_enriched_columns(self, conn: sqlite3.Connection) -> None:
+        """Migration 7: add enriched task columns to match server schema."""
+        task_table = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'"
+        ).fetchone()
+        if not task_table:
+            return
+        cols = conn.execute("PRAGMA table_info(tasks)").fetchall()
+        col_names = {str(row["name"]) for row in cols}
+        new_columns = {
+            "notes": "TEXT DEFAULT ''",
+            "priority": "INTEGER DEFAULT 3",
+            "status": "TEXT DEFAULT 'todo'",
+            "due_time": "TEXT",
+            "reminder_at": "TEXT",
+            "project": "TEXT DEFAULT 'INBOX'",
+            "tags": "TEXT DEFAULT '[]'",
+            "parent_id": "TEXT",
+            "source": "TEXT DEFAULT 'device'",
+            "things_id": "TEXT",
+            "completed_at": "TEXT",
+        }
+        for col, typedef in new_columns.items():
+            if col not in col_names:
+                conn.execute(f"ALTER TABLE tasks ADD COLUMN {col} {typedef}")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority, status)")
 
     def get_schema_version(self, conn: sqlite3.Connection | None = None) -> int:
         if conn is None:

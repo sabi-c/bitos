@@ -46,6 +46,7 @@ ACTIVE_HOURS_START = 8   # 8 AM
 ACTIVE_HOURS_END = 22    # 10 PM
 IDLE_THRESHOLD_SECONDS = 2 * 60 * 60  # 2 hours
 TASK_REMINDER_INTERVAL = 4 * 60 * 60  # 4 hours
+THINGS_SYNC_INTERVAL = 5 * 60  # 5 minutes
 PROACTIVE_COOLDOWN_SECONDS = 15 * 60  # 15 min between proactive messages
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
 
@@ -156,6 +157,14 @@ def _seed_defaults(db: sqlite3.Connection) -> None:
             json.dumps({
                 "description": "Remind about overdue tasks",
                 "interval_hours": 4,
+            }),
+        ),
+        (
+            "things_sync",
+            THINGS_SYNC_INTERVAL,
+            json.dumps({
+                "description": "Bidirectional sync between BITOS tasks and Things 3",
+                "interval_minutes": 5,
             }),
         ),
     ]
@@ -406,6 +415,72 @@ async def _handle_task_reminders() -> str | None:
     return message
 
 
+# ── Things 3 Sync Handler ────────────────────────────────────────────────
+
+async def _handle_things_sync() -> None:
+    """Bidirectional sync between BITOS tasks DB and Things 3."""
+    try:
+        import task_store
+        from integrations.things_adapter import ThingsAdapter
+        adapter = ThingsAdapter()
+        if not adapter.is_available:
+            logger.debug("things_sync: Things DB not available, skipping")
+            return
+
+        # 1. Import new tasks from Things that aren't in BITOS yet
+        things_tasks = adapter.read_today() + adapter.read_inbox()
+        imported = 0
+        for tt in things_tasks:
+            existing = task_store.find_by_things_id(tt["uuid"])
+            if not existing:
+                task_store.create_task(
+                    title=tt["title"],
+                    notes=tt.get("notes", ""),
+                    due_date=tt.get("due_date"),
+                    project=tt.get("project") or tt.get("area") or "INBOX",
+                    source="things",
+                    things_id=tt["uuid"],
+                )
+                imported += 1
+
+        # 2. Push BITOS tasks that don't have a things_id yet
+        unsynced = task_store.get_unsynced_tasks()
+        pushed = 0
+        for task in unsynced:
+            when = None
+            if task.get("due_date"):
+                from datetime import datetime as dt
+                today = dt.now().strftime("%Y-%m-%d")
+                when = "today" if task["due_date"] <= today else task["due_date"]
+            ok = adapter.push_task(
+                title=task["title"],
+                notes=task.get("notes", ""),
+                when=when,
+                list_name=task.get("project") if task.get("project") != "INBOX" else None,
+            )
+            if ok:
+                pushed += 1
+                # Note: URL scheme doesn't return the Things UUID, so we can't set things_id
+                # The next sync will match by title if needed
+
+        # 3. Sync completions from Things -> BITOS
+        completed = 0
+        tracked = task_store.get_tracked_open_tasks()
+        for task in tracked:
+            things_task = adapter.read_task_by_uuid(task["things_id"])
+            if things_task and things_task.get("completed"):
+                task_store.complete_task(task["id"])
+                completed += 1
+
+        if imported or pushed or completed:
+            logger.info(
+                "things_sync: imported=%d pushed=%d completed=%d",
+                imported, pushed, completed,
+            )
+    except Exception as exc:
+        logger.warning("things_sync_error: %s", exc)
+
+
 # ── Core Heartbeat Engine ─────────────────────────────────────────────────
 
 class _HeartbeatEngine:
@@ -506,6 +581,13 @@ class _HeartbeatEngine:
 
             elif atype == "task_reminders" and is_waking:
                 await self._check_interval(now, atype, last_run, action["interval_seconds"])
+
+            elif atype == "things_sync" and is_waking:
+                await self._check_interval(now, atype, last_run, action["interval_seconds"])
+
+        # Always check task-specific reminders (reminder_at field) every tick
+        if is_waking:
+            await self._check_task_reminders(now)
 
         # Poll Spotify listening history (every tick, ~60s)
         await self._poll_music_history()
@@ -609,11 +691,79 @@ class _HeartbeatEngine:
 
         if action_type == "task_reminders":
             message = await _handle_task_reminders()
+        elif action_type == "things_sync":
+            await _handle_things_sync()
+            # Silent sync — update last_run but don't deliver a message
+            db = _get_db()
+            try:
+                db.execute(
+                    "UPDATE scheduled_actions SET last_run = ? WHERE action_type = ?",
+                    (now.isoformat(), action_type),
+                )
+                db.commit()
+            finally:
+                db.close()
+            return
         else:
             return
 
         if message:
             await self._deliver(message, action_type, now)
+
+    # ── Task Reminder Checking ───────────────────────────────────────
+
+    async def _check_task_reminders(self, now: datetime) -> None:
+        """Fire any task reminders whose reminder_at <= now and not yet fired."""
+        try:
+            import task_store
+            due_reminders = task_store.get_due_reminders(now.isoformat())
+
+            for task in due_reminders:
+                # Build notification event
+                try:
+                    from notifications.models import NotificationEvent, Priority
+                    event = NotificationEvent(
+                        type="task_reminder",
+                        priority=Priority.HIGH,
+                        category="reminder",
+                        payload={
+                            "task_id": task["id"],
+                            "title": task["title"],
+                            "due_date": task.get("due_date"),
+                            "notes": (task.get("notes") or "")[:100],
+                        },
+                    )
+                    # Try dispatching through notification system
+                    try:
+                        from notifications.dispatcher import NotificationDispatcher
+                        from notifications.queue_store import QueueStore
+                        store = QueueStore()
+                        dispatcher = NotificationDispatcher(store)
+                        dispatcher.dispatch(event)
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+
+                # Broadcast via /ws/proactive for immediate device display
+                await _broadcast_to_devices({
+                    "type": "task_reminder",
+                    "task_id": task["id"],
+                    "title": task["title"],
+                    "message": f"Reminder: {task['title']}",
+                    "timestamp": now.isoformat(),
+                })
+
+                # Mark fired
+                task_store.mark_reminder_fired(task["id"])
+
+                # Handle recurrence
+                if task.get("recurrence"):
+                    task_store.advance_recurring_reminder(task["id"])
+
+                logger.info("task_reminder_fired: id=%s title=%s", task["id"], task["title"][:40])
+        except Exception as exc:
+            logger.warning("check_task_reminders_error: %s", exc)
 
     # ── Delivery ──────────────────────────────────────────────────────
 
@@ -720,6 +870,7 @@ class _HeartbeatEngine:
                 (now - self._last_user_activity).total_seconds()
             ),
             "task_reminders": _handle_task_reminders,
+            "things_sync": lambda: _handle_things_sync(),
         }
 
         handler = handlers.get(action_type)
