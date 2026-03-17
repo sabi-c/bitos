@@ -276,6 +276,15 @@ def main():
     logger.info("[BITOS] Starting device...")
     start_time = time.time()
 
+    # Run one-shot boot fix scripts from boot partition (e.g., BT config repair)
+    for fix_path in ("/boot/firmware/fix_bt.sh", "/boot/fix_bt.sh"):
+        if os.path.exists(fix_path):
+            logger.info("[BITOS] Running boot fix: %s", fix_path)
+            try:
+                subprocess.run(["sudo", "bash", fix_path], timeout=10, capture_output=True)
+            except Exception as exc:
+                logger.warning("[BITOS] Boot fix failed: %s", exc)
+
     driver = create_driver(board=board)
     driver.init()
     corner_mask = CornerMask()
