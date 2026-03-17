@@ -67,6 +67,7 @@ class BluetoothAudioManager:
         self._scan_thread: threading.Thread | None = None
         self._connected_device: BTAudioDevice | None = None
         self._lock = threading.Lock()
+        self._scan_lock = threading.Lock()
 
         # Check if bluetoothctl is available
         self._bt_available = self._check_bluetoothctl()
@@ -90,9 +91,13 @@ class BluetoothAudioManager:
         """
         if not self._bt_available:
             logger.warning("[BT-AUDIO] scan: bluetoothctl not available")
+            self._scanning = False
             return []
 
-        if self._scanning:
+        # If _scanning is already True it was pre-set by scan_async —
+        # that's our own thread, so proceed.  Use _scan_lock to guard
+        # against truly concurrent direct scan() calls.
+        if not self._scan_lock.acquire(blocking=False):
             logger.info("[BT-AUDIO] scan already in progress")
             return [d.to_dict() for d in self._scan_results]
 
@@ -126,6 +131,7 @@ class BluetoothAudioManager:
             logger.error("[BT-AUDIO] scan error: %s", exc)
         finally:
             self._scanning = False
+            self._scan_lock.release()
 
         results = [d.to_dict() for d in self._scan_results]
         logger.info("[BT-AUDIO] scan complete: %d devices found", len(results))
@@ -136,7 +142,17 @@ class BluetoothAudioManager:
 
         Call `get_scan_results()` to check progress, or pass `on_complete`
         callback which receives the results list.
+
+        Sets ``_scanning = True`` immediately so that callers checking
+        ``is_scanning`` in the next frame see the correct state (fixes a
+        race where ``update()`` would see ``is_scanning=False`` before the
+        background thread entered ``scan()``).
         """
+        # Pre-set scanning flag *before* the thread starts so that UI
+        # polling loops don't see a stale False and collect empty results.
+        self._scanning = True
+        self._scan_results = []
+
         def _scan_worker():
             results = self.scan(timeout=timeout)
             if on_complete:
