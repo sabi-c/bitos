@@ -263,6 +263,71 @@ DEVICE_TOOLS = [
             "required": [],
         },
     },
+    # ── Memory Tools ─────────────────────────────────────────────────────
+    {
+        "name": "remember_fact",
+        "description": (
+            "Save a fact about the user to long-term memory. Use this when the user "
+            "shares something important about themselves — preferences, personal info, "
+            "projects, relationships, habits. The fact will persist across conversations."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "description": "The fact to remember (e.g. 'Seb prefers dark roast coffee').",
+                },
+                "category": {
+                    "type": "string",
+                    "enum": ["preference", "personal", "work", "relationship", "habit", "health", "location", "other"],
+                    "description": "Category of the fact.",
+                },
+            },
+            "required": ["content", "category"],
+        },
+    },
+    {
+        "name": "recall_facts",
+        "description": (
+            "Search long-term memory for facts about the user. Use this when you need "
+            "to remember something specific about the user that might have been mentioned "
+            "in a previous conversation."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query (keywords about what you're looking for).",
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    # ── Web Search Tool ───────────────────────────────────────────────
+    {
+        "name": "web_search",
+        "description": (
+            "Search the web for current information. Use this when the user asks about "
+            "recent events, facts you're unsure about, prices, weather, news, or anything "
+            "that benefits from up-to-date information. Returns titles, URLs, and snippets."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query.",
+                },
+                "num_results": {
+                    "type": "integer",
+                    "description": "Number of results to return (default 5, max 10).",
+                },
+            },
+            "required": ["query"],
+        },
+    },
     # ── Task Management Tools ──────────────────────────────────────────
     {
         "name": "create_task",
@@ -468,6 +533,13 @@ def _handle_tool_call_inner(
 
     if tool_name == "get_calendar_events":
         return _get_calendar_events(tool_input)
+
+    # ── Memory tools ────────────────────────────────────────────────
+    if tool_name == "remember_fact":
+        return _remember_fact(tool_input)
+
+    if tool_name == "recall_facts":
+        return _recall_facts(tool_input)
 
     # ── Task management tools ────────────────────────────────────────
     if tool_name == "create_task":
@@ -705,6 +777,38 @@ end tell
         return json.dumps({"events": events, "count": len(events)})
     except Exception as exc:
         return json.dumps({"error": f"Calendar read failed: {exc}"})
+
+
+# ── Memory tool handlers ──────────────────────────────────────────────────
+
+def _remember_fact(tool_input: dict) -> str:
+    content = tool_input.get("content", "").strip()
+    category = tool_input.get("category", "other")
+    if not content:
+        return json.dumps({"error": "content is required"})
+
+    from memory_store import add_fact
+    try:
+        fact_id = add_fact(content=content, source="agent", confidence=0.9, category=category)
+        logger.info("agent_remember: id=%d category=%s content=%.60s", fact_id, category, content)
+        return json.dumps({"success": True, "id": fact_id, "content": content})
+    except Exception as exc:
+        logger.warning("remember_fact_error: %s", exc)
+        return json.dumps({"error": f"Failed to store fact: {exc}"})
+
+
+def _recall_facts(tool_input: dict) -> str:
+    query = tool_input.get("query", "").strip()
+    if not query:
+        return json.dumps({"error": "query is required"})
+
+    from memory_store import search_facts
+    try:
+        results = search_facts(query, limit=10)
+        return json.dumps({"facts": results, "count": len(results)})
+    except Exception as exc:
+        logger.warning("recall_facts_error: %s", exc)
+        return json.dumps({"error": f"Failed to search facts: {exc}"})
 
 
 # ── Task management tool handlers ────────────────────────────────────────

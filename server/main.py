@@ -69,6 +69,14 @@ from conversation_store import (
     list_conversations,
     get_conversation,
 )
+from fact_extractor import extract_and_store_facts
+from memory_store import (
+    add_fact,
+    search_facts,
+    get_recent_facts,
+    get_facts_by_category,
+    deactivate_fact,
+)
 from llm_bridge import create_llm_bridge, to_sse_data
 from perception import classify as classify_perception
 from ui_settings import UISettingsStore, UISettingsValidationError
@@ -1663,6 +1671,19 @@ async def chat(payload: ChatRequest):
         meta_prompt=payload.meta_prompt,
     )
 
+    # ── Inject long-term memory facts into system prompt ──
+    if payload.memory:
+        try:
+            memory_facts = search_facts(message, limit=10)
+            if memory_facts:
+                facts_lines = [f"- {f['content']}" for f in memory_facts]
+                system_prompt += (
+                    "\n\nMEMORY (things I know about you):\n"
+                    + "\n".join(facts_lines)
+                )
+        except Exception as mem_exc:
+            logger.warning("Memory retrieval failed (non-critical): %s", mem_exc)
+
     # Map short model names to full Anthropic model IDs
     _MODEL_MAP = {
         "haiku": "claude-haiku-4-5-20251001",
@@ -1771,6 +1792,18 @@ async def chat(payload: ChatRequest):
             add_message(conv_id, "user", message)
             add_message(conv_id, "assistant", full_response)
 
+            # ── Background fact extraction (non-blocking) ──
+            if payload.memory:
+                try:
+                    _msg, _resp, _cid = message, full_response, conv_id
+                    threading.Thread(
+                        target=extract_and_store_facts,
+                        args=(_msg, _resp, _cid),
+                        daemon=True,
+                    ).start()
+                except Exception:
+                    pass  # Never let extraction failure affect chat
+
         # Emit conversation_id so client can continue the conversation
         if conv_id:
             yield f"data: {json.dumps({'conversation_id': conv_id})}\n\n"
@@ -1812,6 +1845,57 @@ async def conversation_detail(conv_id: str):
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return conv
+
+
+# ── Memory endpoints ─────────────────────────────────────────────────────
+
+
+class ManualFactRequest(BaseModel):
+    content: str
+    category: str = "general"
+    confidence: float = 0.8
+
+
+@app.get("/memory")
+async def memory_list(category: str = "", limit: int = 20):
+    """List recent memory facts, optionally filtered by category."""
+    if category:
+        facts = get_facts_by_category(category)
+    else:
+        facts = get_recent_facts(limit=min(limit, 100))
+    return {"facts": facts, "count": len(facts)}
+
+
+@app.get("/memory/search")
+async def memory_search(q: str = "", limit: int = 10):
+    """Search memory facts by keyword."""
+    if not q:
+        raise HTTPException(status_code=400, detail="Query parameter 'q' is required")
+    results = search_facts(q, limit=min(limit, 50))
+    return {"facts": results, "count": len(results), "query": q}
+
+
+@app.delete("/memory/{fact_id}")
+async def memory_delete(fact_id: int):
+    """Soft-delete (deactivate) a memory fact."""
+    ok = deactivate_fact(fact_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Fact not found")
+    return {"success": True, "id": fact_id}
+
+
+@app.post("/memory")
+async def memory_add(payload: ManualFactRequest):
+    """Manually add a fact to long-term memory."""
+    if not payload.content.strip():
+        raise HTTPException(status_code=400, detail="Content is required")
+    fact_id = add_fact(
+        content=payload.content,
+        source="manual",
+        confidence=payload.confidence,
+        category=payload.category,
+    )
+    return {"success": True, "id": fact_id}
 
 
 @app.get("/logs")
