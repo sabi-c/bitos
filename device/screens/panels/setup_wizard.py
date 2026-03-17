@@ -1,15 +1,16 @@
 """BITOS first-boot setup wizard panel.
 
-Multi-step guided setup: Welcome -> WiFi -> Pair Phone -> AirPods -> All Set.
+Multi-step guided setup: Welcome -> WiFi -> Pair Phone -> AirPods -> Volume -> All Set.
 Shown on first boot when setup_complete is not set. Re-runnable from Settings.
 
 UI flow:
-    BOOT -> SETUP WIZARD -> 5 steps with progress dots
+    BOOT -> SETUP WIZARD -> 6 steps with progress dots
         Step 0: WELCOME — title + subtitle + DOUBLE to begin
         Step 1: CONNECT WI-FI — status + QR if needed
         Step 2: PAIR PHONE — BLE discoverable + QR + auto-advance
         Step 3: CONNECT AIRPODS — optional BT audio scan + pair
-        Step 4: ALL SET! — summary + DOUBLE to start
+        Step 4: SPEAKER LEVEL — volume 0-100, SHORT +10, TRIPLE -10, DOUBLE confirm
+        Step 5: ALL SET! — summary + DOUBLE to start
 """
 from __future__ import annotations
 
@@ -31,7 +32,7 @@ from screens.components import NavItem, VerticalNavController
 
 logger = logging.getLogger(__name__)
 
-_NUM_STEPS = 5
+_NUM_STEPS = 6
 
 # Animation frames for discoverable status
 _DISCOVERABLE_FRAMES = ["DISCOVERABLE", "DISCOVERABLE.", "DISCOVERABLE..", "DISCOVERABLE..."]
@@ -85,6 +86,9 @@ class SetupWizardPanel(BaseScreen):
         self._anim_frame = 0
         self._anim_tick: float = 0.0
 
+        # Volume setting state
+        self._volume = 50
+
         # BT audio scan state
         self._bt_scanning = False
         self._bt_scan_start: float = 0.0
@@ -118,6 +122,8 @@ class SetupWizardPanel(BaseScreen):
         elif self._current_step == 3:
             self._handle_step_airpods(action)
         elif self._current_step == 4:
+            self._handle_step_volume(action)
+        elif self._current_step == 5:
             self._handle_step_done(action)
 
     def handle_input(self, event: pygame.event.Event):
@@ -190,6 +196,8 @@ class SetupWizardPanel(BaseScreen):
         elif self._current_step == 3:
             self._render_step_airpods(surface)
         elif self._current_step == 4:
+            self._render_step_volume(surface)
+        elif self._current_step == 5:
             self._render_step_done(surface)
 
     # ------------------------------------------------------------------
@@ -197,7 +205,7 @@ class SetupWizardPanel(BaseScreen):
     # ------------------------------------------------------------------
 
     def _render_progress_dots(self, surface: pygame.Surface):
-        """Draw 5 progress dots centered below the status bar."""
+        """Draw progress dots centered below the status bar."""
         dot_radius = 4
         dot_spacing = 16
         total_w = (_NUM_STEPS - 1) * dot_spacing
@@ -457,8 +465,8 @@ class SetupWizardPanel(BaseScreen):
             surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 8))
             return
 
-        if self._bt_scan_results and self._bt_nav:
-            # Show scan results as nav items
+        if self._bt_nav:
+            # Show scan results as nav items (always has RESCAN + SKIP)
             self._render_bt_results(surface, y)
             return
 
@@ -543,7 +551,7 @@ class SetupWizardPanel(BaseScreen):
                 self._current_step = 4
             return
 
-        if self._bt_scan_results and self._bt_nav:
+        if self._bt_nav:
             # Navigating scan results
             if action == "SHORT_PRESS":
                 self._bt_nav.move(1)
@@ -591,19 +599,26 @@ class SetupWizardPanel(BaseScreen):
     def _pair_bt_device(self, address: str):
         """Pair and connect to a BT audio device in background."""
         self._set_bt_status("PAIRING...")
+        # Clear nav while pairing so UI shows status message
+        self._bt_nav = None
 
         def _worker():
             paired = self._bt.pair(address)
             if not paired:
-                self._set_bt_status("PAIR FAILED")
+                self._set_bt_status("PAIR FAILED — TRY AGAIN")
+                # Rebuild nav so user can retry
+                self._bt_nav = self._build_bt_nav()
+                self._scroll_offset = 0
                 return
             connected = self._bt.connect(address)
             if connected:
                 self._airpods_connected = True
                 self._set_bt_status("CONNECTED")
-                # Auto-advance after short delay
             else:
-                self._set_bt_status("CONNECT FAILED")
+                self._set_bt_status("CONNECT FAILED — TRY AGAIN")
+                # Rebuild nav so user can retry
+                self._bt_nav = self._build_bt_nav()
+                self._scroll_offset = 0
 
         threading.Thread(target=_worker, name="wizard-bt-pair", daemon=True).start()
 
@@ -616,7 +631,48 @@ class SetupWizardPanel(BaseScreen):
         self._bt_status_timeout = time.monotonic() + duration
 
     # ------------------------------------------------------------------
-    # Step 4: ALL SET!
+    # Step 4: SPEAKER LEVEL
+    # ------------------------------------------------------------------
+
+    def _render_step_volume(self, surface: pygame.Surface):
+        y = STATUS_BAR_H + 30
+
+        step_label = self._font_small.render("SPEAKER LEVEL", False, DIM2)
+        surface.blit(step_label, ((PHYSICAL_W - step_label.get_width()) // 2, y))
+        y += step_label.get_height() + 24
+
+        # Volume number
+        vol_text = f"{self._volume}%"
+        vol_surf = self._font_title.render(vol_text, False, WHITE)
+        surface.blit(vol_surf, ((PHYSICAL_W - vol_surf.get_width()) // 2, y))
+        y += vol_surf.get_height() + 16
+
+        # Volume bar
+        bar_x = 24
+        bar_w = PHYSICAL_W - 48
+        bar_h = 8
+        pygame.draw.rect(surface, DIM3, pygame.Rect(bar_x, y, bar_w, bar_h))
+        fill_w = int(bar_w * self._volume / 100)
+        if fill_w > 0:
+            pygame.draw.rect(surface, WHITE, pygame.Rect(bar_x, y, fill_w, bar_h))
+
+        hint = self._font_hint.render("SHORT:+  TRPL:-  DBL:OK", False, DIM3)
+        surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 8))
+
+    def _handle_step_volume(self, action: str):
+        if action == "SHORT_PRESS":
+            self._volume = self._volume + 10 if self._volume < 100 else 0
+        elif action == "TRIPLE_PRESS":
+            self._volume = self._volume - 10 if self._volume > 0 else 100
+        elif action == "DOUBLE_PRESS":
+            self._repo.set_setting("volume", self._volume)
+            logger.info("[SetupWizard] volume=%d", self._volume)
+            self._current_step = 5
+        elif action == "LONG_PRESS":
+            self._current_step = 3
+
+    # ------------------------------------------------------------------
+    # Step 5: ALL SET!
     # ------------------------------------------------------------------
 
     def _render_step_done(self, surface: pygame.Surface):
@@ -631,6 +687,7 @@ class SetupWizardPanel(BaseScreen):
             ("WI-FI", self._wifi_connected),
             ("COMPANION", self._phone_paired or self._gatt.is_companion_connected()),
             ("BT AUDIO", self._airpods_connected),
+            ("VOLUME", True),  # Always set (has default)
         ]
 
         for label, done in steps:
@@ -652,7 +709,7 @@ class SetupWizardPanel(BaseScreen):
         if action == "DOUBLE_PRESS":
             self._finish_wizard()
         elif action == "LONG_PRESS":
-            self._current_step = 3
+            self._current_step = 4
 
     def _finish_wizard(self):
         """Mark setup complete and fire on_complete callback."""
