@@ -402,14 +402,17 @@ DEVICE_TOOLS = [
 SETTING_VALIDATORS: dict[str, dict[str, Any]] = {
     "volume": {"type": "int", "min": 0, "max": 100},
     "voice_mode": {"type": "choice", "choices": ["off", "on", "auto"]},
-    "tts_engine": {"type": "choice", "choices": ["speechify", "chatterbox", "piper", "openai", "espeak", "auto"]},
+    "tts_engine": {"type": "choice", "choices": ["auto", "edge_tts", "cartesia", "speechify", "chatterbox", "piper", "openai", "espeak"]},
     "ai_model": {"type": "choice", "choices": ["default", "haiku", "sonnet", "opus", ""]},
     "web_search": {"type": "bool"},
     "memory": {"type": "bool"},
     "extended_thinking": {"type": "bool"},
     "agent_mode": {"type": "choice", "choices": ["producer", "hacker", "clown", "monk", "storyteller", "director"]},
     "meta_prompt": {"type": "str"},
-    "text_speed": {"type": "choice", "choices": ["slow", "normal", "fast"]},
+    "text_speed": {"type": "choice", "choices": ["slow", "normal", "fast", "custom"]},
+    "voice_id": {"type": "str"},
+    "voice_params": {"type": "json"},
+    "typewriter_config": {"type": "json"},
 }
 
 
@@ -437,6 +440,19 @@ def validate_setting(key: str, value: Any) -> tuple[bool, str, Any]:
             return True, "", v
         if spec["type"] == "str":
             return True, "", str(value)
+        if spec["type"] == "json":
+            import json
+            if isinstance(value, dict):
+                return True, "", json.dumps(value)
+            if isinstance(value, str):
+                try:
+                    parsed = json.loads(value)
+                    if not isinstance(parsed, dict):
+                        return False, f"{key} must be a JSON object", None
+                    return True, "", value
+                except json.JSONDecodeError as e:
+                    return False, f"{key} is not valid JSON: {e}", None
+            return False, f"{key} must be a JSON object or string", None
     except (ValueError, TypeError) as exc:
         return False, f"Invalid value for {key}: {exc}", None
 
