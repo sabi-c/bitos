@@ -1,5 +1,5 @@
 // BITOS Companion — Service Worker (network-first, cache fallback)
-const CACHE_NAME = 'bitos-companion-v4';
+const CACHE_NAME = 'bitos-companion-v5';
 const ASSETS = [
   '/',
   '/dashboard.html',
@@ -17,6 +17,7 @@ const ASSETS = [
   '/js/auth.js',
   '/js/crypto.js',
   '/js/settings.js',
+  '/js/connection.js',
   '/manifest.json',
   '/icon-192.svg',
   '/icon-512.svg',

@@ -458,6 +458,109 @@
       </div>
     </div>
 
+    <div class="card" id="card-wifi-networks">
+      <div class="card-header" onclick="toggleCard('card-wifi-networks')">
+        <h2>WI-FI NETWORKS</h2>
+        <span class="card-chevron">&#9660;</span>
+      </div>
+      <div class="card-body">
+        <div class="info-row">
+          <span class="info-key">Current network</span>
+          <span class="info-val" id="wifi-current-ssid">--</span>
+        </div>
+        <div id="wifi-saved-list" style="margin:10px 0"></div>
+        <div style="margin-top:12px;border-top:1px solid #222;padding-top:12px">
+          <div style="font-size:11px;color:#888;margin-bottom:8px;letter-spacing:.04em">ADD NETWORK</div>
+          <input type="text" id="wifi-new-ssid" placeholder="Network name (SSID)">
+          <input type="password" id="wifi-new-password" placeholder="Password (leave empty for open)">
+          <div class="setting-row" style="border:none;padding:4px 0">
+            <span class="setting-label">Security</span>
+            <div class="setting-control">
+              <div class="picker" id="wifi-security-picker">
+                <button class="picker-opt active" data-value="WPA2" onclick="setWifiSecurity('WPA2',this)">WPA2</button>
+                <button class="picker-opt" data-value="WPA3" onclick="setWifiSecurity('WPA3',this)">WPA3</button>
+                <button class="picker-opt" data-value="OPEN" onclick="setWifiSecurity('OPEN',this)">OPEN</button>
+              </div>
+            </div>
+          </div>
+          <div class="setting-row" style="border:none;padding:4px 0">
+            <span class="setting-label">Priority</span>
+            <div class="setting-control">
+              <div class="slider-wrap">
+                <input type="range" id="wifi-priority" min="1" max="200" step="1" value="100"
+                       oninput="document.getElementById('wifi-priority-val').textContent=this.value">
+                <span class="slider-val" id="wifi-priority-val">100</span>
+              </div>
+            </div>
+          </div>
+          <button class="secondary" onclick="addWifiNetwork()">ADD NETWORK</button>
+          <div class="status" id="wifi-add-status" style="min-height:0;padding:4px 0"></div>
+        </div>
+        <button class="secondary" onclick="refreshWifiNetworks()" style="margin-top:8px">REFRESH</button>
+      </div>
+    </div>
+
+    <div class="card" id="card-device-identity">
+      <div class="card-header" onclick="toggleCard('card-device-identity')">
+        <h2>DEVICE IDENTITY</h2>
+        <span class="card-chevron">&#9660;</span>
+      </div>
+      <div class="card-body">
+        <div class="setting-row">
+          <div class="setting-label-wrap">
+            <div class="setting-label">Device name</div>
+            <div class="setting-sublabel">Shown on lock screen and status bar</div>
+          </div>
+          <div class="setting-control">
+            <input type="text" id="device-name-input" value="BITOS" style="width:120px;margin:0"
+                   onchange="saveSetting('device_name',this.value.trim())">
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label-wrap">
+            <div class="setting-label">Change PIN</div>
+            <div class="setting-sublabel">4-digit lock screen PIN</div>
+          </div>
+          <div class="setting-control">
+            <button class="secondary" onclick="showPinChange()" style="margin:0;padding:6px 12px;font-size:10px">CHANGE</button>
+          </div>
+        </div>
+        <div id="pin-change-fields" style="display:none;margin-top:8px">
+          <input type="password" id="pin-current" placeholder="Current PIN" maxlength="4" inputmode="numeric" style="width:120px">
+          <input type="password" id="pin-new" placeholder="New PIN" maxlength="4" inputmode="numeric" style="width:120px">
+          <input type="password" id="pin-confirm" placeholder="Confirm PIN" maxlength="4" inputmode="numeric" style="width:120px">
+          <button class="secondary" onclick="submitPinChange()" style="margin-top:4px">SAVE NEW PIN</button>
+          <div class="status" id="pin-status" style="min-height:0;padding:4px 0"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="card-location">
+      <div class="card-header" onclick="toggleCard('card-location')">
+        <h2>LOCATION</h2>
+        <span class="card-chevron">&#9660;</span>
+      </div>
+      <div class="card-body">
+        <div class="info-row">
+          <span class="info-key">Detected</span>
+          <span class="info-val" id="location-detected">--</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">Timezone</span>
+          <span class="info-val" id="location-timezone">--</span>
+        </div>
+        <div style="margin-top:10px;font-size:10px;color:#666;line-height:1.5">
+          Location is auto-detected from your IP address for time/weather context.
+          You can override it below.
+        </div>
+        <div style="margin-top:8px">
+          <input type="text" id="location-city" placeholder="City (e.g. Melbourne, AU)" style="margin-bottom:4px">
+          <input type="text" id="location-timezone-input" placeholder="Timezone (e.g. Australia/Melbourne)">
+          <button class="secondary" onclick="saveLocation()" style="margin-top:4px">SAVE LOCATION</button>
+        </div>
+      </div>
+    </div>
+
     <div class="card" id="card-ble">
       <div class="card-header" onclick="toggleCard('card-ble')">
         <h2>BLE CONNECTION</h2>
@@ -539,6 +642,26 @@
             <button class="toggle" id="toggle-audio-feedback" onclick="toggleSetting('audio_feedback',this)"></button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div class="card" id="card-wakeword">
+      <div class="card-header" onclick="toggleCard('card-wakeword')">
+        <h2>WAKE WORD</h2>
+        <span class="card-chevron">&#9660;</span>
+      </div>
+      <div class="card-body">
+        <div id="settings-wakeword"></div>
+      </div>
+    </div>
+
+    <div class="card" id="card-sleep">
+      <div class="card-header" onclick="toggleCard('card-sleep')">
+        <h2>SLEEP &amp; POWER</h2>
+        <span class="card-chevron">&#9660;</span>
+      </div>
+      <div class="card-body">
+        <div id="settings-sleep"></div>
       </div>
     </div>
   </div>
@@ -945,6 +1068,60 @@
         <input type="password" id="vk-token" placeholder="Vikunja API token">
       </div>
       <button class="test-btn" id="vk-test-btn" onclick="saveVikunja()">SAVE & TEST CONNECTION</button>
+    </div>
+
+    <!-- OpenAI setup -->
+    <div class="setup-card" id="setup-openai">
+      <div class="setup-header">
+        <h3>OPENAI</h3>
+        <div class="status-dot" id="dot-openai"></div>
+      </div>
+      <div class="setup-status" id="openai-status">Not configured</div>
+      <ol class="setup-steps">
+        <li data-step="1">Get an API key from platform.openai.com</li>
+        <li data-step="2">Paste your key below (starts with sk-)</li>
+        <li data-step="3">Click Save to store on device</li>
+      </ol>
+      <div class="setup-fields">
+        <input type="password" id="openai-key" placeholder="sk-...">
+      </div>
+      <button class="test-btn" id="openai-test-btn" onclick="saveApiKey('openai','openai-key','OPENAI_API_KEY','openai-test-btn','openai-status')">SAVE & TEST CONNECTION</button>
+    </div>
+
+    <!-- Cartesia TTS setup -->
+    <div class="setup-card" id="setup-cartesia">
+      <div class="setup-header">
+        <h3>CARTESIA TTS</h3>
+        <div class="status-dot" id="dot-cartesia"></div>
+      </div>
+      <div class="setup-status" id="cartesia-status">Not configured</div>
+      <ol class="setup-steps">
+        <li data-step="1">Get an API key from play.cartesia.ai</li>
+        <li data-step="2">Paste your key below</li>
+        <li data-step="3">Select "cartesia" as TTS engine in Voice settings</li>
+      </ol>
+      <div class="setup-fields">
+        <input type="password" id="cartesia-key" placeholder="Cartesia API key">
+      </div>
+      <button class="test-btn" id="cartesia-test-btn" onclick="saveApiKey('cartesia','cartesia-key','CARTESIA_API_KEY','cartesia-test-btn','cartesia-status')">SAVE KEY</button>
+    </div>
+
+    <!-- Speechify TTS setup -->
+    <div class="setup-card" id="setup-speechify">
+      <div class="setup-header">
+        <h3>SPEECHIFY TTS</h3>
+        <div class="status-dot" id="dot-speechify"></div>
+      </div>
+      <div class="setup-status" id="speechify-status">Not configured</div>
+      <ol class="setup-steps">
+        <li data-step="1">Get an API key from speechify.com</li>
+        <li data-step="2">Paste your key below</li>
+        <li data-step="3">Select "speechify" as TTS engine in Voice settings</li>
+      </ol>
+      <div class="setup-fields">
+        <input type="password" id="speechify-key" placeholder="Speechify API key">
+      </div>
+      <button class="test-btn" id="speechify-test-btn" onclick="saveApiKey('speechify','speechify-key','SPEECHIFY_API_KEY','speechify-test-btn','speechify-status')">SAVE KEY</button>
     </div>
   </div>
 
@@ -1399,6 +1576,31 @@
       document.getElementById('debug-build').textContent = status.build || status.commit || '--';
       document.getElementById('debug-commit').textContent = status.commit || '--';
       document.getElementById('debug-connection').textContent = mgr.connectionMode.toUpperCase();
+
+      // Device name input
+      const nameInput = document.getElementById('device-name-input');
+      if (nameInput && settings.device_name && nameInput !== document.activeElement) {
+        nameInput.value = settings.device_name;
+      }
+
+      // Location info
+      if (settings.geolocation) {
+        try {
+          const geo = typeof settings.geolocation === 'string' ? JSON.parse(settings.geolocation) : settings.geolocation;
+          const locEl = document.getElementById('location-detected');
+          if (locEl && geo.city) locEl.textContent = geo.city + (geo.region ? ', ' + geo.region : '');
+        } catch (_) {}
+      }
+      if (settings.timezone) {
+        const tzEl = document.getElementById('location-timezone');
+        if (tzEl) tzEl.textContent = settings.timezone;
+      }
+
+      // WiFi current SSID
+      if (status.wifi_ssid) {
+        const wifiEl = document.getElementById('wifi-current-ssid');
+        if (wifiEl) wifiEl.textContent = status.wifi_connected ? status.wifi_ssid : '--';
+      }
     }
 
     function syncToggle(id, value) {
@@ -1438,6 +1640,12 @@
         notif_sound: true,
         quiet_hours_start: '22:00',
         quiet_hours_end: '07:00',
+        device_name: 'BITOS',
+        wake_word_enabled: false,
+        wake_word_phrase: 'hey bitos',
+        wake_word_sensitivity: 0.5,
+        sleep_timeout_seconds: 60,
+        safe_shutdown_pct: 5,
       };
       for (const agent of SUB_AGENTS) {
         defaults['agent_' + agent.key] = true;
@@ -1659,6 +1867,101 @@
         btn.disabled = false;
         btn.textContent = 'EXPORT DATA';
       }
+    }
+
+    // ── WiFi connection settings ─────────────────────────
+    (function initConnSettings() {
+      const s = connMgr.settings;
+      document.getElementById('settings-device-ip').value = s.deviceIp || 'bitos.local';
+      document.getElementById('settings-device-port').value = s.port || 8080;
+      // Sync connection mode picker
+      const modePicker = document.querySelector('.picker[data-key="conn_mode"]');
+      if (modePicker) {
+        modePicker.querySelectorAll('.picker-opt').forEach(b =>
+          b.classList.toggle('active', b.dataset.value === (s.preferredMode || 'auto')));
+      }
+      // Show BLE unavailable notice
+      if (!isBleAvailable()) {
+        document.getElementById('ble-unavailable').style.display = 'block';
+      }
+    })();
+
+    function saveDeviceIp() {
+      const ip = document.getElementById('settings-device-ip').value.trim();
+      if (!ip) return;
+      connMgr.updateSettings({ deviceIp: ip });
+      showToast('DEVICE IP SAVED');
+    }
+
+    function saveDevicePort() {
+      const port = parseInt(document.getElementById('settings-device-port').value) || 8080;
+      connMgr.updateSettings({ port });
+      showToast('PORT SAVED');
+    }
+
+    function setConnMode(mode, btn) {
+      const picker = btn.closest('.picker');
+      picker.querySelectorAll('.picker-opt').forEach(b =>
+        b.classList.toggle('active', b.dataset.value === mode));
+      connMgr.updateSettings({ preferredMode: mode });
+      showToast(mode.toUpperCase() + ' MODE');
+    }
+
+    async function testWifiConnection() {
+      const statusEl = document.getElementById('wifi-conn-test-status');
+      statusEl.textContent = 'Testing...';
+      statusEl.className = 'status';
+      const ip = document.getElementById('settings-device-ip').value.trim() || 'bitos.local';
+      const port = parseInt(document.getElementById('settings-device-port').value) || 8080;
+      const url = `http://${ip}:${port}`;
+      try {
+        const r = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(5000) });
+        if (r.ok) {
+          const d = await r.json();
+          statusEl.textContent = 'Connected — ' + (d.service || 'device online');
+          statusEl.className = 'status ok';
+          // Also fetch device info
+          try {
+            const infoR = await fetch(`${url}/api/device/info`, { signal: AbortSignal.timeout(3000) });
+            if (infoR.ok) {
+              const info = await infoR.json();
+              statusEl.textContent += ' | ' + (info.model || 'BITOS') + ' (' + (info.serial || '').slice(-6) + ')';
+            }
+          } catch (_) {}
+        } else {
+          statusEl.textContent = 'Device returned ' + r.status;
+          statusEl.className = 'status error';
+        }
+      } catch (e) {
+        statusEl.textContent = 'Cannot reach ' + url + ' — ' + (e.message || 'timeout');
+        statusEl.className = 'status error';
+      }
+    }
+
+    function refreshConnLogs() {
+      const viewer = document.getElementById('conn-log-viewer');
+      const logs = connMgr.logs;
+      if (logs.length === 0) {
+        viewer.innerHTML = '<span style="color:#555">No connection events yet</span>';
+        return;
+      }
+      viewer.innerHTML = '';
+      for (const entry of logs) {
+        const span = document.createElement('span');
+        const ts = entry.time.split('T')[1]?.split('.')[0] || entry.time;
+        span.textContent = `[${ts}] ${entry.level}: ${entry.msg}\n`;
+        if (entry.level === 'ERROR') span.style.color = '#f44';
+        else if (entry.level === 'WARN') span.style.color = '#fa0';
+        else span.style.color = '#888';
+        viewer.appendChild(span);
+      }
+      viewer.scrollTop = viewer.scrollHeight;
+    }
+
+    function clearConnLogs() {
+      connMgr._logs = [];
+      refreshConnLogs();
+      showToast('LOGS CLEARED');
     }
 
     // ── BLE connection ─────────────────────────────────────
@@ -2043,10 +2346,10 @@
     }
 
     // ── BLE availability check ─────────────────────────────
-    if (!navigator.bluetooth) {
+    if (!isBleAvailable()) {
       document.getElementById('btn-ble-connect').style.display = 'none';
       document.getElementById('ble-unavailable').style.display = 'block';
-      document.getElementById('ble-conn-status').textContent = 'HTTP only (BLE not available)';
+      document.getElementById('ble-conn-status').textContent = 'WiFi only (BLE not available in this browser)';
       document.getElementById('ble-conn-status').style.color = '#888';
     }
 
