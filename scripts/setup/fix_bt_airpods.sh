@@ -1,28 +1,19 @@
 #!/bin/bash
-# Fix Bluetooth config for AirPods compatibility on Pi
-# AirPods require ControllerMode = bredr (classic BT, not BLE)
-# See: https://github.com/bluez/bluez/issues/514
+# Ensure Bluetooth audio packages are installed for AirPods support.
+# NOTE: Does NOT change ControllerMode — BITOS needs 'dual' for BLE (companion app).
+# AirPods scanning uses temporary bredr mode switch in audio_manager.py instead.
 set -euo pipefail
 
+echo "[BT] Checking Bluetooth audio packages..."
+
+# Ensure ControllerMode is dual (not bredr) — BLE required for companion app
 MAIN_CONF="/etc/bluetooth/main.conf"
-
-echo "[BT] Checking Bluetooth config for AirPods compatibility..."
-
-# Check current ControllerMode
 if grep -q "^ControllerMode = bredr" "$MAIN_CONF" 2>/dev/null; then
-    echo "[BT] ControllerMode already set to bredr ✓"
-else
-    echo "[BT] Setting ControllerMode = bredr (required for AirPods)..."
-    # Uncomment and set if commented out
-    sudo sed -i 's/^#\?ControllerMode.*/ControllerMode = bredr/' "$MAIN_CONF"
-    # If the line doesn't exist at all, add it under [General]
-    if ! grep -q "^ControllerMode" "$MAIN_CONF"; then
-        sudo sed -i '/^\[General\]/a ControllerMode = bredr' "$MAIN_CONF"
-    fi
-    echo "[BT] Restarting bluetooth service..."
+    echo "[BT] Reverting ControllerMode to dual (BLE required for companion app)..."
+    sudo sed -i 's/^ControllerMode = bredr/#ControllerMode = dual/' "$MAIN_CONF"
     sudo systemctl restart bluetooth
     sleep 2
-    echo "[BT] Bluetooth restarted ✓"
+    echo "[BT] Bluetooth restarted with dual mode ✓"
 fi
 
 # Check for PipeWire or PulseAudio BT support
@@ -34,17 +25,9 @@ else
     echo "[BT] No Bluetooth audio stack found. Installing PipeWire..."
     sudo apt install -y pipewire pipewire-pulse wireplumber \
         libspa-0.2-bluetooth pipewire-audio-client-libraries
-    # Enable for the pi user
     systemctl --user enable pipewire pipewire-pulse wireplumber 2>/dev/null || true
     systemctl --user start pipewire pipewire-pulse wireplumber 2>/dev/null || true
     echo "[BT] PipeWire installed and started ✓"
 fi
 
-echo ""
-echo "[BT] AirPods fix applied. To pair:"
-echo "  1. Open AirPods case, hold back button until white flash"
-echo "  2. Run: bluetoothctl scan on"
-echo "  3. Wait for AirPods MAC, then:"
-echo "     bluetoothctl pair XX:XX:XX:XX:XX:XX"
-echo "     bluetoothctl trust XX:XX:XX:XX:XX:XX"
-echo "     bluetoothctl connect XX:XX:XX:XX:XX:XX"
+echo "[BT] Bluetooth audio setup complete ✓"

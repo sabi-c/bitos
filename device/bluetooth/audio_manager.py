@@ -108,6 +108,13 @@ class BluetoothAudioManager:
             # Power on adapter (agent is registered by GATT server — don't duplicate)
             self._run_bluetoothctl(["power", "on"])
 
+            # Unblock rfkill in case BT is soft-blocked
+            try:
+                subprocess.run(["sudo", "rfkill", "unblock", "bluetooth"],
+                               timeout=3, capture_output=True)
+            except Exception:
+                pass
+
             # Start scanning — use longer timeout for slow adapters/AirPods
             self._run_bluetoothctl(["scan", "on"], timeout=5, ignore_errors=True)
 
