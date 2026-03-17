@@ -290,8 +290,7 @@ def main():
             init_alsa_soft_start(target_pct=max(0, min(100, int(vol))))
         except Exception:
             init_alsa_soft_start()
-    import threading as _thr
-    _thr.Thread(target=_alsa_soft_start, daemon=True, name="alsa-softstart").start()
+    threading.Thread(target=_alsa_soft_start, daemon=True, name="alsa-softstart").start()
 
     led = LEDController(board=board)
     monitor = SystemMonitor(interval=30)
@@ -669,7 +668,6 @@ def main():
                 logger.warning("[BITOS] Backend not reachable — chat will not work until server starts")
         except Exception as exc:
             logger.warning("[BITOS] Server check failed: %s", exc)
-    import threading
     threading.Thread(target=_async_server_check, daemon=True, name="server-check").start()
 
     # Apply on-device font scale override from local repository
