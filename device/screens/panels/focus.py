@@ -9,7 +9,7 @@ import pygame
 from display.theme import load_ui_font, merge_runtime_ui_settings
 from display.tokens import BLACK, DIM1, DIM2, DIM3, HAIRLINE, PHYSICAL_H, PHYSICAL_W, WHITE, STATUS_BAR_H, ROW_H_MIN
 from screens.base import BaseScreen
-from screens.components import NavItem, VerticalNavController
+from screens.components import NavItem, VerticalNavController, Widget, WidgetStrip
 
 
 class FocusPanel(BaseScreen):
@@ -34,6 +34,11 @@ class FocusPanel(BaseScreen):
         self._session_number = 1
         self._is_break = False
         self._countdown_accum = 0.0
+
+        self._widget_strip = WidgetStrip([
+            Widget(key="session", label="SESSION", value=str(self._session_number)),
+            Widget(key="elapsed", label="ELAPSED", value="00:00"),
+        ])
 
         self._nav = VerticalNavController(
             [
@@ -79,6 +84,11 @@ class FocusPanel(BaseScreen):
         if self._remaining_seconds <= 0:
             self._running = False
 
+        # Update widget strip
+        em, es = divmod(self._elapsed_seconds, 60)
+        self._widget_strip.update_widget("elapsed", value=f"{em:02d}:{es:02d}")
+        self._widget_strip.update_widget("session", value=str(self._session_number))
+
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
 
@@ -108,9 +118,14 @@ class FocusPanel(BaseScreen):
         if fill_w > 0:
             pygame.draw.rect(surface, WHITE, pygame.Rect(11, bar_y + 1, fill_w, 3))
 
+        # ── Widget strip ──
+        widget_y = bar_y + 14
+        widget_fonts = {"hint": self._font_hint, "small": self._font_small}
+        self._widget_strip.render(surface, widget_y, PHYSICAL_W, 44, fonts=widget_fonts)
+
         # ── Nav rows: 26px, inverted focus ──
         self._sync_nav_labels()
-        y = bar_y + 16
+        y = widget_y + 44 + 6
         for idx, item in enumerate(self._nav.items):
             focused = idx == self._nav.focus_index
             if focused:
