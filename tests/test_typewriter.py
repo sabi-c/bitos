@@ -1,11 +1,14 @@
 """Tests for TypewriterRenderer (character-level)."""
+import os
 import sys
 import unittest
 from pathlib import Path
 
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "device"))
 
-from display.typewriter import TypewriterRenderer, SPEED_PRESETS
+from display.typewriter import TypewriterRenderer, TypewriterConfig, SPEED_PRESETS
 
 
 class TypewriterTests(unittest.TestCase):
@@ -73,6 +76,47 @@ class TypewriterTests(unittest.TestCase):
         tw.update(10.0)
         self.assertTrue(tw.finished)
         self.assertEqual(tw.get_visible_text(), text)
+
+
+class TypewriterConfigTests(unittest.TestCase):
+    def test_default_config(self):
+        cfg = TypewriterConfig()
+        self.assertEqual(cfg.base_speed_ms, 45.0)
+        self.assertEqual(cfg.jitter_amount, 0.15)
+
+    def test_from_preset(self):
+        cfg = TypewriterConfig.from_preset("slow")
+        self.assertEqual(cfg.base_speed_ms, 80.0)
+
+    def test_from_dict(self):
+        cfg = TypewriterConfig.from_dict({"base_speed_ms": 60, "jitter_amount": 0.05})
+        self.assertEqual(cfg.base_speed_ms, 60.0)
+        self.assertEqual(cfg.jitter_amount, 0.05)
+        # Non-specified fields keep defaults
+        self.assertEqual(cfg.common_speedup, 0.8)
+
+    def test_renderer_with_config(self):
+        cfg = TypewriterConfig(base_speed_ms=10.0, jitter_amount=0.0)
+        tw = TypewriterRenderer("Hello", config=cfg)
+        tw.update(1.0)  # 1 second should reveal all at 10ms/char
+        self.assertTrue(tw.finished)
+        self.assertEqual(tw.get_visible_text(), "Hello")
+
+    def test_renderer_with_speed_preset(self):
+        tw = TypewriterRenderer("Hi", speed="fast")
+        tw.update(1.0)
+        self.assertTrue(tw.finished)
+
+    def test_renderer_instant(self):
+        tw = TypewriterRenderer("Test", speed="instant")
+        self.assertTrue(tw.finished)
+        self.assertEqual(tw.get_visible_text(), "Test")
+
+    def test_config_to_dict(self):
+        cfg = TypewriterConfig(base_speed_ms=50.0)
+        d = cfg.to_dict()
+        self.assertEqual(d["base_speed_ms"], 50.0)
+        self.assertIn("punctuation_multiplier", d)
 
 
 if __name__ == "__main__":
