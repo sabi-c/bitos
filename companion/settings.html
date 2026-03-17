@@ -41,6 +41,10 @@
       font-size: 13px; color: #ccc;
       flex-shrink: 0; margin-right: 12px;
     }
+    .setting-sublabel {
+      font-size: 10px; color: #555; margin-top: 2px;
+    }
+    .setting-label-wrap { flex: 1; min-width: 0; margin-right: 12px; }
     .setting-control { flex-shrink: 0; }
 
     /* Toggle switch */
@@ -97,6 +101,15 @@
       cursor: pointer;
     }
 
+    /* Time input */
+    input[type="time"] {
+      background: #111; border: 1px solid #444;
+      color: #ccc; font-family: monospace; font-size: 12px;
+      padding: 6px 8px; outline: none;
+      -webkit-appearance: none;
+    }
+    input[type="time"]:focus { border-color: #fff; }
+
     /* Integration inputs */
     input[type="text"], input[type="password"] {
       width: 100%; background: #111; border: 2px solid #444;
@@ -111,6 +124,20 @@
     /* Connection dot variants for BLE/HTTP */
     .conn-dot.http { background: #fa0; }
     .conn-dot.ble { background: #4f4; }
+
+    /* ── Collapsible card sections ── */
+    .card-header {
+      display: flex; align-items: center; justify-content: space-between;
+      cursor: pointer; -webkit-user-select: none; user-select: none;
+    }
+    .card-header h2 { margin-bottom: 0; }
+    .card-chevron {
+      font-size: 14px; color: #555;
+      transition: transform .2s;
+    }
+    .card.collapsed .card-chevron { transform: rotate(-90deg); }
+    .card-body { margin-top: 14px; }
+    .card.collapsed .card-body { display: none; }
 
     /* ── Integration setup cards ── */
     .setup-card {
@@ -223,6 +250,93 @@
       cursor: pointer; min-height: 36px; white-space: nowrap;
     }
     .tts-test-btn:active { border-color: #888; color: #fff; }
+
+    /* ── Sub-agent row ── */
+    .agent-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 0; border-bottom: 1px solid #1a1a1a;
+      min-height: 44px;
+    }
+    .agent-row:last-child { border-bottom: none; }
+    .agent-info { flex: 1; min-width: 0; margin-right: 10px; }
+    .agent-name {
+      font-size: 12px; color: #ccc; font-weight: bold;
+      letter-spacing: .04em;
+    }
+    .agent-status {
+      font-size: 10px; color: #555; margin-top: 2px;
+    }
+    .agent-status.active { color: #4f4; }
+    .agent-status.inactive { color: #666; }
+
+    /* ── Danger button ── */
+    button.danger {
+      width: 100%; background: #000; color: #f44;
+      border: 2px solid #f44; font-family: monospace;
+      font-size: 12px; font-weight: bold; padding: 10px;
+      cursor: pointer; letter-spacing: .06em; margin-top: 8px;
+      min-height: 44px;
+    }
+    button.danger:active { background: #200; }
+
+    /* ── Log viewer ── */
+    .log-viewer {
+      background: #0a0a0a; border: 1px solid #222;
+      padding: 10px; font-size: 10px; color: #888;
+      line-height: 1.5; max-height: 300px; overflow-y: auto;
+      white-space: pre-wrap; word-wrap: break-word;
+      display: none; margin-top: 8px;
+    }
+    .log-viewer.visible { display: block; }
+    .log-line-error { color: #f44; }
+    .log-line-warning { color: #fa0; }
+
+    /* ── Confirm dialog overlay ── */
+    .confirm-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,.85); z-index: 200;
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px;
+    }
+    .confirm-dialog {
+      background: #111; border: 2px solid #444;
+      padding: 24px; max-width: 320px; width: 100%;
+      text-align: center;
+    }
+    .confirm-dialog h3 {
+      font-size: 13px; color: #fff; margin-bottom: 8px;
+      letter-spacing: .04em;
+    }
+    .confirm-dialog p {
+      font-size: 11px; color: #888; margin-bottom: 16px;
+      line-height: 1.5;
+    }
+    .confirm-actions {
+      display: flex; gap: 8px;
+    }
+    .confirm-actions button {
+      flex: 1; font-family: monospace; font-size: 12px;
+      font-weight: bold; padding: 10px; cursor: pointer;
+      border: none; min-height: 44px;
+    }
+    .confirm-cancel {
+      background: #333; color: #ccc;
+    }
+    .confirm-ok {
+      background: #f44; color: #fff;
+    }
+
+    /* ── Storage bar ── */
+    .storage-bar {
+      width: 100%; height: 6px; background: #222;
+      margin: 8px 0;
+    }
+    .storage-fill {
+      height: 100%; background: #4f4;
+      transition: width .3s;
+    }
+    .storage-fill.warn { background: #fa0; }
+    .storage-fill.critical { background: #f44; }
   </style>
 </head>
 <body>
@@ -239,111 +353,453 @@
     <button class="tab" data-pane="voice" onclick="switchTab('voice')">VOICE</button>
     <button class="tab" data-pane="agent" onclick="switchTab('agent')">AGENT</button>
     <button class="tab" data-pane="display" onclick="switchTab('display')">DISPLAY</button>
+    <button class="tab" data-pane="system" onclick="switchTab('system')">SYSTEM</button>
     <button class="tab" data-pane="integrations" onclick="switchTab('integrations')">CONNECT</button>
   </div>
 
-  <!-- ── Device pane ── -->
+  <!-- ══════════════════════════════════════════════════════════
+       DEVICE PANE
+       ══════════════════════════════════════════════════════════ -->
   <div class="pane active" id="pane-device">
-    <div class="card">
-      <h2>DEVICE STATUS</h2>
-      <div class="info-row">
-        <span class="info-key">Firmware</span>
-        <span class="info-val" id="info-firmware">--</span>
+    <div class="card" id="card-device-status">
+      <div class="card-header" onclick="toggleCard('card-device-status')">
+        <h2>DEVICE STATUS</h2>
+        <span class="card-chevron">&#9660;</span>
       </div>
-      <div class="info-row">
-        <span class="info-key">Battery</span>
-        <span class="info-val" id="info-battery">--</span>
-      </div>
-      <div class="info-row">
-        <span class="info-key">Wi-Fi</span>
-        <span class="info-val" id="info-wifi">--</span>
-      </div>
-      <div class="info-row">
-        <span class="info-key">Server</span>
-        <span class="info-val" id="info-server">--</span>
+      <div class="card-body">
+        <div class="info-row">
+          <span class="info-key">Firmware</span>
+          <span class="info-val" id="info-firmware">--</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">Battery</span>
+          <span class="info-val" id="info-battery">--</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">Wi-Fi</span>
+          <span class="info-val" id="info-wifi">--</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">Server</span>
+          <span class="info-val" id="info-server">--</span>
+        </div>
       </div>
     </div>
 
-    <div class="card">
-      <h2>FIRMWARE UPDATE</h2>
-      <div id="version-info" class="status">Checking...</div>
-      <div id="update-available" style="display:none">
-        <div class="status ok" id="update-msg"></div>
-        <button class="primary" id="update-button" onclick="startUpdate('both')">
-          UPDATE DEVICE + SERVER
-        </button>
-        <div class="status" id="update-status"></div>
+    <div class="card" id="card-firmware">
+      <div class="card-header" onclick="toggleCard('card-firmware')">
+        <h2>FIRMWARE UPDATE</h2>
+        <span class="card-chevron">&#9660;</span>
       </div>
-      <div id="up-to-date" style="display:none">
-        <div class="status ok">UP TO DATE</div>
+      <div class="card-body">
+        <div id="version-info" class="status">Checking...</div>
+        <div id="update-available" style="display:none">
+          <div class="status ok" id="update-msg"></div>
+          <button class="primary" id="update-button" onclick="startUpdate('both')">
+            UPDATE DEVICE + SERVER
+          </button>
+          <div class="status" id="update-status"></div>
+        </div>
+        <div id="up-to-date" style="display:none">
+          <div class="status ok">UP TO DATE</div>
+        </div>
+        <button class="secondary" onclick="checkVersion()">CHECK FOR UPDATES</button>
       </div>
-      <button class="secondary" onclick="checkVersion()">CHECK FOR UPDATES</button>
     </div>
 
-    <div class="card">
-      <h2>BLE CONNECTION</h2>
-      <div class="status" id="ble-conn-status">Not connected</div>
-      <button class="secondary" id="btn-ble-connect" onclick="connectBLE()">CONNECT VIA BLE</button>
-      <div id="ble-unavailable" style="display:none">
-        <div class="status" style="color:#888;font-size:10px;line-height:1.6;padding:8px 0">
-          Web Bluetooth is not available in this browser.<br>
-          Settings work fine over HTTP — BLE is optional.<br>
-          For BLE: use Chrome (desktop) or enable Web Bluetooth<br>
-          in Safari → Settings → Advanced → Feature Flags.
+    <div class="card" id="card-ble">
+      <div class="card-header" onclick="toggleCard('card-ble')">
+        <h2>BLE CONNECTION</h2>
+        <span class="card-chevron">&#9660;</span>
+      </div>
+      <div class="card-body">
+        <div class="status" id="ble-conn-status">Not connected</div>
+        <button class="secondary" id="btn-ble-connect" onclick="connectBLE()">CONNECT VIA BLE</button>
+        <div id="ble-unavailable" style="display:none">
+          <div class="status" style="color:#888;font-size:10px;line-height:1.6;padding:8px 0">
+            Web Bluetooth is not available in this browser.<br>
+            Settings work fine over HTTP — BLE is optional.<br>
+            For BLE: use Chrome (desktop) or enable Web Bluetooth<br>
+            in Safari → Settings → Advanced → Feature Flags.
+          </div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- ── Voice pane ── -->
+  <!-- ══════════════════════════════════════════════════════════
+       VOICE & AUDIO PANE
+       ══════════════════════════════════════════════════════════ -->
   <div class="pane" id="pane-voice">
-    <div class="card">
-      <h2>VOICE</h2>
-      <div id="settings-voice"></div>
-      <div class="tts-test-row">
-        <button class="tts-test-btn" onclick="testTTS()">TEST TTS</button>
-        <span class="status" id="tts-test-status" style="padding:0;font-size:10px"></span>
+    <div class="card" id="card-voice-main">
+      <div class="card-header" onclick="toggleCard('card-voice-main')">
+        <h2>VOICE</h2>
+        <span class="card-chevron">&#9660;</span>
+      </div>
+      <div class="card-body">
+        <div id="settings-voice"></div>
+        <div class="tts-test-row">
+          <button class="tts-test-btn" onclick="testTTS()">TEST TTS</button>
+          <span class="status" id="tts-test-status" style="padding:0;font-size:10px"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="card-audio">
+      <div class="card-header" onclick="toggleCard('card-audio')">
+        <h2>AUDIO</h2>
+        <span class="card-chevron">&#9660;</span>
+      </div>
+      <div class="card-body">
+        <div class="setting-row">
+          <div class="setting-label-wrap">
+            <div class="setting-label">Recording quality</div>
+            <div class="setting-sublabel">Affects mic capture bitrate</div>
+          </div>
+          <div class="setting-control">
+            <div class="picker" data-key="recording_quality">
+              <button class="picker-opt" data-value="low" onclick="setPickerValue('recording_quality','low',this)">LOW</button>
+              <button class="picker-opt active" data-value="medium" onclick="setPickerValue('recording_quality','medium',this)">MED</button>
+              <button class="picker-opt" data-value="high" onclick="setPickerValue('recording_quality','high',this)">HIGH</button>
+            </div>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label-wrap">
+            <div class="setting-label">Audio feedback tones</div>
+            <div class="setting-sublabel">Button press & action sounds</div>
+          </div>
+          <div class="setting-control">
+            <button class="toggle" id="toggle-audio-feedback" onclick="toggleSetting('audio_feedback',this)"></button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- ── Agent pane (replaces old AI pane) ── -->
+  <!-- ══════════════════════════════════════════════════════════
+       AGENT PANE
+       ══════════════════════════════════════════════════════════ -->
   <div class="pane" id="pane-agent">
-    <div class="card">
-      <h2>AI MODEL</h2>
-      <div id="settings-ai"></div>
+    <div class="card" id="card-ai-model">
+      <div class="card-header" onclick="toggleCard('card-ai-model')">
+        <h2>AI MODEL</h2>
+        <span class="card-chevron">&#9660;</span>
+      </div>
+      <div class="card-body">
+        <div id="settings-ai"></div>
+      </div>
     </div>
 
-    <div class="card">
-      <h2>AGENT MODE</h2>
-      <div id="agent-modes-list"></div>
+    <div class="card" id="card-agent-mode">
+      <div class="card-header" onclick="toggleCard('card-agent-mode')">
+        <h2>AGENT MODE</h2>
+        <span class="card-chevron">&#9660;</span>
+      </div>
+      <div class="card-body">
+        <div id="agent-modes-list"></div>
+      </div>
     </div>
 
-    <div class="card">
-      <h2>SYSTEM PROMPT</h2>
-      <button class="secondary" onclick="togglePromptPreview()" style="margin-top:0">
-        SHOW / HIDE PROMPT
-      </button>
-      <div class="prompt-preview" id="prompt-preview"></div>
+    <div class="card" id="card-sub-agents">
+      <div class="card-header" onclick="toggleCard('card-sub-agents')">
+        <h2>SUB-AGENTS</h2>
+        <span class="card-chevron">&#9660;</span>
+      </div>
+      <div class="card-body">
+        <div id="sub-agents-list"></div>
+        <div class="setting-row" style="margin-top:8px">
+          <div class="setting-label-wrap">
+            <div class="setting-label">Consolidation interval</div>
+            <div class="setting-sublabel">Turns between memory consolidation</div>
+          </div>
+          <div class="setting-control">
+            <div class="slider-wrap">
+              <input type="range" min="4" max="20" step="2" value="8"
+                     data-key="consolidation_interval"
+                     oninput="document.getElementById('slider-val-consolidation_interval').textContent=this.value"
+                     onchange="saveSetting('consolidation_interval',parseInt(this.value))">
+              <span class="slider-val" id="slider-val-consolidation_interval">8</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="card-heartbeat">
+      <div class="card-header" onclick="toggleCard('card-heartbeat')">
+        <h2>HEARTBEAT</h2>
+        <span class="card-chevron">&#9660;</span>
+      </div>
+      <div class="card-body">
+        <div class="setting-row">
+          <div class="setting-label">Heartbeat enabled</div>
+          <div class="setting-control">
+            <button class="toggle" id="toggle-heartbeat" onclick="toggleSetting('heartbeat_enabled',this)"></button>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label-wrap">
+            <div class="setting-label">Interval</div>
+            <div class="setting-sublabel" id="heartbeat-interval-label">60s</div>
+          </div>
+          <div class="setting-control">
+            <div class="slider-wrap">
+              <input type="range" min="30" max="300" step="10" value="60"
+                     data-key="heartbeat_interval"
+                     oninput="updateHeartbeatLabel(this.value)"
+                     onchange="saveSetting('heartbeat_interval',parseInt(this.value))">
+              <span class="slider-val" id="slider-val-heartbeat_interval">60</span>
+            </div>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">Morning greeting</div>
+          <div class="setting-control">
+            <input type="time" id="time-morning" value="08:00"
+                   onchange="saveSetting('morning_greeting_time',this.value)">
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">Evening check-in</div>
+          <div class="setting-control">
+            <input type="time" id="time-evening" value="21:00"
+                   onchange="saveSetting('evening_checkin_time',this.value)">
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">Idle check-ins</div>
+          <div class="setting-control">
+            <button class="toggle" id="toggle-idle-checkins" onclick="toggleSetting('idle_checkins',this)"></button>
+          </div>
+        </div>
+        <div class="info-row" style="margin-top:8px">
+          <span class="info-key">Last heartbeat</span>
+          <span class="info-val" id="last-heartbeat">--</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="card-prompt">
+      <div class="card-header" onclick="toggleCard('card-prompt')">
+        <h2>SYSTEM PROMPT</h2>
+        <span class="card-chevron">&#9660;</span>
+      </div>
+      <div class="card-body">
+        <button class="secondary" onclick="togglePromptPreview()" style="margin-top:0">
+          SHOW / HIDE PROMPT
+        </button>
+        <div class="prompt-preview" id="prompt-preview"></div>
+      </div>
     </div>
   </div>
 
-  <!-- ── Display pane ── -->
+  <!-- ══════════════════════════════════════════════════════════
+       DISPLAY PANE
+       ══════════════════════════════════════════════════════════ -->
   <div class="pane" id="pane-display">
-    <div class="card">
-      <h2>DISPLAY</h2>
-      <div id="settings-display"></div>
+    <div class="card" id="card-display-text">
+      <div class="card-header" onclick="toggleCard('card-display-text')">
+        <h2>TEXT & FONT</h2>
+        <span class="card-chevron">&#9660;</span>
+      </div>
+      <div class="card-body">
+        <div id="settings-display"></div>
+      </div>
+    </div>
+
+    <div class="card" id="card-display-screen">
+      <div class="card-header" onclick="toggleCard('card-display-screen')">
+        <h2>SCREEN</h2>
+        <span class="card-chevron">&#9660;</span>
+      </div>
+      <div class="card-body">
+        <div class="setting-row">
+          <div class="setting-label-wrap">
+            <div class="setting-label">Brightness</div>
+          </div>
+          <div class="setting-control">
+            <div class="slider-wrap">
+              <input type="range" min="10" max="100" step="5" value="80"
+                     data-key="screen_brightness"
+                     oninput="document.getElementById('slider-val-screen_brightness').textContent=this.value+'%'"
+                     onchange="saveSetting('screen_brightness',parseInt(this.value))">
+              <span class="slider-val" id="slider-val-screen_brightness">80%</span>
+            </div>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label-wrap">
+            <div class="setting-label">Screen timeout</div>
+            <div class="setting-sublabel">Seconds before dim, then off</div>
+          </div>
+          <div class="setting-control">
+            <div class="slider-wrap">
+              <input type="range" min="10" max="120" step="5" value="30"
+                     data-key="screen_timeout"
+                     oninput="document.getElementById('slider-val-screen_timeout').textContent=this.value+'s'"
+                     onchange="saveSetting('screen_timeout',parseInt(this.value))">
+              <span class="slider-val" id="slider-val-screen_timeout">30s</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- ── Integrations pane ── -->
+  <!-- ══════════════════════════════════════════════════════════
+       SYSTEM PANE (notifications, data, debug)
+       ══════════════════════════════════════════════════════════ -->
+  <div class="pane" id="pane-system">
+
+    <!-- Notifications -->
+    <div class="card" id="card-notifications">
+      <div class="card-header" onclick="toggleCard('card-notifications')">
+        <h2>NOTIFICATIONS</h2>
+        <span class="card-chevron">&#9660;</span>
+      </div>
+      <div class="card-body">
+        <div class="setting-row">
+          <div class="setting-label">Reminders</div>
+          <div class="setting-control">
+            <button class="toggle on" id="toggle-notif-reminders" onclick="toggleSetting('notif_reminders',this)"></button>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">Proactive messages</div>
+          <div class="setting-control">
+            <button class="toggle on" id="toggle-notif-proactive" onclick="toggleSetting('notif_proactive',this)"></button>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">System alerts</div>
+          <div class="setting-control">
+            <button class="toggle on" id="toggle-notif-system" onclick="toggleSetting('notif_system',this)"></button>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">Notification sound</div>
+          <div class="setting-control">
+            <button class="toggle on" id="toggle-notif-sound" onclick="toggleSetting('notif_sound',this)"></button>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">Quiet hours start</div>
+          <div class="setting-control">
+            <input type="time" id="time-quiet-start" value="22:00"
+                   onchange="saveSetting('quiet_hours_start',this.value)">
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">Quiet hours end</div>
+          <div class="setting-control">
+            <input type="time" id="time-quiet-end" value="07:00"
+                   onchange="saveSetting('quiet_hours_end',this.value)">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Data & Privacy -->
+    <div class="card" id="card-data">
+      <div class="card-header" onclick="toggleCard('card-data')">
+        <h2>DATA & PRIVACY</h2>
+        <span class="card-chevron">&#9660;</span>
+      </div>
+      <div class="card-body">
+        <div class="info-row">
+          <span class="info-key">Storage used</span>
+          <span class="info-val" id="storage-used">--</span>
+        </div>
+        <div class="storage-bar">
+          <div class="storage-fill" id="storage-fill" style="width:0%"></div>
+        </div>
+        <div class="info-row">
+          <span class="info-key">RAM usage</span>
+          <span class="info-val" id="ram-usage">--</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">CPU</span>
+          <span class="info-val" id="cpu-usage">--</span>
+        </div>
+        <button class="danger" id="btn-clear-chat" onclick="confirmAction('clear-chat','Clear Chat History','This will delete all chat sessions from the server. This cannot be undone.')">
+          CLEAR CHAT HISTORY
+        </button>
+        <button class="danger" id="btn-clear-recordings" onclick="confirmAction('clear-recordings','Clear Recordings','This will delete all field recordings from the device. This cannot be undone.')">
+          CLEAR FIELD RECORDINGS
+        </button>
+        <button class="secondary" id="btn-export" onclick="exportData()" style="margin-top:8px">
+          EXPORT DATA
+        </button>
+      </div>
+    </div>
+
+    <!-- About / Debug -->
+    <div class="card" id="card-debug">
+      <div class="card-header" onclick="toggleCard('card-debug')">
+        <h2>ABOUT / DEBUG</h2>
+        <span class="card-chevron">&#9660;</span>
+      </div>
+      <div class="card-body">
+        <div class="info-row">
+          <span class="info-key">Device name</span>
+          <span class="info-val" id="debug-device-name">--</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">Server version</span>
+          <span class="info-val" id="debug-server-version">--</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">Build</span>
+          <span class="info-val" id="debug-build">--</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">Commit</span>
+          <span class="info-val" id="debug-commit">--</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">Provider</span>
+          <span class="info-val" id="debug-provider">--</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">Model</span>
+          <span class="info-val" id="debug-model">--</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">Connection</span>
+          <span class="info-val" id="debug-connection">--</span>
+        </div>
+        <button class="secondary" onclick="toggleLogViewer()" style="margin-top:8px">
+          VIEW SERVER LOGS
+        </button>
+        <div class="log-viewer" id="log-viewer"></div>
+        <button class="secondary" onclick="toggleDeviceLogViewer()" style="margin-top:4px">
+          VIEW DEVICE LOGS
+        </button>
+        <div class="log-viewer" id="device-log-viewer"></div>
+        <button class="secondary" onclick="runDeepHealth()" style="margin-top:4px" id="btn-deep-health">
+          RUN DEEP HEALTH CHECK
+        </button>
+        <div class="status" id="deep-health-status" style="min-height:0"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       INTEGRATIONS PANE
+       ══════════════════════════════════════════════════════════ -->
   <div class="pane" id="pane-integrations">
     <!-- Overview status card -->
-    <div class="card">
-      <h2>SERVICES</h2>
-      <div id="integrations-loading" class="status">Loading...</div>
-      <div id="integrations-list" style="display:none"></div>
-      <button class="secondary" onclick="refreshIntegrations()">REFRESH ALL</button>
+    <div class="card" id="card-services">
+      <div class="card-header" onclick="toggleCard('card-services')">
+        <h2>SERVICES</h2>
+        <span class="card-chevron">&#9660;</span>
+      </div>
+      <div class="card-body">
+        <div id="integrations-loading" class="status">Loading...</div>
+        <div id="integrations-list" style="display:none"></div>
+        <button class="secondary" onclick="refreshIntegrations()">REFRESH ALL</button>
+      </div>
     </div>
 
     <!-- Anthropic AI setup -->
@@ -426,6 +882,18 @@
     </div>
   </div>
 
+  <!-- Confirm dialog (hidden by default, shown via JS) -->
+  <div id="confirm-overlay" class="confirm-overlay" style="display:none">
+    <div class="confirm-dialog">
+      <h3 id="confirm-title">Confirm</h3>
+      <p id="confirm-message">Are you sure?</p>
+      <div class="confirm-actions">
+        <button class="confirm-cancel" onclick="dismissConfirm()">CANCEL</button>
+        <button class="confirm-ok" id="confirm-ok-btn" onclick="executeConfirmedAction()">CONFIRM</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script>
@@ -446,6 +914,9 @@
     const mgr = new BitosSettings(SERVER);
     let companion = null;
 
+    // ── Pending confirm action ──────────────────────────────
+    let _pendingConfirmAction = null;
+
     // ── Agent mode descriptions ─────────────────────────────
     const MODE_DESCRIPTIONS = {
       producer: 'Operations partner — tasks, deadlines, vendor coordination',
@@ -456,6 +927,14 @@
       director: 'Strategic thinker — big picture, opportunity evaluation',
     };
 
+    // ── Sub-agent definitions ────────────────────────────────
+    const SUB_AGENTS = [
+      { key: 'gesture_annotator', name: 'Gesture Annotator', desc: 'Haiku annotates responses with expressions + gestures' },
+      { key: 'idle_director', name: 'Idle Director', desc: 'Haiku plans idle animation timelines' },
+      { key: 'inner_thoughts', name: 'Inner Thoughts', desc: 'Subconscious reflection + salience scoring' },
+      { key: 'memory_consolidator', name: 'Memory Consolidator', desc: 'Batch memory consolidation every N turns' },
+    ];
+
     // ── Tab switching ──────────────────────────────────────
     function switchTab(name) {
       document.querySelectorAll('.tab').forEach(t =>
@@ -464,12 +943,45 @@
         p.classList.toggle('active', p.id === 'pane-' + name));
     }
 
-    // ── Render setting controls ────────────────────────────
+    // ── Collapsible cards ───────────────────────────────────
+    function toggleCard(id) {
+      const card = document.getElementById(id);
+      if (card) card.classList.toggle('collapsed');
+    }
+
+    // ── Generic setting save helpers ─────────────────────────
+    function saveSetting(key, value) {
+      mgr.setSetting(key, value);
+      showToast('SAVED');
+    }
+
+    function toggleSetting(key, btn) {
+      const isOn = btn.classList.contains('on');
+      const next = !isOn;
+      btn.classList.toggle('on', next);
+      mgr.setSetting(key, next);
+      showToast('SAVED');
+    }
+
+    function setPickerValue(key, value, btn) {
+      const picker = btn.closest('.picker');
+      picker.querySelectorAll('.picker-opt').forEach(b =>
+        b.classList.toggle('active', b.dataset.value === value));
+      mgr.setSetting(key, value);
+      showToast('SAVED');
+    }
+
+    function updateHeartbeatLabel(val) {
+      document.getElementById('slider-val-heartbeat_interval').textContent = val;
+      document.getElementById('heartbeat-interval-label').textContent = val + 's';
+    }
+
+    // ── Render setting controls (for SETTING_GROUPS) ────────
     function renderSettingGroups() {
       for (const group of SETTING_GROUPS) {
         const container = document.getElementById('settings-' + group.id);
         if (!container) continue;
-        container.innerHTML = '';
+        container.textContent = '';
 
         for (const s of group.settings) {
           const row = document.createElement('div');
@@ -555,7 +1067,7 @@
     // ── Render agent mode selector ──────────────────────────
     function renderAgentModes() {
       const container = document.getElementById('agent-modes-list');
-      container.innerHTML = '';
+      container.textContent = '';
       const modes = ['producer', 'hacker', 'clown', 'monk', 'storyteller', 'director'];
       const current = mgr.settings.agent_mode || 'producer';
 
@@ -592,6 +1104,43 @@
         r.classList.toggle('active', r.id === 'radio-' + mode));
       mgr.setSetting('agent_mode', mode);
       showToast(mode.toUpperCase() + ' MODE');
+    }
+
+    // ── Render sub-agents ────────────────────────────────────
+    function renderSubAgents() {
+      const container = document.getElementById('sub-agents-list');
+      container.textContent = '';
+
+      for (const agent of SUB_AGENTS) {
+        const row = document.createElement('div');
+        row.className = 'agent-row';
+
+        const info = document.createElement('div');
+        info.className = 'agent-info';
+
+        const nameEl = document.createElement('div');
+        nameEl.className = 'agent-name';
+        nameEl.textContent = agent.name;
+
+        const statusEl = document.createElement('div');
+        statusEl.className = 'agent-status';
+        statusEl.id = 'agent-status-' + agent.key;
+        statusEl.textContent = agent.desc;
+
+        info.appendChild(nameEl);
+        info.appendChild(statusEl);
+
+        const toggle = document.createElement('button');
+        toggle.className = 'toggle on';
+        toggle.id = 'toggle-agent-' + agent.key;
+        toggle.addEventListener('click', () => {
+          toggleSetting('agent_' + agent.key, toggle);
+        });
+
+        row.appendChild(info);
+        row.appendChild(toggle);
+        container.appendChild(row);
+      }
     }
 
     // ── TTS test ────────────────────────────────────────────
@@ -633,21 +1182,19 @@
       el.textContent = 'Loading...';
       el.classList.add('visible');
       try {
-        // Fetch current agent mode and build a prompt preview via health + settings
         const mode = mgr.settings.agent_mode || 'producer';
         const model = mgr.settings.ai_model || 'default';
         const r = await fetch(`${SERVER}/health`, { signal: AbortSignal.timeout(3000) });
         const health = r.ok ? await r.json() : {};
 
-        // Build a summary of what the prompt looks like
         const lines = [
           '// ACTIVE CONFIGURATION',
-          `Mode: ${mode.toUpperCase()}`,
-          `Model: ${model} (${health.model || 'unknown'})`,
-          `Provider: ${health.provider || 'unknown'}`,
-          `Extended thinking: ${mgr.settings.extended_thinking ? 'ON' : 'OFF'}`,
-          `Web search: ${mgr.settings.web_search !== false ? 'ON' : 'OFF'}`,
-          `Memory: ${mgr.settings.memory !== false ? 'ON' : 'OFF'}`,
+          'Mode: ' + mode.toUpperCase(),
+          'Model: ' + model + ' (' + (health.model || 'unknown') + ')',
+          'Provider: ' + (health.provider || 'unknown'),
+          'Extended thinking: ' + (mgr.settings.extended_thinking ? 'ON' : 'OFF'),
+          'Web search: ' + (mgr.settings.web_search !== false ? 'ON' : 'OFF'),
+          'Memory: ' + (mgr.settings.memory !== false ? 'ON' : 'OFF'),
           '',
           '// MODE DESCRIPTION',
           MODE_DESCRIPTIONS[mode] || 'No description',
@@ -691,8 +1238,8 @@
       document.getElementById('info-server').textContent =
         status.server_online ? SERVER.replace(/^https?:\/\//, '') : 'Offline';
 
-      // Sync toggles
-      document.querySelectorAll('.toggle').forEach(btn => {
+      // Sync toggles from SETTING_GROUPS
+      document.querySelectorAll('.toggle[data-key]').forEach(btn => {
         const val = settings[btn.dataset.key];
         btn.classList.toggle('on', val === true || val === 'on');
       });
@@ -710,7 +1257,13 @@
         if (val != null) {
           range.value = val;
           const valSpan = document.getElementById('slider-val-' + range.dataset.key);
-          if (valSpan) valSpan.textContent = val;
+          if (valSpan) {
+            // Append unit suffix if applicable
+            const key = range.dataset.key;
+            if (key === 'screen_brightness') valSpan.textContent = val + '%';
+            else if (key === 'screen_timeout') valSpan.textContent = val + 's';
+            else valSpan.textContent = val;
+          }
         }
       });
 
@@ -718,6 +1271,70 @@
       const currentMode = settings.agent_mode || 'producer';
       document.querySelectorAll('.mode-radio').forEach(r =>
         r.classList.toggle('active', r.id === 'radio-' + currentMode));
+
+      // Sync custom toggles (heartbeat, notifications, sub-agents, audio)
+      syncToggle('toggle-heartbeat', settings.heartbeat_enabled);
+      syncToggle('toggle-idle-checkins', settings.idle_checkins);
+      syncToggle('toggle-audio-feedback', settings.audio_feedback);
+      syncToggle('toggle-notif-reminders', settings.notif_reminders);
+      syncToggle('toggle-notif-proactive', settings.notif_proactive);
+      syncToggle('toggle-notif-system', settings.notif_system);
+      syncToggle('toggle-notif-sound', settings.notif_sound);
+
+      // Sync sub-agent toggles
+      for (const agent of SUB_AGENTS) {
+        syncToggle('toggle-agent-' + agent.key, settings['agent_' + agent.key]);
+      }
+
+      // Sync time inputs
+      if (settings.morning_greeting_time) {
+        document.getElementById('time-morning').value = settings.morning_greeting_time;
+      }
+      if (settings.evening_checkin_time) {
+        document.getElementById('time-evening').value = settings.evening_checkin_time;
+      }
+      if (settings.quiet_hours_start) {
+        document.getElementById('time-quiet-start').value = settings.quiet_hours_start;
+      }
+      if (settings.quiet_hours_end) {
+        document.getElementById('time-quiet-end').value = settings.quiet_hours_end;
+      }
+
+      // Sync recording quality picker
+      if (settings.recording_quality) {
+        const rqPicker = document.querySelector('.picker[data-key="recording_quality"]');
+        if (rqPicker) {
+          rqPicker.querySelectorAll('.picker-opt').forEach(b =>
+            b.classList.toggle('active', b.dataset.value === settings.recording_quality));
+        }
+      }
+
+      // Heartbeat interval label
+      if (settings.heartbeat_interval) {
+        document.getElementById('heartbeat-interval-label').textContent = settings.heartbeat_interval + 's';
+      }
+
+      // Last heartbeat
+      if (settings.last_heartbeat) {
+        document.getElementById('last-heartbeat').textContent = timeAgo(settings.last_heartbeat);
+      }
+
+      // Debug info
+      document.getElementById('debug-device-name').textContent = settings.device_name || 'BITOS';
+      document.getElementById('debug-server-version').textContent = status.version || '--';
+      document.getElementById('debug-build').textContent = status.build || status.commit || '--';
+      document.getElementById('debug-commit').textContent = status.commit || '--';
+      document.getElementById('debug-connection').textContent = mgr.connectionMode.toUpperCase();
+    }
+
+    function syncToggle(id, value) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      // Default to 'on' for notification toggles if value is undefined
+      const isOn = value === undefined
+        ? (id.startsWith('toggle-notif-') || id === 'toggle-audio-feedback')
+        : (value === true || value === 'on');
+      el.classList.toggle('on', isOn);
     }
 
     // Apply defaults for settings not yet loaded from server
@@ -728,6 +1345,245 @@
             mgr.settings[s.key] = s.default;
           }
         }
+      }
+      // Defaults for new settings
+      const defaults = {
+        heartbeat_enabled: true,
+        heartbeat_interval: 60,
+        morning_greeting_time: '08:00',
+        evening_checkin_time: '21:00',
+        idle_checkins: true,
+        consolidation_interval: 8,
+        recording_quality: 'medium',
+        audio_feedback: true,
+        screen_brightness: 80,
+        screen_timeout: 30,
+        notif_reminders: true,
+        notif_proactive: true,
+        notif_system: true,
+        notif_sound: true,
+        quiet_hours_start: '22:00',
+        quiet_hours_end: '07:00',
+      };
+      for (const agent of SUB_AGENTS) {
+        defaults['agent_' + agent.key] = true;
+      }
+      for (const [k, v] of Object.entries(defaults)) {
+        if (mgr.settings[k] === undefined) {
+          mgr.settings[k] = v;
+        }
+      }
+    }
+
+    // ── Fetch debug/system info ──────────────────────────────
+    async function fetchDebugInfo() {
+      try {
+        const r = await fetch(`${SERVER}/health`, { signal: AbortSignal.timeout(3000) });
+        if (r.ok) {
+          const d = await r.json();
+          document.getElementById('debug-server-version').textContent = d.version || '--';
+          document.getElementById('debug-build').textContent = d.build || d.commit || '--';
+          document.getElementById('debug-commit').textContent = d.commit || '--';
+          document.getElementById('debug-provider').textContent = d.provider || '--';
+          document.getElementById('debug-model').textContent = d.model || '--';
+        }
+      } catch (_) {}
+
+      // Device stats (storage, RAM, CPU)
+      try {
+        const r = await fetch(`${SERVER}/device/stats`, { signal: AbortSignal.timeout(3000) });
+        if (r.ok) {
+          const d = await r.json();
+          document.getElementById('ram-usage').textContent =
+            d.ram_used_mb + ' / ' + d.ram_total_mb + ' MB (' + d.ram_percent + '%)';
+          document.getElementById('cpu-usage').textContent = d.cpu_percent + '%';
+
+          const diskPct = d.disk_percent || 0;
+          document.getElementById('storage-used').textContent = diskPct + '% disk used';
+          const fill = document.getElementById('storage-fill');
+          fill.style.width = diskPct + '%';
+          fill.className = 'storage-fill';
+          if (diskPct > 90) fill.classList.add('critical');
+          else if (diskPct > 70) fill.classList.add('warn');
+        }
+      } catch (_) {}
+    }
+
+    // ── Log viewer ──────────────────────────────────────────
+    async function toggleLogViewer() {
+      const viewer = document.getElementById('log-viewer');
+      if (viewer.classList.contains('visible')) {
+        viewer.classList.remove('visible');
+        return;
+      }
+      viewer.textContent = 'Loading...';
+      viewer.classList.add('visible');
+      try {
+        const r = await fetch(`${SERVER}/logs?lines=100`, { signal: AbortSignal.timeout(5000) });
+        if (!r.ok) throw new Error('Server returned ' + r.status);
+        const d = await r.json();
+        viewer.textContent = '';
+        if (!d.lines || d.lines.length === 0) {
+          viewer.textContent = 'No log entries found.';
+          return;
+        }
+        for (const line of d.lines) {
+          const span = document.createElement('span');
+          span.textContent = line + '\n';
+          if (line.includes('ERROR')) span.className = 'log-line-error';
+          else if (line.includes('WARNING')) span.className = 'log-line-warning';
+          viewer.appendChild(span);
+        }
+        viewer.scrollTop = viewer.scrollHeight;
+      } catch (e) {
+        viewer.textContent = 'Cannot load logs: ' + (e.message || 'offline');
+      }
+    }
+
+    async function toggleDeviceLogViewer() {
+      const viewer = document.getElementById('device-log-viewer');
+      if (viewer.classList.contains('visible')) {
+        viewer.classList.remove('visible');
+        return;
+      }
+      viewer.textContent = 'Loading...';
+      viewer.classList.add('visible');
+      try {
+        const r = await fetch(`${SERVER}/logs/device?lines=100`, { signal: AbortSignal.timeout(5000) });
+        if (!r.ok) throw new Error('Server returned ' + r.status);
+        const d = await r.json();
+        viewer.textContent = '';
+        if (!d.lines || d.lines.length === 0) {
+          viewer.textContent = d.exists === false ? 'Device log file not found.' : 'No log entries.';
+          return;
+        }
+        for (const line of d.lines) {
+          const span = document.createElement('span');
+          span.textContent = line + '\n';
+          if (line.includes('ERROR')) span.className = 'log-line-error';
+          else if (line.includes('WARNING')) span.className = 'log-line-warning';
+          viewer.appendChild(span);
+        }
+        viewer.scrollTop = viewer.scrollHeight;
+      } catch (e) {
+        viewer.textContent = 'Cannot load logs: ' + (e.message || 'offline');
+      }
+    }
+
+    // ── Deep health check ───────────────────────────────────
+    async function runDeepHealth() {
+      const btn = document.getElementById('btn-deep-health');
+      const statusEl = document.getElementById('deep-health-status');
+      btn.disabled = true;
+      statusEl.textContent = 'Running deep health check...';
+      statusEl.className = 'status';
+      try {
+        const r = await fetch(`${SERVER}/health/deep`, { signal: AbortSignal.timeout(30000) });
+        if (!r.ok) throw new Error('Server returned ' + r.status);
+        const d = await r.json();
+        const parts = ['Status: ' + (d.status || 'unknown').toUpperCase()];
+        if (d.checks) {
+          for (const [name, check] of Object.entries(d.checks)) {
+            const ok = check.ok ? 'OK' : 'FAIL';
+            const extra = check.error ? ' — ' + check.error : (check.mode ? ' (' + check.mode + ')' : '');
+            parts.push('  ' + name + ': ' + ok + extra);
+          }
+        }
+        statusEl.textContent = parts.join('\n');
+        statusEl.style.whiteSpace = 'pre-wrap';
+        statusEl.className = d.status === 'ok' ? 'status ok' : 'status error';
+      } catch (e) {
+        statusEl.textContent = 'Failed: ' + (e.message || 'unreachable');
+        statusEl.className = 'status error';
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    // ── Confirm dialog ──────────────────────────────────────
+    function confirmAction(action, title, message) {
+      _pendingConfirmAction = action;
+      document.getElementById('confirm-title').textContent = title;
+      document.getElementById('confirm-message').textContent = message;
+      document.getElementById('confirm-overlay').style.display = 'flex';
+    }
+
+    function dismissConfirm() {
+      _pendingConfirmAction = null;
+      document.getElementById('confirm-overlay').style.display = 'none';
+    }
+
+    async function executeConfirmedAction() {
+      const action = _pendingConfirmAction;
+      dismissConfirm();
+      if (!action) return;
+
+      if (action === 'clear-chat') {
+        // NOTE: No dedicated clear-chat endpoint exists yet.
+        // This sends a request to the server; wire to actual endpoint when available.
+        try {
+          const r = await fetch(`${SERVER}/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: '/clear-history', system: true }),
+            signal: AbortSignal.timeout(5000),
+          });
+          showToast(r.ok ? 'CHAT HISTORY CLEARED' : 'CLEAR FAILED');
+        } catch (_) {
+          showToast('SERVER UNREACHABLE');
+        }
+      } else if (action === 'clear-recordings') {
+        // NOTE: No dedicated clear-recordings endpoint exists yet.
+        try {
+          await fetch(`${SERVER}/settings/device`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: 'clear_recordings', value: true }),
+            signal: AbortSignal.timeout(5000),
+          });
+          showToast('RECORDINGS CLEARED');
+        } catch (_) {
+          showToast('SERVER UNREACHABLE');
+        }
+      }
+    }
+
+    // ── Export data ──────────────────────────────────────────
+    async function exportData() {
+      const btn = document.getElementById('btn-export');
+      btn.disabled = true;
+      btn.textContent = 'EXPORTING...';
+      try {
+        // Gather all available data
+        const [settingsResp, healthResp, statsResp] = await Promise.all([
+          fetch(`${SERVER}/settings/device`, { signal: AbortSignal.timeout(5000) }).catch(() => null),
+          fetch(`${SERVER}/health`, { signal: AbortSignal.timeout(5000) }).catch(() => null),
+          fetch(`${SERVER}/device/stats`, { signal: AbortSignal.timeout(5000) }).catch(() => null),
+        ]);
+
+        const exported = {
+          exported_at: new Date().toISOString(),
+          settings: settingsResp && settingsResp.ok ? await settingsResp.json() : {},
+          health: healthResp && healthResp.ok ? await healthResp.json() : {},
+          stats: statsResp && statsResp.ok ? await statsResp.json() : {},
+        };
+
+        // Download as JSON file
+        const blob = new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'bitos-export-' + new Date().toISOString().slice(0, 10) + '.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('DATA EXPORTED');
+      } catch (e) {
+        showToast('EXPORT FAILED');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'EXPORT DATA';
       }
     }
 
@@ -773,15 +1629,15 @@
         const r = await fetch(`${SERVER}/device/version`, {
           signal: AbortSignal.timeout(5000),
         });
-        if (!r.ok) throw new Error(`Server returned ${r.status}`);
+        if (!r.ok) throw new Error('Server returned ' + r.status);
         const d = await r.json();
         document.getElementById('version-info').textContent =
-          `Version: ${d.version} (${d.commit})`;
+          'Version: ' + d.version + ' (' + d.commit + ')';
         if (d.update_available) {
           document.getElementById('update-available').style.display = 'block';
           document.getElementById('up-to-date').style.display = 'none';
           document.getElementById('update-msg').textContent =
-            `${d.behind} update(s) available`;
+            d.behind + ' update(s) available';
         } else {
           document.getElementById('update-available').style.display = 'none';
           document.getElementById('up-to-date').style.display = 'block';
@@ -807,7 +1663,7 @@
         });
         if (!r.ok) {
           const err = await r.json().catch(() => ({}));
-          throw new Error(err.detail || `Server returned ${r.status}`);
+          throw new Error(err.detail || 'Server returned ' + r.status);
         }
         const d = await r.json();
         if (d.ok) {
@@ -869,7 +1725,7 @@
         const r = await fetch(`${SERVER}/status/integrations`, {
           signal: AbortSignal.timeout(5000),
         });
-        if (!r.ok) throw new Error(`Server returned ${r.status}`);
+        if (!r.ok) throw new Error('Server returned ' + r.status);
         const data = await r.json();
         renderIntegrations(data);
       } catch (e) {
@@ -880,7 +1736,7 @@
 
     function renderIntegrations(data) {
       const list = document.getElementById('integrations-list');
-      list.innerHTML = '';
+      list.textContent = '';
       document.getElementById('integrations-loading').style.display = 'none';
       list.style.display = 'block';
 
@@ -895,16 +1751,16 @@
         const info = data[entry.key];
         if (!info) continue;
         const lbl = integrationLabel(info.status);
-        const detail = info.unread != null ? ` (${info.unread} unread)` :
-                       info.task_count != null ? ` (${info.task_count} tasks)` :
-                       info.model ? ` (${info.model})` : '';
+        const detail = info.unread != null ? ' (' + info.unread + ' unread)' :
+                       info.task_count != null ? ' (' + info.task_count + ' tasks)' :
+                       info.model ? ' (' + info.model + ')' : '';
         const row = document.createElement('div');
         row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #222';
         const nameSpan = document.createElement('span');
         nameSpan.style.fontSize = '12px';
         nameSpan.textContent = entry.label;
         const statusSpan = document.createElement('span');
-        statusSpan.style.cssText = `color:${lbl.color};font-size:11px;text-align:right`;
+        statusSpan.style.cssText = 'color:' + lbl.color + ';font-size:11px;text-align:right';
         statusSpan.textContent = lbl.text + detail;
         row.appendChild(nameSpan);
         row.appendChild(statusSpan);
@@ -981,7 +1837,7 @@
         });
         if (!r.ok) {
           const err = await r.json().catch(() => ({}));
-          throw new Error(err.detail || `Server returned ${r.status}`);
+          throw new Error(err.detail || 'Server returned ' + r.status);
         }
         const d = await r.json();
         if (d.ok) {
@@ -1015,7 +1871,7 @@
         });
         if (!r.ok) {
           const err = await r.json().catch(() => ({}));
-          throw new Error(err.detail || `Server returned ${r.status}`);
+          throw new Error(err.detail || 'Server returned ' + r.status);
         }
         const d = await r.json();
         if (d.ok) {
@@ -1097,7 +1953,7 @@
         });
         if (!r.ok) {
           const err = await r.json().catch(() => ({}));
-          throw new Error(err.detail || `Server returned ${r.status}`);
+          throw new Error(err.detail || 'Server returned ' + r.status);
         }
         const d = await r.json();
         if (d.ok) {
@@ -1123,6 +1979,7 @@
     // ── Initialize ─────────────────────────────────────────
     renderSettingGroups();
     renderAgentModes();
+    renderSubAgents();
     applyDefaults();
     syncControls(mgr.settings, mgr.deviceStatus);
 
@@ -1133,6 +1990,7 @@
     mgr.startAutoRefresh(5000);
     checkVersion();
     refreshIntegrations();
+    fetchDebugInfo();
 
     // Pause polling when hidden
     document.addEventListener('visibilitychange', () => {
@@ -1141,6 +1999,7 @@
       } else {
         mgr.startAutoRefresh(5000);
         refreshIntegrations();
+        fetchDebugInfo();
       }
     });
   </script>
