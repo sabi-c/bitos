@@ -126,6 +126,7 @@ class BTService:
         self._reconnect_tasks: dict[str, asyncio.Task] = {}
         self._discovery_active = False
         self._running = False
+        self._loop: asyncio.AbstractEventLoop | None = None  # stored on start() for thread-safe callbacks
 
         # Event callbacks
         self.on_state_change: BTEventCallback | None = None
@@ -196,6 +197,7 @@ class BTService:
             )
 
             self._running = True
+            self._loop = asyncio.get_event_loop()
             logger.info("[BT] Service started, adapter ready")
 
             # Try reconnecting trusted devices
@@ -442,6 +444,26 @@ class BTService:
             return False
 
     # ------------------------------------------------------------------
+    # Internal: thread-safe callback dispatch
+    # ------------------------------------------------------------------
+
+    def _safe_callback(self, callback: Callable, *args: Any) -> None:
+        """Invoke a callback safely from the D-Bus signal thread.
+
+        If callback is async (returns coroutine), schedule it on the stored
+        event loop via call_soon_threadsafe. If sync, just call it.
+        """
+        try:
+            result = callback(*args)
+            if asyncio.iscoroutine(result):
+                if self._loop and self._loop.is_running():
+                    self._loop.call_soon_threadsafe(asyncio.ensure_future, result)
+                else:
+                    logger.warning("[BT] No running loop for async callback, dropping")
+        except Exception as exc:
+            logger.error("[BT] Callback error: %s", exc)
+
+    # ------------------------------------------------------------------
     # Internal: D-Bus signal handling
     # ------------------------------------------------------------------
 
@@ -498,12 +520,7 @@ class BTService:
                     self._start_reconnect(address)
 
                 if self.on_disconnect:
-                    try:
-                        result = self.on_disconnect(address)
-                        if asyncio.iscoroutine(result):
-                            asyncio.ensure_future(result)
-                    except Exception as exc:
-                        logger.error("[BT] on_disconnect callback error: %s", exc)
+                    self._safe_callback(self.on_disconnect, address)
 
         # Track newly discovered devices
         if "Name" in changed or "RSSI" in changed:
@@ -514,12 +531,7 @@ class BTService:
                 info = BTDeviceInfo(address=address, name=name or "Unknown", rssi=rssi)
                 self._known_devices[address] = info
                 if self.on_device_found:
-                    try:
-                        result = self.on_device_found(info)
-                        if asyncio.iscoroutine(result):
-                            asyncio.ensure_future(result)
-                    except Exception as exc:
-                        logger.error("[BT] on_device_found callback error: %s", exc)
+                    self._safe_callback(self.on_device_found, info)
             else:
                 if name:
                     self._known_devices[address].name = name

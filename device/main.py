@@ -547,6 +547,22 @@ def main():
 
     client.on_approval_request = show_approval_overlay
 
+    # Wire confirm dialogue overlay from agent setting_change events
+    def _show_confirm_dialogue(data: dict):
+        from overlays.confirm_dialogue import ConfirmDialogue
+        dialogue = ConfirmDialogue(
+            title=data.get("title", "CONFIRM"),
+            message=data.get("message", ""),
+            confirm_label=data.get("confirm_label", "OK"),
+            cancel_label=data.get("cancel_label", "CANCEL"),
+            destructive=bool(data.get("destructive", False)),
+            on_confirm=lambda: logging.info("confirm_dialogue: confirmed"),
+            on_cancel=lambda: logging.info("confirm_dialogue: cancelled"),
+        )
+        screen_mgr.push_overlay(dialogue)
+
+    client.on_confirm_dialogue = _show_confirm_dialogue
+
     # SD-002: BLE auth bootstrap binds device identity + shared secret before any protected characteristic writes.
     auth_manager = AuthManager(
         # SD-005: PIN hash and BLE secret are sourced from env-backed device secrets.
@@ -1024,11 +1040,30 @@ def main():
             )
         )
 
+    def open_ui_lab():
+        from screens.panels.ui_lab import UILabPanel
+        screen_mgr.push(UILabPanel(
+            on_back=lambda: screen_mgr.pop(),
+            on_show_overlay=lambda overlay: screen_mgr.push_overlay(overlay),
+            ui_settings=ui_settings,
+        ))
+
     def open_focus():
-        screen_mgr.push(FocusPanel(on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings, repository=repository))
+        screen_mgr.push(FocusPanel(
+            on_back=lambda: screen_mgr.pop(),
+            on_open_ui_lab=open_ui_lab,
+            ui_settings=ui_settings,
+            repository=repository,
+        ))
+
+    def _on_task_complete(task_title: str):
+        from screens.panels.ui_lab import AnimationOverlay
+        from screens.components import CheckmarkAnimation
+        anim = CheckmarkAnimation(text=task_title[:20])
+        screen_mgr.push_overlay(AnimationOverlay(anim))
 
     def open_tasks():
-        screen_mgr.push(TasksPanel(client=client, repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
+        screen_mgr.push(TasksPanel(client=client, repository=repository, on_back=lambda: screen_mgr.pop(), on_task_complete=_on_task_complete, ui_settings=ui_settings))
 
     def open_activity():
         screen_mgr.push(ActivityPanel(client=client, repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
@@ -1399,14 +1434,21 @@ def main():
                 logger.info("[BITOS] BT connection manager unavailable (no dbus-next)")
 
         import asyncio as _aio
-        try:
-            loop = _aio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(_start_bt_conn_service())
-            else:
-                loop.run_until_complete(_start_bt_conn_service())
-        except RuntimeError:
-            _aio.run(_start_bt_conn_service())
+        import threading as _thr
+
+        def _bt_thread():
+            """Run BTService on its own event loop (dedicated daemon thread)."""
+            bt_loop = _aio.new_event_loop()
+            _aio.set_event_loop(bt_loop)
+            try:
+                bt_loop.run_until_complete(_start_bt_conn_service())
+                bt_loop.run_forever()  # keep alive for D-Bus signals + reconnect
+            except Exception as _bt_exc:
+                logger.error("[BITOS] BT thread error: %s", _bt_exc)
+            finally:
+                bt_loop.close()
+
+        _thr.Thread(target=_bt_thread, daemon=True, name="bt-service").start()
     except Exception as exc:
         logger.error("[BITOS] BT connection manager failed to initialize: %s", exc)
 
