@@ -30,7 +30,7 @@ from display.tokens import (
 from display.animator import blink_cursor
 from display.pagination import split_into_pages as _shared_split_into_pages
 from display.pagination import wrap_text as _shared_wrap_text
-from display.typewriter import TypewriterRenderer
+from display.typewriter import TypewriterRenderer, TypewriterConfig
 from display.theme import merge_runtime_ui_settings, load_ui_font, ui_line_height
 from display.markdown import parse_line, wrap_markdown_text, STYLE_BOLD, STYLE_ITALIC, STYLE_CODE, STYLE_HEADER, STYLE_BULLET
 from client.api import BackendClient, BackendChatError
@@ -493,7 +493,12 @@ class ChatPanel(BaseScreen):
             saved_speed = self._repository.get_setting("text_speed", None)
             if saved_speed:
                 speed = str(saved_speed)
-        self._page_typewriter = TypewriterRenderer(page_text, speed=speed)
+        if speed == "custom" and self._repository:
+            config_raw = self._repository.get_setting("typewriter_config", "{}")
+            config = TypewriterConfig.from_json(str(config_raw))
+            self._page_typewriter = TypewriterRenderer(page_text, config=config)
+        else:
+            self._page_typewriter = TypewriterRenderer(page_text, speed=speed)
 
     def _build_pages(self, response_text: str, user_message: str = "") -> None:
         """Split response into paginated pages and start typewriter on page 1.

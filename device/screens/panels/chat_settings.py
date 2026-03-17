@@ -64,7 +64,7 @@ class ChatSettingsPanel(BaseScreen):
              "options": ["default", "haiku", "sonnet", "opus"]},
             {"label": "META PROMPT", "key": "meta_prompt", "value": str(meta or "default assistant")},
             {"label": "TEXT SPEED", "key": "text_speed", "value": str(text_speed or "normal"),
-             "options": ["slow", "normal", "fast"]},
+             "options": ["slow", "normal", "fast", "custom"]},
         ]
         self._test_voice_status = ""
 

@@ -5,7 +5,7 @@ import pygame
 
 from screens.base import BaseScreen
 from display.pagination import split_into_pages, wrap_text
-from display.typewriter import TypewriterRenderer
+from display.typewriter import TypewriterRenderer, TypewriterConfig
 from display.tokens import (
     BLACK,
     WHITE,
@@ -94,7 +94,12 @@ class MarkdownViewerPanel(BaseScreen):
             saved_speed = self._repository.get_setting("text_speed", None)
             if saved_speed:
                 speed = str(saved_speed)
-        self._page_typewriter = TypewriterRenderer(page_text, speed=speed)
+        if speed == "custom" and self._repository:
+            config_raw = self._repository.get_setting("typewriter_config", "{}")
+            config = TypewriterConfig.from_json(str(config_raw))
+            self._page_typewriter = TypewriterRenderer(page_text, config=config)
+        else:
+            self._page_typewriter = TypewriterRenderer(page_text, speed=speed)
 
     def update(self, dt: float):
         if self._page_typewriter and not self._page_typewriter.finished:
