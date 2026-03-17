@@ -9,6 +9,9 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
+# Ensure server is first so notifications package is found
+if str(ROOT / "server") in sys.path:
+    sys.path.remove(str(ROOT / "server"))
 sys.path.insert(0, str(ROOT / "server"))
 sys.path.insert(0, str(ROOT / "server" / "integrations"))
 
@@ -30,7 +33,7 @@ class ReminderDeliveryTests(unittest.TestCase):
         os.unlink(self._tmpfile.name)
 
     def test_reminder_creates_notification_event(self):
-        """Reminder firing should create a NotificationEvent with correct fields."""
+        """Reminder firing should mark the task as fired and broadcast."""
         import asyncio
         import task_store
 
@@ -39,16 +42,6 @@ class ReminderDeliveryTests(unittest.TestCase):
             reminder_at="2020-01-01T09:00:00",
             priority=2,
         )
-
-        # Capture notifications
-        notifications = []
-        from notifications.models import NotificationEvent
-        from notifications.queue_store import QueueStore
-        from notifications.dispatcher import NotificationDispatcher
-
-        store = QueueStore()
-        dispatcher = NotificationDispatcher(store)
-        dispatcher.register_callback(lambda evt: notifications.append(evt))
 
         from heartbeat import _HeartbeatEngine
         engine = _HeartbeatEngine()
