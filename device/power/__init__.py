@@ -2,5 +2,6 @@
 
 from .battery import BatteryMonitor
 from .leds import LEDController
+from .manager import PowerManager
 
-__all__ = ["BatteryMonitor", "LEDController"]
+__all__ = ["BatteryMonitor", "LEDController", "PowerManager"]

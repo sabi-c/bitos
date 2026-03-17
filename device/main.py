@@ -77,6 +77,7 @@ from hardware import StatusPoller, StatusState, SystemMonitor
 from power.battery import BatteryMonitor
 from power.idle import IdleManager
 from power.leds import LEDController
+from power.manager import PowerManager
 from screens.manager import ScreenManager
 from screens.boot import BootScreen
 from screens.lock import LockScreen
@@ -249,6 +250,8 @@ def main():
     status_state = StatusState()
     screen_mgr = ScreenManager(notification_queue=notification_queue, status_state=status_state)
     idle_mgr = IdleManager(driver, repository)
+    power_mgr = PowerManager()
+    power_mgr.system_power_save()
 
     def _active_screen_name() -> str:
         current = screen_mgr.current
@@ -262,6 +265,7 @@ def main():
     def _on_button(btn_event: ButtonEvent):
         logger.info("[Button] %s", btn_event.name)
         idle_mgr.wake()
+        power_mgr.poke()
         if power_overlay is not None:
             power_overlay.handle_input(btn_event.name)
             return
@@ -1084,7 +1088,7 @@ def main():
         corner_mask.apply(surface)
         driver.update()
 
-        clock.tick(FPS)
+        clock.tick(power_mgr.get_target_fps())
 
     notification_poller.stop()
     status_poller.stop()
