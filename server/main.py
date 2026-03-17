@@ -406,7 +406,9 @@ app = FastAPI(title="BITOS Server", version=__version__)
 
 # ── 01-compatible WebSocket endpoint ──
 from endpoints.ws_01_compat import router as ws_01_router
+from endpoints.spotify_auth import router as spotify_router
 app.include_router(ws_01_router)
+app.include_router(spotify_router)
 
 # ── SMS/iMessage webhook endpoint ──
 from endpoints.webhook_sms import router as webhook_sms_router
@@ -1970,6 +1972,23 @@ async def chat(payload: ChatRequest):
                 )
         except Exception as mem_exc:
             logger.warning("Memory retrieval failed (non-critical): %s", mem_exc)
+
+    # ── Inject now-playing music context ──
+    try:
+        from integrations.spotify_adapter import get_spotify
+        _sp = get_spotify()
+        if _sp.available:
+            _np = _sp.get_now_playing()
+            if _np and _np.get("is_playing"):
+                _prog = _np["progress_ms"] // 1000
+                _dur = _np["duration_ms"] // 1000
+                system_prompt += (
+                    f"\n\n[NOW PLAYING] {_np['track']} by {_np['artist']} "
+                    f"({_np['album']}) "
+                    f"— {_prog // 60}:{_prog % 60:02d}/{_dur // 60}:{_dur % 60:02d}"
+                )
+    except Exception:
+        pass  # Spotify context is optional, never block chat
 
     # Map short model names to full Anthropic model IDs
     _MODEL_MAP = {
