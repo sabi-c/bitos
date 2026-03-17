@@ -63,7 +63,7 @@ class ActionBar:
             items.append((icon_type, label_surf))
 
         total_width = sum(8 + 4 + s.get_width() for _, s in items)
-        spacing = (width - total_width) // (len(items) + 1)
+        spacing = max(2, (width - total_width) // (len(items) + 1))
         x = spacing
 
         for icon_type, label_surf in items:

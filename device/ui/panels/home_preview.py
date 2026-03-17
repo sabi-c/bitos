@@ -123,10 +123,9 @@ class HomePreviewPanel(PreviewPanel):
         max_width = 156 - PAD_X * 2  # panel width minus padding
         for i, text in enumerate(items):
             if status_font.size(text)[0] > max_width:
-                while status_font.size(text)[0] > max_width and len(text) > 1:
+                while len(text) > 1 and status_font.size(text + "\u2026")[0] > max_width:
                     text = text[:-1]
-                text = text[:-1] + "\u2026"
-                items[i] = text
+                items[i] = text + "\u2026"
 
         self._ticker_items = items
 

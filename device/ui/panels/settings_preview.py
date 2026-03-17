@@ -56,32 +56,47 @@ class SettingsPreviewPanel(PreviewPanel):
         """Update item labels to reflect current persisted values."""
         if not self._repository:
             return
-        voice = str(self._repository.get_setting("voice_mode", "off")).lower()
-        mode = str(self._repository.get_setting("agent_mode", "producer")).lower()
-        vol = int(self._repository.get_setting("volume", 75))
-        self.items[0]["label"] = f"VOICE: {voice.upper()}"
-        self.items[1]["label"] = f"MODE: {mode.upper()}"
-        self.items[2]["label"] = f"VOL: {vol}%"
+        try:
+            voice = str(self._repository.get_setting("voice_mode", "off")).lower()
+            mode = str(self._repository.get_setting("agent_mode", "producer")).lower()
+            try:
+                vol = int(self._repository.get_setting("volume", 75))
+            except (ValueError, TypeError):
+                vol = 75
+            self.items[0]["label"] = f"VOICE: {voice.upper()}"
+            self.items[1]["label"] = f"MODE: {mode.upper()}"
+            self.items[2]["label"] = f"VOL: {vol}%"
+        except Exception:
+            pass
 
     def _cycle_voice(self):
-        cur = str(self._repository.get_setting("voice_mode", "off")).lower()
-        idx = VOICE_OPTIONS.index(cur) if cur in VOICE_OPTIONS else 0
-        nxt = VOICE_OPTIONS[(idx + 1) % len(VOICE_OPTIONS)]
-        self._repository.set_setting("voice_mode", nxt)
+        try:
+            cur = str(self._repository.get_setting("voice_mode", "off")).lower()
+            idx = VOICE_OPTIONS.index(cur) if cur in VOICE_OPTIONS else 0
+            nxt = VOICE_OPTIONS[(idx + 1) % len(VOICE_OPTIONS)]
+            self._repository.set_setting("voice_mode", nxt)
+        except Exception:
+            pass
         self._refresh_labels()
 
     def _cycle_agent_mode(self):
-        cur = str(self._repository.get_setting("agent_mode", "producer")).lower()
-        idx = AGENT_MODE_OPTIONS.index(cur) if cur in AGENT_MODE_OPTIONS else 0
-        nxt = AGENT_MODE_OPTIONS[(idx + 1) % len(AGENT_MODE_OPTIONS)]
-        self._repository.set_setting("agent_mode", nxt)
+        try:
+            cur = str(self._repository.get_setting("agent_mode", "producer")).lower()
+            idx = AGENT_MODE_OPTIONS.index(cur) if cur in AGENT_MODE_OPTIONS else 0
+            nxt = AGENT_MODE_OPTIONS[(idx + 1) % len(AGENT_MODE_OPTIONS)]
+            self._repository.set_setting("agent_mode", nxt)
+        except Exception:
+            pass
         self._refresh_labels()
 
     def _cycle_volume(self):
-        cur = int(self._repository.get_setting("volume", 75))
-        idx = VOLUME_OPTIONS.index(cur) if cur in VOLUME_OPTIONS else 0
-        nxt = VOLUME_OPTIONS[(idx + 1) % len(VOLUME_OPTIONS)]
-        self._repository.set_setting("volume", nxt)
+        try:
+            cur = int(self._repository.get_setting("volume", 75))
+            idx = VOLUME_OPTIONS.index(cur) if cur in VOLUME_OPTIONS else 0
+            nxt = VOLUME_OPTIONS[(idx + 1) % len(VOLUME_OPTIONS)]
+            self._repository.set_setting("volume", nxt)
+        except (ValueError, TypeError, Exception):
+            pass
         self._refresh_labels()
 
     # ── Action override ─────────────────────────────────────────────

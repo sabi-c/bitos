@@ -58,16 +58,22 @@ class CommsPreviewPanel(PreviewPanel):
         y += LINE_H + 2
 
         # Latest previews
+        has_preview = False
         if self._latest_msg:
-            text = self._latest_msg[:28] + "..." if len(self._latest_msg or "") > 28 else (self._latest_msg or "")
+            text = self._latest_msg[:28] + "..." if len(self._latest_msg) > 28 else self._latest_msg
             prefix = f"MSG {self._msg_sender}: " if self._msg_sender else "MSG: "
             surf = preview_font.render(f"{prefix}{text}", False, DIM2)
             surface.blit(surf, (PAD_X, y))
             y += LINE_H
+            has_preview = True
         if self._latest_mail:
-            text = self._latest_mail[:28] + "..." if len(self._latest_mail or "") > 28 else (self._latest_mail or "")
+            text = self._latest_mail[:28] + "..." if len(self._latest_mail) > 28 else self._latest_mail
             prefix = f"MAIL {self._mail_sender}: " if self._mail_sender else "MAIL: "
             surf = preview_font.render(f"{prefix}{text}", False, DIM3)
+            surface.blit(surf, (PAD_X, y))
+            has_preview = True
+        if not has_preview:
+            surf = preview_font.render("No new messages", False, DIM3)
             surface.blit(surf, (PAD_X, y))
 
         # Separator

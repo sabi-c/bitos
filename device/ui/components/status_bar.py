@@ -8,7 +8,7 @@ from datetime import datetime
 import pygame
 
 from device.display.theme import get_font
-from device.display.tokens import FONT_SIZE_STATUS_BAR, WHITE, BLACK
+from device.display.tokens import FONT_SIZE_STATUS_BAR, WHITE, BLACK, HAIRLINE
 
 BAR_H = 20
 FONT_SIZE = FONT_SIZE_STATUS_BAR
@@ -46,4 +46,4 @@ class StatusBar:
                                     y + (BAR_H - status_surf.get_height()) // 2))
 
         # Bottom border
-        pygame.draw.line(surface, WHITE, (0, y + BAR_H - 1), (width, y + BAR_H - 1), 2)
+        pygame.draw.line(surface, BLACK, (0, y + BAR_H - 1), (width, y + BAR_H - 1), 1)

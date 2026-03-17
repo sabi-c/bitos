@@ -35,6 +35,8 @@ class PreviewPanel:
 
     def handle_action(self, action: str) -> bool:
         """Handle button action. Returns True if consumed."""
+        if not self.items:
+            return False
         if action == "SHORT_PRESS":
             self.selected_index = (self.selected_index + 1) % len(self.items)
             # Wrap scroll offset when selection wraps to top
@@ -42,8 +44,8 @@ class PreviewPanel:
                 self._scroll_offset = 0
             return True
         elif action == "DOUBLE_PRESS":
-            if self.selected_index < 0:
-                return False  # Not focused yet
+            if self.selected_index < 0 or self.selected_index >= len(self.items):
+                return False  # Not focused yet or out of bounds
             item = self.items[self.selected_index]
             self._on_action(item["action"])
             return True
