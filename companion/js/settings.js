@@ -247,7 +247,24 @@ const SETTING_GROUPS = [
       { key: 'voice_enabled', label: 'Voice output', type: 'toggle', default: false },
       { key: 'voice_mode', label: 'Voice mode', type: 'picker', options: ['off', 'on', 'auto'], default: 'auto' },
       { key: 'volume', label: 'Volume', type: 'slider', min: 0, max: 100, step: 5, default: 70 },
-      { key: 'tts_engine', label: 'TTS engine', type: 'picker', options: ['auto', 'speechify', 'chatterbox', 'piper', 'openai', 'espeak'], default: 'auto' },
+      { key: 'tts_engine', label: 'TTS engine', type: 'picker',
+        options: ['auto', 'edge_tts', 'cartesia', 'speechify', 'openai', 'espeak'], default: 'auto' },
+      { key: 'voice_id', label: 'Voice', type: 'voice_picker', default: '' },
+      { key: 'voice_params', label: 'Voice tuning', type: 'voice_params', default: '{}' },
+      { key: '_test_voice', label: 'Preview on device', type: 'action', action: 'test_voice' },
+    ],
+  },
+  {
+    id: 'text',
+    label: 'TEXT',
+    settings: [
+      { key: 'text_speed', label: 'Speed preset', type: 'picker', options: ['slow', 'normal', 'fast', 'custom'], default: 'normal' },
+      { key: 'tw_base_speed_ms', label: 'Base speed (ms/char)', type: 'slider', min: 10, max: 120, step: 5, default: 45, showWhen: 'custom' },
+      { key: 'tw_punctuation', label: 'Punctuation pause', type: 'slider', min: 0.5, max: 3.0, step: 0.1, default: 1.0, showWhen: 'custom' },
+      { key: 'tw_jitter', label: 'Jitter amount', type: 'slider', min: 0, max: 0.30, step: 0.01, default: 0.15, showWhen: 'custom' },
+      { key: 'tw_common_speed', label: 'Common letter speed', type: 'slider', min: 0.5, max: 1.0, step: 0.05, default: 0.8, showWhen: 'custom' },
+      { key: 'tw_rare_speed', label: 'Rare letter speed', type: 'slider', min: 1.0, max: 2.0, step: 0.05, default: 1.3, showWhen: 'custom' },
+      { key: '_test_typewriter', label: 'Test on device', type: 'action', action: 'test_typewriter' },
     ],
   },
   {
@@ -265,7 +282,6 @@ const SETTING_GROUPS = [
     id: 'display',
     label: 'DISPLAY',
     settings: [
-      { key: 'text_speed', label: 'Text speed', type: 'picker', options: ['slow', 'normal', 'fast'], default: 'normal' },
       { key: 'font_family', label: 'Font', type: 'picker', options: ['press_start_2p', 'monocraft'], default: 'monocraft' },
       { key: 'font_scale', label: 'Font size', type: 'slider', min: 0.8, max: 1.5, step: 0.1, default: 1.0 },
     ],
