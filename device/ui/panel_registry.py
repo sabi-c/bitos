@@ -3,7 +3,7 @@
 Creates custom preview panels for each sidebar item wired to
 action callbacks from main.py.
 
-Sidebar items: HOME, CHAT, TASKS, ACTIVITY, COMMS, FILES, SETTINGS, FOCUS
+Sidebar items: HOME, CHAT, TASKS, ACTIVITY, COMMS, FILES, RECORD, SETTINGS, FOCUS
 """
 
 from device.ui.panels.chat_preview import ChatPreviewPanel
@@ -12,6 +12,7 @@ from device.ui.panels.home_preview import HomePreviewPanel
 from device.ui.panels.activity_preview import ActivityPreviewPanel
 from device.ui.panels.comms_preview import CommsPreviewPanel
 from device.ui.panels.settings_preview import SettingsPreviewPanel
+from device.ui.panels.field_recording_panel import FieldRecordingPanel
 from device.ui.panels.generic_preview import GenericPreviewPanel
 
 
@@ -180,6 +181,20 @@ def create_right_panels(panel_openers: dict | None = None, repository=None,
         status_state=status_state,
         repository=repository,
     )
+
+    # ── Record: field recording panel ──
+    def record_action(action_key):
+        if action_key == "back":
+            return
+        if action_key == "new_recording":
+            # Handled internally by the panel state machine
+            return
+        # view_rec_* actions could open detail view in future
+        opener = openers.get("RECORD")
+        if opener is not None:
+            opener()
+
+    panels["RECORD"] = FieldRecordingPanel(on_action=record_action)
 
     # ── Generic panels for remaining items ──
     for label, items in _GENERIC_CONFIGS.items():
