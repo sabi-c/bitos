@@ -10,6 +10,7 @@ smbus2>=0.4.3        # I2C (PiSugar battery, WM8960)
 pyaudio>=0.2.14      # Audio playback
 sounddevice>=0.4.6   # Audio capture
 pydub>=0.25.1        # Audio processing
+webrtcvad-wheels>=2.0.10  # Voice activity detection (pre-built, no compile)
 
 # BLE
 bluezero>=0.8.0      # BLE GATT server — requires: sudo apt install python3-gi libgirepository1.0-dev

@@ -46,6 +46,23 @@ tmpfs /tmp       tmpfs defaults,noatime,nosuid,size=64m  0 0
 tmpfs /var/tmp   tmpfs defaults,noatime,nosuid,size=16m  0 0
 EOF'
 
+# zram — compressed swap in RAM (better than SD-backed swap)
+if ! dpkg -l 2>/dev/null | grep -q zram-tools; then
+    sudo apt-get install -y -qq zram-tools 2>&1 | tail -1
+    echo "PERCENTAGE=50" | sudo tee /etc/default/zramswap > /dev/null
+    sudo systemctl restart zramswap 2>/dev/null || true
+fi
+
+# GPU memory — minimal for headless Pi
+CONFIG=/boot/config.txt
+[ -f /boot/firmware/config.txt ] && CONFIG=/boot/firmware/config.txt
+grep -q "gpu_mem=16" "$CONFIG" || echo "gpu_mem=16" | sudo tee -a "$CONFIG" > /dev/null
+
+# noatime on root — reduces SD card writes from access timestamp updates
+if ! grep -q "noatime" /etc/fstab 2>/dev/null || ! grep -q "mmcblk0p2.*noatime" /etc/fstab 2>/dev/null; then
+    sudo sed -i 's|defaults|defaults,noatime|' /etc/fstab 2>/dev/null || true
+fi
+
 echo "RESILIENCE SETUP COMPLETE — reboot required for watchdog"
 echo "After reboot, verify: cat /proc/sys/kernel/watchdog"
 

@@ -31,7 +31,7 @@ User=pi
 WorkingDirectory=/home/pi/bitos
 EnvironmentFile=/etc/bitos/secrets
 Environment=XDG_RUNTIME_DIR=/run/user/1000
-Environment=SDL_VIDEODRIVER=offscreen
+Environment=SDL_VIDEODRIVER=fbcon
 Environment=SDL_FBDEV=/dev/fb0
 Environment=BITOS_DISPLAY=st7789
 Environment=BITOS_AUDIO=hw:0

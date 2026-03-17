@@ -11,5 +11,16 @@ ExecStart=/home/pi/bitos/.venv/bin/uvicorn server.main:app --host 0.0.0.0 --port
 Restart=always
 RestartSec=3
 
+# Resource limits
+MemoryMax=192M
+CPUQuota=60%
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/pi/bitos/server/data /home/pi/bitos/logs /tmp
+PrivateTmp=yes
+
 [Install]
 WantedBy=multi-user.target
