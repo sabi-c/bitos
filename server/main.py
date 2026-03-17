@@ -731,6 +731,22 @@ async def get_pending_device_settings():
     return {"changes": pending}
 
 
+@app.get("/settings/voices")
+async def get_voice_catalog():
+    """Return available TTS voices and per-engine parameters."""
+    from voice_catalog import build_catalog
+    with _device_settings_lock:
+        engine = _device_settings_cache.get("tts_engine", "auto")
+        voice_id = _device_settings_cache.get("voice_id", "")
+        params_raw = _device_settings_cache.get("voice_params", "{}")
+    import json
+    try:
+        params = json.loads(params_raw) if isinstance(params_raw, str) else (params_raw or {})
+    except (json.JSONDecodeError, TypeError):
+        params = {}
+    return build_catalog(current_engine=engine, current_voice_id=voice_id, current_params=params)
+
+
 @app.get("/settings/catalog")
 async def settings_catalog():
     """Return catalog metadata for editable UI settings."""
