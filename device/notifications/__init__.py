@@ -1,3 +1,4 @@
 from .poller import NotificationPoller
+from .renderer import NotificationRenderer
 
-__all__ = ["NotificationPoller"]
+__all__ = ["NotificationPoller", "NotificationRenderer"]
