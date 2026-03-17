@@ -53,7 +53,7 @@ class TestEdgeTTSProvider:
                     result = synthesize("hello", out)
 
         assert result is True
-        mock_edge.Communicate.assert_called_once_with("hello", "en-US-AriaNeural")
+        mock_edge.Communicate.assert_called_once_with("hello", "en-US-AriaNeural", rate=None, pitch=None)
 
 
 class TestTTSEngineDetection:

@@ -39,7 +39,8 @@ def is_available() -> bool:
         return False
 
 
-def synthesize(text: str, output_path: Path, voice: str | None = None) -> bool:
+def synthesize(text: str, output_path: Path, voice: str | None = None,
+               rate: str | None = None, pitch: str | None = None) -> bool:
     """Synthesize text to WAV file using Edge TTS.
 
     Returns True on success, False on failure.
@@ -54,7 +55,7 @@ def synthesize(text: str, output_path: Path, voice: str | None = None) -> bool:
         # edge-tts is async, so we run it in a new event loop
         # (safe even if called from sync code in a thread)
         loop = _get_or_create_loop()
-        return loop.run_until_complete(_synthesize_async(text, output_path, voice))
+        return loop.run_until_complete(_synthesize_async(text, output_path, voice, rate=rate, pitch=pitch))
     except Exception as exc:
         logger.warning("edge_tts_error: %s", exc)
         return False
@@ -88,11 +89,12 @@ def synthesize_streaming(text: str, output_path: Path, voice: str | None = None,
         return False
 
 
-async def _synthesize_async(text: str, output_path: Path, voice: str) -> bool:
+async def _synthesize_async(text: str, output_path: Path, voice: str,
+                            rate: str | None = None, pitch: str | None = None) -> bool:
     """Core async synthesis — collects all audio then writes WAV."""
     import edge_tts
 
-    communicate = edge_tts.Communicate(text, voice)
+    communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
 
     # Collect MP3 chunks
     audio_chunks: list[bytes] = []

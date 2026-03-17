@@ -40,6 +40,18 @@ class TextToSpeech:
             self.player.set_volume(max(0, min(100, int(vol))) / 100.0)
         except Exception:
             pass
+        # Load voice settings from repository
+        self._voice_id = None
+        self._voice_params = {}
+        try:
+            from storage.repository import DeviceRepository
+            import json
+            _repo = DeviceRepository()
+            self._voice_id = _repo.get_setting("voice_id", None)
+            params_raw = _repo.get_setting("voice_params", "{}")
+            self._voice_params = json.loads(params_raw) if isinstance(params_raw, str) else (params_raw or {})
+        except Exception:
+            pass
         self.engine = self._detect_engine()
         # Track latency metrics for diagnostics
         self.last_synthesis_ms: int = 0
@@ -187,7 +199,8 @@ class TextToSpeech:
 
         from . import cartesia_provider
 
-        ok = cartesia_provider.synthesize(text, output_file)
+        voice = self._voice_id or None
+        ok = cartesia_provider.synthesize(text, output_file, voice=voice)
         if ok:
             self.last_ttfb_ms = int((time.monotonic() - t0) * 1000)
             logger.info("cartesia_ttfb: %dms", self.last_ttfb_ms)
@@ -205,14 +218,19 @@ class TextToSpeech:
             self.last_ttfb_ms = int((time.monotonic() - t0) * 1000)
             logger.info("edge_tts_ttfb: %dms", self.last_ttfb_ms)
 
-        ok = edge_tts_provider.synthesize(text, output_file)
+        voice = self._voice_id or None
+        rate = self._voice_params.get("rate")
+        pitch = self._voice_params.get("pitch")
+        ok = edge_tts_provider.synthesize(text, output_file, voice=voice, rate=rate, pitch=pitch)
         if not ok:
             logger.warning("edge_tts_fallback: trying speechify or next engine")
             self._run_fallback(text, output_file, skip="edge_tts")
 
     def _run_speechify(self, text: str, output_file: Path) -> None:
         from .speechify import synthesize
-        if not synthesize(text, output_file):
+        voice = self._voice_id or None
+        model = self._voice_params.get("model")
+        if not synthesize(text, output_file, voice_id=voice, model=model):
             logger.warning("speechify_fallback: trying next engine")
             self._run_fallback(text, output_file, skip="speechify")
 
@@ -283,8 +301,11 @@ class TextToSpeech:
         import openai
 
         client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+        voice = self._voice_id or "alloy"
+        speed = float(self._voice_params.get("speed", 1.0))
+        model = self._voice_params.get("model", "tts-1")
         with client.audio.speech.with_streaming_response.create(
-            model="tts-1", voice="alloy", input=text
+            model=model, voice=voice, input=text, speed=speed
         ) as resp:
             resp.stream_to_file(str(output_file))
 
@@ -292,9 +313,12 @@ class TextToSpeech:
         espeak_cmd = shutil.which("espeak-ng") or shutil.which("espeak")
         if not espeak_cmd:
             return
+        voice = self._voice_id or "en-us"
+        speed = str(self._voice_params.get("speed", 150))
+        pitch = str(self._voice_params.get("pitch", 50))
         env = os.environ.copy()
         env["ALSA_DEFAULT_PCM"] = PLAYBACK_DEVICE
-        subprocess.run([espeak_cmd, "-v", "en-us", "-s", "150", "-w", str(output_file), text], check=False, timeout=20, env=env)
+        subprocess.run([espeak_cmd, "-v", voice, "-s", speed, "-p", pitch, "-w", str(output_file), text], check=False, timeout=20, env=env)
 
     def _ensure_48k_stereo_wav(self, path: Path) -> None:
         try:
@@ -333,3 +357,17 @@ class TextToSpeech:
             dst.setsampwidth(2)
             dst.setframerate(SAMPLE_RATE)
             dst.writeframes(stereo.astype(np.int16).tobytes())
+
+    def reload_voice_settings(self) -> None:
+        """Re-read voice_id and voice_params from repository. Called after settings sync."""
+        try:
+            from storage.repository import DeviceRepository
+            import json
+            repo = DeviceRepository()
+            self._voice_id = repo.get_setting("voice_id", None)
+            params_raw = repo.get_setting("voice_params", "{}")
+            self._voice_params = json.loads(params_raw) if isinstance(params_raw, str) else (params_raw or {})
+            # Also re-detect engine in case tts_engine changed
+            self.engine = self._detect_engine()
+        except Exception:
+            pass

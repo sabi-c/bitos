@@ -25,7 +25,8 @@ def get_api_key() -> str | None:
     return os.environ.get("SPEECHIFY_API_KEY")
 
 
-def synthesize(text: str, output_path: Path, voice_id: str | None = None) -> bool:
+def synthesize(text: str, output_path: Path, voice_id: str | None = None,
+               model: str | None = None) -> bool:
     """Synthesize text to a WAV file via Speechify API.
 
     Returns True on success, False on any failure.
@@ -45,7 +46,7 @@ def synthesize(text: str, output_path: Path, voice_id: str | None = None) -> boo
             json={
                 "input": text,
                 "voice_id": voice,
-                "model": DEFAULT_MODEL,
+                "model": model or DEFAULT_MODEL,
                 "audio_format": "wav",
             },
             timeout=30,
