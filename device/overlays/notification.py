@@ -37,6 +37,27 @@ class NotificationRecord:
     source_id: str | None = None
 
 
+TOAST_H = 28
+TOAST_ENTRANCE_MS = 150
+TOAST_EXIT_MS = 100
+
+CATEGORY_COLORS: dict[str, tuple[int, int, int]] = {
+    "sms": (60, 130, 220),
+    "mail": (180, 140, 60),
+    "calendar": (80, 180, 120),
+    "task": (160, 100, 220),
+    "agent": (100, 200, 200),
+    "reminder": (220, 80, 80),
+    "tool": (100, 200, 200),
+    "system": (120, 120, 120),
+}
+
+
+def _ease_out_cubic(t: float) -> float:
+    t = max(0.0, min(1.0, t))
+    return 1.0 - (1.0 - t) ** 3
+
+
 @dataclass
 class NotificationToast:
     """Overlay toast that renders above screens and expires by duration."""
@@ -45,25 +66,58 @@ class NotificationToast:
     icon: str
     message: str
     time_str: str
-    duration_ms: int = 5000
+    duration_ms: int = 3000
     on_open: Callable[[], None] | None = None
     elapsed_ms: int = 0
+    category: str = "system"
     _fonts: dict[str, pygame.font.Font] = field(default_factory=dict, init=False, repr=False)
 
+    @property
+    def progress(self) -> float:
+        """Remaining time fraction: 1.0 -> 0.0 over duration."""
+        return max(0.0, 1.0 - self.elapsed_ms / max(1, self.duration_ms))
+
+    @property
+    def category_color(self) -> tuple[int, int, int]:
+        """RGB colour for the current category."""
+        return CATEGORY_COLORS.get(self.category, CATEGORY_COLORS["system"])
+
+    @property
+    def slide_y_offset(self) -> float:
+        """Vertical offset for entrance/exit slide animation."""
+        remaining_ms = self.duration_ms - self.elapsed_ms
+        if remaining_ms <= TOAST_EXIT_MS and self.elapsed_ms > TOAST_ENTRANCE_MS:
+            t = 1.0 - (remaining_ms / max(1, TOAST_EXIT_MS))
+            return -TOAST_H * _ease_out_cubic(t)
+
+        if self.elapsed_ms < TOAST_ENTRANCE_MS:
+            t = self.elapsed_ms / TOAST_ENTRANCE_MS
+            eased = _ease_out_cubic(t)
+            if eased < 1.0:
+                return -TOAST_H * (1.0 - eased * 1.028)
+            return 0.0
+
+        return 0.0
+
     def render(self, surface, tokens) -> None:
-        strip_h = 28
-        pygame.draw.rect(surface, tokens.WHITE, pygame.Rect(0, 0, tokens.PHYSICAL_W, strip_h))
+        strip_h = TOAST_H
+        y_off = int(self.slide_y_offset)
+        pygame.draw.rect(surface, tokens.WHITE, pygame.Rect(0, y_off, tokens.PHYSICAL_W, strip_h))
         font = self._font(tokens, "small")
         left = f"{self.icon} {self.app}"[:14]
         msg = self.message[:24]
         right = self.time_str[:6]
 
-        surface.blit(font.render(left, False, tokens.BLACK), (4, 3))
-        surface.blit(font.render(right, False, tokens.BLACK), (tokens.PHYSICAL_W - 42, 3))
-        surface.blit(font.render(msg, False, tokens.BLACK), (4, 14))
+        surface.blit(font.render(left, False, tokens.BLACK), (4, y_off + 3))
+        surface.blit(font.render(right, False, tokens.BLACK), (tokens.PHYSICAL_W - 42, y_off + 3))
+        surface.blit(font.render(msg, False, tokens.BLACK), (4, y_off + 14))
 
-        progress_w = int(tokens.PHYSICAL_W * min(1.0, self.elapsed_ms / max(1, self.duration_ms)))
-        pygame.draw.rect(surface, tokens.BLACK, pygame.Rect(0, strip_h - 2, progress_w, 2))
+        # Mini progress bar at bottom, colored by category
+        progress_w = int(tokens.PHYSICAL_W * self.progress)
+        pygame.draw.rect(
+            surface, self.category_color,
+            pygame.Rect(0, y_off + strip_h - 2, progress_w, 2),
+        )
 
     def tick(self, dt_ms: int) -> bool:
         self.elapsed_ms += max(0, int(dt_ms))
