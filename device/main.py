@@ -165,6 +165,62 @@ def _handle_main_loop_crash(error: Exception, crash_path: str = "/tmp/bitos_cras
     with open(crash_path, "w", encoding="utf-8") as f:
         json.dump({"error": str(error), "timestamp": time.time()}, f)
 
+    # Show crash info on screen so the user sees what happened
+    try:
+        _show_crash_screen(error)
+    except Exception:
+        pass  # Display might be dead too
+
+
+def _show_crash_screen(error: Exception, display_seconds: int = 30):
+    """Render a crash error screen so the user sees something instead of black."""
+    try:
+        import pygame
+        if not pygame.get_init():
+            pygame.init()
+        screen = pygame.display.set_mode((240, 280))
+        screen.fill((0, 0, 0))
+
+        font = pygame.font.SysFont("monospace", 14)
+        small = pygame.font.SysFont("monospace", 10)
+
+        # Title
+        title = font.render("BITOS CRASH", False, (255, 255, 255))
+        screen.blit(title, (10, 20))
+
+        # Error type
+        err_type = small.render(type(error).__name__, False, (180, 180, 180))
+        screen.blit(err_type, (10, 50))
+
+        # Error message — word-wrap to fit 240px
+        msg = str(error)[:200]
+        y = 70
+        line_w = 28  # chars per line at monospace 10
+        for i in range(0, len(msg), line_w):
+            line = small.render(msg[i:i + line_w], False, (180, 180, 180))
+            screen.blit(line, (10, y))
+            y += 14
+            if y > 220:
+                break
+
+        # Hint
+        hint = small.render("Auto-restart in 30s...", False, (100, 100, 100))
+        screen.blit(hint, (10, 258))
+
+        pygame.display.flip()
+
+        # Keep screen visible for display_seconds, then exit so systemd can restart
+        start = time.time()
+        while time.time() - start < display_seconds:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    return
+                if event.type == pygame.KEYDOWN:
+                    return  # Any button press exits early
+            time.sleep(0.1)
+    except Exception:
+        pass  # Best-effort — don't crash the crash handler
+
 
 def _cancel_inflight_voice_recording(screen_mgr):
     """Stop any in-progress voice recording before shutdown."""
@@ -1100,7 +1156,12 @@ def main():
         screen_mgr.replace(lock)
         # Show setup wizard on first boot
         if not repository.get_setting("setup_complete", False):
-            _open_setup_wizard()
+            try:
+                _open_setup_wizard()
+            except Exception as exc:
+                logger.error("setup_wizard_failed: %s — skipping to normal boot", exc)
+                # Don't block boot if wizard crashes — mark complete and continue
+                repository.set_setting("setup_complete", True)
             return
         _show_setup_qr_if_needed()
 
@@ -1200,49 +1261,61 @@ def main():
 
     logger.info("[Startup] stack=%s", [type(s).__name__ for s in screen_mgr._stack])
 
+    _consecutive_errors = 0
+    _MAX_CONSECUTIVE_ERRORS = 10  # If 10 frames crash in a row, let it propagate
+
     while running:
-        now = time.time()
-        dt = now - last_time
-        last_time = now
+        try:
+            now = time.time()
+            dt = now - last_time
+            last_time = now
 
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                    break
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    running = False
+                    break
+
+                consumed = button.handle_pygame_event(event)
+                if not consumed:
+                    screen_mgr.handle_input(event)
+
+            if not running:
                 break
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                running = False
-                break
 
-            consumed = button.handle_pygame_event(event)
-            if not consumed:
-                screen_mgr.handle_input(event)
+            button.update()
+            idle_mgr.tick()
+            worker_results = outbound_loop.tick(now=now)
+            for result in worker_results:
+                if result.status in ("retrying", "dead_letter"):
+                    reason = result.reason or "unknown"
+                    logger.error("[Queue] command=%s status=%s reason=%s", result.command_id, result.status, reason)
+            surface = driver.get_surface()
+            screen_mgr.update(dt)
+            screen_mgr.render(surface)
+            # Agent overlay renders on top of everything except power overlay
+            if agent_overlay is not None:
+                dt_ms = int(max(0.0, dt) * 1000)
+                if not agent_overlay.tick(dt_ms):
+                    agent_overlay = None
+                else:
+                    agent_overlay.render(surface)
+            if power_overlay is not None:
+                power_overlay.render(surface, tokens)
+            corner_mask.apply(surface)
+            driver.update()
 
-        if not running:
-            break
+            clock.tick(power_mgr.get_target_fps())
+            _consecutive_errors = 0  # Reset on successful frame
 
-        button.update()
-        idle_mgr.tick()
-        worker_results = outbound_loop.tick(now=now)
-        for result in worker_results:
-            if result.status in ("retrying", "dead_letter"):
-                reason = result.reason or "unknown"
-                logger.error("[Queue] command=%s status=%s reason=%s", result.command_id, result.status, reason)
-        surface = driver.get_surface()
-        screen_mgr.update(dt)
-        screen_mgr.render(surface)
-        # Agent overlay renders on top of everything except power overlay
-        if agent_overlay is not None:
-            dt_ms = int(max(0.0, dt) * 1000)
-            if not agent_overlay.tick(dt_ms):
-                agent_overlay = None
-            else:
-                agent_overlay.render(surface)
-        if power_overlay is not None:
-            power_overlay.render(surface, tokens)
-        corner_mask.apply(surface)
-        driver.update()
-
-        clock.tick(power_mgr.get_target_fps())
+        except Exception as frame_exc:
+            _consecutive_errors += 1
+            logger.error("frame_error #%d: %s", _consecutive_errors, frame_exc, exc_info=True)
+            if _consecutive_errors >= _MAX_CONSECUTIVE_ERRORS:
+                raise  # Let the outer crash handler deal with it
+            time.sleep(0.1)  # Brief pause before retrying
 
     notification_poller.stop()
     ws_client.stop()
@@ -1265,9 +1338,29 @@ def main():
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception as fatal:
-        _handle_main_loop_crash(fatal)
-        logging.critical("BITOS device crashed — see /tmp/bitos_crash.json")
-        sys.exit(1)
+    MAX_RESTARTS = 3
+    RESTART_COOLDOWN = 5  # seconds between restart attempts
+
+    for attempt in range(MAX_RESTARTS + 1):
+        try:
+            main()
+            break  # Clean exit
+        except Exception as fatal:
+            _handle_main_loop_crash(fatal)
+            if attempt < MAX_RESTARTS:
+                logging.warning(
+                    "BITOS crash #%d/%d — restarting in %ds",
+                    attempt + 1, MAX_RESTARTS, RESTART_COOLDOWN,
+                )
+                time.sleep(RESTART_COOLDOWN)
+                # Reset pygame for clean restart
+                try:
+                    pygame.quit()
+                except Exception:
+                    pass
+            else:
+                logging.critical(
+                    "BITOS crashed %d times — giving up. See /tmp/bitos_crash.json",
+                    MAX_RESTARTS + 1,
+                )
+                sys.exit(1)
