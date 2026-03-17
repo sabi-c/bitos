@@ -284,8 +284,8 @@ class BluetoothAudioPanel(BaseScreen):
         for dev in self._scan_results:
             name = dev.get("name", "Unknown")
             address = dev.get("address", "")
-            # Truncate long names for 128px display
-            display_name = name[:14] if len(name) > 14 else name
+            # Truncate long names for 240px display
+            display_name = name[:22] if len(name) > 22 else name
             items.append(NavItem(
                 key=address,
                 label=display_name,
