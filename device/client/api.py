@@ -29,6 +29,7 @@ class BackendClient:
         self.base_url = base_url or os.environ.get("BITOS_SERVER_URL", DEFAULT_SERVER_URL)
         self.device_token = os.environ.get("BITOS_DEVICE_TOKEN", "")
         self.on_approval_request = None  # Callable[[str, str, list[str]], None] or None
+        self._conversation_id: str | None = None  # Multi-turn conversation tracking
         if not self.device_token:
             logging.warning("[BITOS] BITOS_DEVICE_TOKEN is not set; running in dev mode without device token auth")
 
@@ -120,6 +121,7 @@ class BackendClient:
         voice_enabled = False
         voice_mode = "auto"
         extended_thinking = False
+        meta_prompt = ""
 
         try:
             repository = DeviceRepository()
@@ -131,6 +133,7 @@ class BackendClient:
             voice_enabled = repository.get_setting("voice_enabled", False)
             voice_mode = str(repository.get_setting("voice_mode", "auto"))
             extended_thinking = bool(repository.get_setting("extended_thinking", False))
+            meta_prompt = str(repository.get_setting("meta_prompt", "") or "")
             tasks_today = [str(t.get("title", "")).strip() for t in repository.list_incomplete_tasks(limit=3)]
             tasks_today = [t for t in tasks_today if t]
             # Load cached geolocation if available
@@ -148,7 +151,7 @@ class BackendClient:
             logging.debug("battery_read_failed error=%s", exc)
 
         try:
-            gen = self._stream_chat_sse(message, mode, tasks_today, battery_pct, web_search, memory, ai_model, location, volume, voice_enabled, voice_mode, extended_thinking)
+            gen = self._stream_chat_sse(message, mode, tasks_today, battery_pct, web_search, memory, ai_model, location, volume, voice_enabled, voice_mode, extended_thinking, meta_prompt)
             # Eagerly start the generator so connection errors are caught here
             first = next(gen)
         except StopIteration:
@@ -175,6 +178,7 @@ class BackendClient:
         voice_enabled: bool = False,
         voice_mode: str = "auto",
         extended_thinking: bool = False,
+        meta_prompt: str = "",
     ) -> Generator[str, None, None]:
         """Yield text chunks from the /chat SSE stream in real time."""
         payload: dict = {
@@ -206,6 +210,11 @@ class BackendClient:
             payload["model"] = model
         if location:
             payload["location"] = location
+        if meta_prompt:
+            payload["meta_prompt"] = meta_prompt
+        # Multi-turn: send conversation_id if we have one from a previous exchange
+        if self._conversation_id:
+            payload["conversation_id"] = self._conversation_id
         with httpx.stream(
             "POST",
             f"{self.base_url}/chat",
@@ -229,12 +238,25 @@ class BackendClient:
                         elif "approval_request" in chunk:
                             # Agent wants user approval — show overlay
                             self._handle_approval_request(chunk["approval_request"])
+                        elif "conversation_id" in chunk:
+                            # Server assigned/confirmed conversation_id for multi-turn
+                            self._conversation_id = chunk["conversation_id"]
+                            logging.debug("conversation_id: %s", self._conversation_id)
                         elif "perception" in chunk:
                             # Perception metadata — log but don't yield as text
                             logging.debug("perception: %s", chunk["perception"])
                     except json.JSONDecodeError:
                         yield data
 
+
+    def new_conversation(self) -> None:
+        """Reset conversation state so the next chat() starts a fresh conversation."""
+        self._conversation_id = None
+
+    @property
+    def conversation_id(self) -> str | None:
+        """Return the current multi-turn conversation ID, if any."""
+        return self._conversation_id
 
     def _handle_approval_request(self, data: dict) -> None:
         """Handle an approval_request SSE event from the agent."""
