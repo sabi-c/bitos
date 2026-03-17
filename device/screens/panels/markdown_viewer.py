@@ -11,6 +11,7 @@ from display.tokens import (
     WHITE,
     DIM1,
     DIM2,
+    DIM3,
     HAIRLINE,
     PHYSICAL_W,
     PHYSICAL_H,
@@ -18,23 +19,44 @@ from display.tokens import (
     SAFE_INSET,
 )
 from display.theme import merge_runtime_ui_settings, load_ui_font, ui_line_height
+from display.markdown import (
+    parse_line,
+    wrap_markdown_text,
+    STYLE_BOLD,
+    STYLE_ITALIC,
+    STYLE_CODE,
+    STYLE_HEADER,
+    STYLE_BULLET,
+)
 
 
 class MarkdownViewerPanel(BaseScreen):
     """Display a parsed markdown file with pagination and typewriter animation."""
 
-    def __init__(self, file_data: dict, client=None, on_back=None, ui_settings=None, repository=None):
+    # Markdown style -> color mapping (same as chat panel)
+    _MD_COLORS = {
+        STYLE_BOLD: WHITE,
+        STYLE_ITALIC: DIM3,
+        STYLE_CODE: DIM2,
+        STYLE_HEADER: WHITE,
+        STYLE_BULLET: DIM1,
+        "normal": WHITE,
+    }
+
+    def __init__(self, file_data: dict, client=None, on_back=None, on_agent_query=None, ui_settings=None, repository=None):
         """
         Args:
             file_data: dict with 'name', 'id', and either 'content' or 'pages'.
-            client: BackendClient (unused for now, reserved for LLM parse).
+            client: BackendClient (used for file query).
             on_back: Callback when user navigates back.
+            on_agent_query: Callback(context: str) to open agent overlay with document context.
             ui_settings: Runtime UI settings override.
             repository: DeviceRepository for text speed preference.
         """
         self._file_data = file_data
         self._client = client
         self._on_back = on_back
+        self._on_agent_query = on_agent_query
         self._repository = repository
         self._ui_settings = merge_runtime_ui_settings(ui_settings)
         self._font = load_ui_font("body", self._ui_settings)
@@ -52,25 +74,21 @@ class MarkdownViewerPanel(BaseScreen):
 
     def _build_pages(self) -> None:
         """Build paginated view from file data."""
+        hint_px = 14
+        available_h = PHYSICAL_H - (SAFE_INSET + STATUS_BAR_H + 2) - SAFE_INSET - hint_px
+        lines_per_page = max(1, int(available_h / self._line_height) - 1)  # -1 for page indicator
+
         if "pages" in self._file_data and self._file_data["pages"]:
             # Pre-parsed pages (e.g. from LLM parse endpoint)
             raw_pages = self._file_data["pages"]
-            hint_px = 14
-            available_h = PHYSICAL_H - (SAFE_INSET + STATUS_BAR_H + 2) - SAFE_INSET - hint_px
-            lines_per_page = max(1, int(available_h / self._line_height) - 1)  # -1 for page indicator
-
             self._pages = []
             for page_text in raw_pages:
-                wrapped = wrap_text(str(page_text), self._font, PHYSICAL_W - SAFE_INSET * 2)
+                wrapped = wrap_markdown_text(str(page_text), self._font, PHYSICAL_W - SAFE_INSET * 2)
                 # Truncate to fit one "page" worth of lines
                 self._pages.append(wrapped[:lines_per_page])
         elif "content" in self._file_data:
             content = str(self._file_data.get("content", ""))
-            hint_px = 14
-            available_h = PHYSICAL_H - (SAFE_INSET + STATUS_BAR_H + 2) - SAFE_INSET - hint_px
-            lines_per_page = max(1, int(available_h / self._line_height) - 1)
-
-            wrapped = wrap_text(content, self._font, PHYSICAL_W - SAFE_INSET * 2)
+            wrapped = wrap_markdown_text(content, self._font, PHYSICAL_W - SAFE_INSET * 2)
             self._pages = split_into_pages(wrapped, lines_per_page)
         else:
             self._pages = [["(no content)"]]
@@ -118,14 +136,34 @@ class MarkdownViewerPanel(BaseScreen):
                 self._on_back()
             return
 
-        if action == "TRIPLE_PRESS" and len(self._pages) > 1:
-            # Mark current page as revealed
+        if action == "SHORT_PRESS" and len(self._pages) > 1:
+            # Forward page navigation
             if self._current_page < len(self._page_revealed):
                 self._page_revealed[self._current_page] = True
             self._page_typewriter = None
-            # Advance to next page
             self._current_page = (self._current_page + 1) % len(self._pages)
             self._start_page_typewriter()
+            return
+
+        if action == "TRIPLE_PRESS" and len(self._pages) > 1:
+            # Backward page navigation
+            if self._current_page < len(self._page_revealed):
+                self._page_revealed[self._current_page] = True
+            self._page_typewriter = None
+            self._current_page = (self._current_page - 1) % len(self._pages)
+            self._start_page_typewriter()
+            return
+
+        if action == "DOUBLE_PRESS":
+            # Open agent overlay with document context
+            if self._on_agent_query:
+                context = f"Document: {self._title}"
+                if "content" in self._file_data:
+                    # Include a snippet for context
+                    snippet = str(self._file_data["content"])[:500]
+                    context = f"Document: {self._title}\n\n{snippet}"
+                self._on_agent_query(context)
+            return
 
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
@@ -146,15 +184,14 @@ class MarkdownViewerPanel(BaseScreen):
 
         if self._page_typewriter and not self._page_typewriter.finished:
             visible = self._page_typewriter.get_visible_text()
-            display_lines = wrap_text(visible, self._font, PHYSICAL_W - SAFE_INSET * 2)
+            display_lines = wrap_markdown_text(visible, self._font, PHYSICAL_W - SAFE_INSET * 2)
         else:
             display_lines = page
 
         for line_text in display_lines:
             if y + self._line_height > msg_area_bottom - self._line_height:
                 break
-            text_surface = self._font.render(line_text, False, WHITE)
-            surface.blit(text_surface, (SAFE_INSET, y))
+            self._render_styled_line(surface, line_text, SAFE_INSET, y)
             y += self._line_height
 
         # Page indicator (centered, small font) -- only if 2+ pages
@@ -169,11 +206,23 @@ class MarkdownViewerPanel(BaseScreen):
         hint_center_y = hint_y + hint_px // 2
         self._render_hint_line(surface, hint_center_y)
 
+    def _render_styled_line(self, surface: pygame.Surface, line_text: str, x: int, y: int) -> None:
+        """Render a line with markdown styling (bold=bright, italic=dim, code=dimmer)."""
+        segments = parse_line(line_text)
+        cx = x
+        for seg in segments:
+            color = self._MD_COLORS.get(seg.style, WHITE)
+            seg_surf = self._font.render(seg.text, False, color)
+            surface.blit(seg_surf, (cx, y))
+            cx += seg_surf.get_width()
+
     def _render_hint_line(self, surface: pygame.Surface, center_y: int):
         """Render compact gesture hint line."""
         items = []
         if len(self._pages) > 1:
-            items.append(("triple", "next"))
+            items.append(("tap", "next"))
+            items.append(("triple", "prev"))
+        items.append(("double", "ask"))
         items.append(("hold", "back"))
 
         rendered = []
@@ -186,7 +235,12 @@ class MarkdownViewerPanel(BaseScreen):
         bx = spacing
         for icon_type, label_surf in rendered:
             ic = (bx + 3, center_y)
-            if icon_type == "triple":
+            if icon_type == "tap":
+                pygame.draw.circle(surface, DIM1, ic, 2, 1)
+            elif icon_type == "double":
+                pygame.draw.circle(surface, DIM1, ic, 2, 1)
+                pygame.draw.circle(surface, DIM1, ic, 1, 1)
+            elif icon_type == "triple":
                 for offset in (-3, 0, 3):
                     pygame.draw.circle(surface, DIM1, (ic[0] + offset, ic[1]), 2, 1)
             elif icon_type == "hold":

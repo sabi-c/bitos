@@ -585,6 +585,21 @@ class BackendClient:
             logging.warning("file_parse_failed file=%s error=%s", file_id[:24], exc)
             return {}
 
+    def query_file(self, file_id: str, question: str) -> str:
+        """POST /files/{file_id}/query — ask a question about a file."""
+        try:
+            resp = httpx.post(
+                f"{self.base_url}/files/{file_id}/query",
+                json={"question": question},
+                timeout=30,
+                headers=self._request_headers(),
+            )
+            resp.raise_for_status()
+            return str(resp.json().get("answer", "")).strip()
+        except Exception as exc:
+            logging.warning("file_query_failed file=%s error=%s", file_id[:24], exc)
+            return ""
+
     def get_context(self) -> dict:
         """GET /context — aggregated live context for home screen ticker."""
         try:
