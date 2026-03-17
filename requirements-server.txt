@@ -4,3 +4,4 @@ anthropic
 httpx
 duckduckgo-search>=7.0.0
 spotipy>=2.24.0
+# optional: pip install sqlite-vec  — enables vector similarity search in memory system

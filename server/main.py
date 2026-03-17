@@ -79,6 +79,9 @@ from memory_store import (
     get_facts_by_category,
     deactivate_fact,
 )
+from memory.memory_store import MemoryStore
+from memory.fact_extractor import FactExtractor
+from memory.retriever import MemoryRetriever
 from llm_bridge import create_llm_bridge, to_sse_data
 from perception import classify as classify_perception
 from ui_settings import UISettingsStore, UISettingsValidationError
@@ -419,6 +422,11 @@ app.include_router(webhook_sms_router)
 settings_store = UISettingsStore(UI_SETTINGS_FILE)
 llm_bridge = create_llm_bridge()
 _token_warning_logged = False
+
+# ── Memory system (v2 — structured facts + retrieval) ──
+_memory_store = MemoryStore()
+_fact_extractor = FactExtractor(_memory_store)
+_memory_retriever = MemoryRetriever(_memory_store)
 
 # ── Notification stack ──
 _notif_db_path = str(SERVER_DIR / "data" / "notifications.db")
@@ -1982,13 +1990,23 @@ async def chat(payload: ChatRequest):
     # ── Inject long-term memory facts into system prompt ──
     if payload.memory:
         try:
-            memory_facts = search_facts(message, limit=10)
-            if memory_facts:
-                facts_lines = [f"- {f['content']}" for f in memory_facts]
+            # Use new ranked retriever (falls back to FTS5 search)
+            ranked_facts = _memory_retriever.retrieve_for_context(message, limit=10)
+            if ranked_facts:
+                facts_lines = [f"- {f}" for f in ranked_facts]
                 system_prompt += (
                     "\n\nMEMORY (things I know about you):\n"
                     + "\n".join(facts_lines)
                 )
+            else:
+                # Fallback to legacy store if retriever returns nothing
+                memory_facts = search_facts(message, limit=10)
+                if memory_facts:
+                    facts_lines = [f"- {f['content']}" for f in memory_facts]
+                    system_prompt += (
+                        "\n\nMEMORY (things I know about you):\n"
+                        + "\n".join(facts_lines)
+                    )
         except Exception as mem_exc:
             logger.warning("Memory retrieval failed (non-critical): %s", mem_exc)
 
@@ -2132,11 +2150,20 @@ async def chat(payload: ChatRequest):
             if payload.memory:
                 try:
                     _msg, _resp, _cid = message, full_response, conv_id
+                    # Legacy extractor (per-turn)
                     threading.Thread(
                         target=extract_and_store_facts,
                         args=(_msg, _resp, _cid),
                         daemon=True,
                     ).start()
+                    # New batch extractor — buffer turn, extract every 8 turns
+                    _fact_extractor.add_turn(_msg, _resp)
+                    if _fact_extractor.should_extract():
+                        threading.Thread(
+                            target=_fact_extractor.extract_now,
+                            args=(_cid,),
+                            daemon=True,
+                        ).start()
                 except Exception:
                     pass  # Never let extraction failure affect chat
 
@@ -2232,6 +2259,40 @@ async def memory_add(payload: ManualFactRequest):
         category=payload.category,
     )
     return {"success": True, "id": fact_id}
+
+
+# ── Memory v2 endpoints (structured store + retriever) ────────────────
+
+
+@app.get("/memory/v2")
+async def memory_v2_list(category: str = "", limit: int = 20):
+    """List memory facts from the structured store, optionally by category."""
+    if category:
+        facts = _memory_store.get_facts_by_category(category)
+    else:
+        facts = _memory_store.get_recent_facts(limit=min(limit, 100))
+    return {"facts": facts, "count": len(facts), "version": 2}
+
+
+@app.get("/memory/v2/search")
+async def memory_v2_search(q: str = "", limit: int = 10):
+    """Ranked memory search using retriever (FTS5 + recency + frequency)."""
+    if not q:
+        raise HTTPException(status_code=400, detail="Query parameter 'q' is required")
+    results = _memory_retriever.retrieve(q, limit=min(limit, 50))
+    return {"facts": results, "count": len(results), "query": q, "version": 2}
+
+
+@app.get("/memory/v2/stats")
+async def memory_v2_stats():
+    """Memory system statistics."""
+    return {
+        "total_facts": _memory_store.count_facts(active_only=True),
+        "total_all": _memory_store.count_facts(active_only=False),
+        "episodes": len(_memory_store.get_episodes(limit=1000)),
+        "has_vector_search": _memory_store.has_vector_search,
+        "extractor_buffered_turns": _fact_extractor.turn_count,
+    }
 
 
 @app.get("/logs")
