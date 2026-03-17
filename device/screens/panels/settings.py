@@ -35,6 +35,7 @@ class SettingsPanel(BaseScreen):
         on_open_sleep_timer=None,
         on_open_about=None,
         on_open_companion_app=None,
+        on_open_setup_wizard=None,
         on_open_change_pin=None,
         on_open_battery=None,
         on_open_dev=None,
@@ -58,6 +59,7 @@ class SettingsPanel(BaseScreen):
         self._on_open_sleep_timer = on_open_sleep_timer
         self._on_open_about = on_open_about
         self._on_open_companion_app = on_open_companion_app
+        self._on_open_setup_wizard = on_open_setup_wizard
         self._on_open_change_pin = on_open_change_pin
         self._on_open_battery = on_open_battery
         self._on_open_dev = on_open_dev
@@ -96,6 +98,7 @@ class SettingsPanel(BaseScreen):
             NavItem(key="bluetooth", label="BLUETOOTH", status="", action=self._open_bluetooth),
             NavItem(key="bt_audio", label="BT AUDIO", status="", action=self._open_bt_audio),
             NavItem(key="companion", label="COMPANION APP", status="", action=self._open_companion_app),
+            NavItem(key="setup_wizard", label="SETUP WIZARD", status="", action=self._open_setup_wizard),
             NavItem(key="ai_model", label="AI MODEL", status="", action=self._open_model_picker),
             NavItem(key="agent_mode", label="AGENT MODE", status="", action=self._open_agent_mode),
             NavItem(key="web_search", label="WEB SEARCH", status="", action=self._toggle_web_search),
@@ -170,6 +173,7 @@ class SettingsPanel(BaseScreen):
             "about": "v1.0 \u203a",
             "bluetooth": "\u203a",
             "companion": "PAIR \u203a",
+            "setup_wizard": "RUN \u203a",
             "bt_audio": "\u203a",
             "battery": "\u203a",
             "change_pin": "\u203a",
@@ -309,6 +313,10 @@ class SettingsPanel(BaseScreen):
         self._on_push_overlay(qr)
         self._on_set_discoverable(True, 120)
 
+
+    def _open_setup_wizard(self):
+        if self._on_open_setup_wizard:
+            self._on_open_setup_wizard()
 
     def _open_bluetooth(self):
         if self._on_open_bluetooth:

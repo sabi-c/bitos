@@ -99,6 +99,7 @@ from screens.panels.chat_history import ChatHistoryPanel
 from screens.panels.settings import SettingsPanel, ModelPickerPanel, AgentModePanel, SleepTimerPanel, AboutPanel, BatteryPanel, DevPanel, FontPickerPanel, TextSpeedPanel
 from screens.panels.bluetooth import BluetoothPanel
 from screens.panels.bt_audio import BluetoothAudioPanel
+from screens.panels.setup_wizard import SetupWizardPanel
 from screens.panels.change_pin import ChangePinPanel
 from screens.subscreens.integration_detail import IntegrationDetailPanel
 from overlays.power import PowerOverlay
@@ -972,6 +973,7 @@ def main():
                 on_open_text_speed=open_text_speed,
                 on_open_bt_audio=open_bt_audio,
                 on_open_bluetooth=open_bluetooth,
+                on_open_setup_wizard=open_setup_wizard,
                 on_push_overlay=screen_mgr.push_overlay,
                 on_dismiss_overlay=screen_mgr.dismiss_overlay,
                 get_ble_address=gatt_server.get_device_address,
@@ -1020,6 +1022,21 @@ def main():
     def open_bt_audio():
         screen_mgr.push(BluetoothAudioPanel(bt_audio_manager=bt_audio_manager, repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
 
+    def open_setup_wizard():
+        def _on_wizard_complete():
+            screen_mgr.pop()
+
+        screen_mgr.push(SetupWizardPanel(
+            gatt_server=gatt_server,
+            bt_audio_manager=bt_audio_manager,
+            auth_manager=auth_manager,
+            repository=repository,
+            on_complete=_on_wizard_complete,
+            on_push_overlay=screen_mgr.push_overlay,
+            on_dismiss_overlay=screen_mgr.dismiss_overlay,
+            ui_settings=ui_settings,
+        ))
+
     def open_dev():
         screen_mgr.push(DevPanel(system_monitor=monitor, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
 
@@ -1061,9 +1078,30 @@ def main():
         screen_mgr.push_overlay(qr)
         gatt_server.set_discoverable(True, timeout_s=120)
 
+    def _open_setup_wizard():
+        """Push the setup wizard panel onto the screen stack."""
+        def _on_wizard_complete():
+            screen_mgr.pop()
+            on_home()
+
+        screen_mgr.push(SetupWizardPanel(
+            gatt_server=gatt_server,
+            bt_audio_manager=bt_audio_manager,
+            auth_manager=auth_manager,
+            repository=repository,
+            on_complete=_on_wizard_complete,
+            on_push_overlay=screen_mgr.push_overlay,
+            on_dismiss_overlay=screen_mgr.dismiss_overlay,
+            ui_settings=ui_settings,
+        ))
+
     def on_boot_complete():
         lock = LockScreen(on_home=on_home, ui_settings=ui_settings, repository=repository)
         screen_mgr.replace(lock)
+        # Show setup wizard on first boot
+        if not repository.get_setting("setup_complete", False):
+            _open_setup_wizard()
+            return
         _show_setup_qr_if_needed()
 
     boot = BootScreen(on_complete=on_boot_complete, startup_health=startup_health, health_check=lambda: _run_startup_health_check(client, repository, startup_health))
