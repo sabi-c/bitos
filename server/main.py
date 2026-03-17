@@ -39,7 +39,7 @@ except Exception:  # pragma: no cover - fallback for environments missing psutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
@@ -54,6 +54,10 @@ if str(INTEGRATIONS_DIR) not in sys.path:
 from integrations.bluebubbles_adapter import BlueBubblesAdapter
 from integrations.vikunja_adapter import VikunjaAdapter
 from integrations.gmail_adapter import GmailAdapter
+
+from notifications.dispatcher import NotificationDispatcher
+from notifications.queue_store import QueueStore
+from notifications.ws_handler import DeviceWSHandler
 
 from agent_modes import get_system_prompt
 from config import UI_SETTINGS_FILE
@@ -376,6 +380,13 @@ app = FastAPI(title="BITOS Server", version=__version__)
 settings_store = UISettingsStore(UI_SETTINGS_FILE)
 llm_bridge = create_llm_bridge()
 _token_warning_logged = False
+
+# ── Notification stack ──
+_notif_db_path = str(SERVER_DIR / "data" / "notifications.db")
+os.makedirs(os.path.dirname(_notif_db_path), exist_ok=True)
+_notif_store = QueueStore(_notif_db_path)
+_notif_dispatcher = NotificationDispatcher(_notif_store)
+_device_ws = DeviceWSHandler(_notif_dispatcher)
 
 # ── Agent subtask database ──
 _SUBTASK_DB_PATH = os.environ.get("DATABASE_PATH", str(SERVER_DIR / "data" / "subtasks.db"))
@@ -1774,6 +1785,33 @@ async def get_device_logs(lines: int = 100, level: str = ""):
             status_code=500,
             content={"error": f"Cannot read device logs: {exc}"},
         )
+
+
+# ── WebSocket: device notification push ──────────────────────────────
+
+@app.websocket("/ws/device")
+async def ws_device(ws: WebSocket, device_id: str = "default"):
+    """Real-time notification push to BITOS hardware devices."""
+    await ws.accept()
+    _device_ws.register(ws, device_id)
+    logger.info("[WS] Device %s connected to /ws/device", device_id)
+    try:
+        while True:
+            data = await ws.receive_json()
+            msg_type = data.get("type")
+            if msg_type == "ping":
+                await ws.send_json({"type": "pong"})
+            elif msg_type == "reconnect":
+                last_ts = data.get("last_event_ts", 0.0)
+                _device_ws.handle_reconnect(ws, last_ts=last_ts)
+            else:
+                _device_ws.handle_message(data)
+    except WebSocketDisconnect:
+        logger.info("[WS] Device %s disconnected", device_id)
+    except Exception as exc:
+        logger.warning("[WS] Device %s error: %s", device_id, exc)
+    finally:
+        _device_ws.unregister(device_id)
 
 
 if __name__ == "__main__":
