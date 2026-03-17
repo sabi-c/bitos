@@ -10,6 +10,7 @@
     .row{display:flex;gap:10px;margin-top:10px}
     .btn{padding:11px 12px;border:1px solid #555;background:#1b1b1b;color:#fff;border-radius:10px;cursor:pointer}
     .btn.wide{display:block;width:100%}
+    .btn.primary{background:#fff;color:#000;border-color:#fff;font-weight:bold}
     .btn.secondary{background:#0e0e0e;border-color:#444;color:#aaa}
     input,textarea{width:100%;background:#0e0e0e;color:#fff;border:1px solid #444;border-radius:8px;padding:10px}
     textarea{min-height:88px}
@@ -20,6 +21,12 @@
     .pin-display{font-size:32px;letter-spacing:8px;font-family:monospace;text-align:center;padding:24px;border:2px solid #fff;margin:16px 0;color:#fff}
     .pin-status{text-align:center;color:#aaa;font-size:13px;margin-top:8px}
     .hidden{display:none}
+    .or-divider{display:flex;align-items:center;gap:12px;margin:10px 0;color:#555;font-size:11px;letter-spacing:.08em}
+    .or-divider::before,.or-divider::after{content:'';flex:1;border-top:1px solid #333}
+    .conn-label{font-size:10px;letter-spacing:.06em;color:#666;margin-bottom:6px}
+    .transport-tag{display:inline-block;font-size:10px;padding:3px 8px;border:1px solid #444;color:#888;border-radius:4px;margin-bottom:8px}
+    .ble-notice{font-size:12px;line-height:1.6;color:#d58f8f;padding:8px 0}
+    .ble-notice.warn{color:#f8a44c}
   </style>
 </head>
 <body>
@@ -28,8 +35,32 @@
 
     <div class="step">
       <h3>1. CONNECT</h3>
-      <button class="btn wide" onclick="connectDevice()">CONNECT &rarr;</button>
+
+      <!-- BLE option -->
+      <div id="ble-connect-section">
+        <div class="conn-label">BLUETOOTH</div>
+        <button class="btn wide" id="btn-ble-connect" onclick="connectDevice()">CONNECT VIA BLUETOOTH &rarr;</button>
+      </div>
+
+      <div class="or-divider">OR</div>
+
+      <!-- WiFi/HTTP option -->
+      <div id="wifi-connect-section">
+        <div class="conn-label">WI-FI (SAME NETWORK)</div>
+        <input id="device-host" type="text" placeholder="Device IP or bitos.local" value="bitos.local" style="margin-bottom:6px" />
+        <input id="device-port" type="text" placeholder="Port (default: 8080)" value="8080" style="margin-bottom:8px" />
+        <button class="btn wide" id="btn-wifi-connect" onclick="connectHTTP()">CONNECT VIA WI-FI &rarr;</button>
+      </div>
+
       <div id="connect-status" class="muted"></div>
+
+      <!-- BLE availability notices -->
+      <div class="ble-notice warn" id="ble-warn" style="display:none">
+        Web Bluetooth is not supported on iOS. Use "Connect via Wi-Fi" instead, or use Chrome on Android/desktop.
+      </div>
+      <div class="ble-notice" id="ble-unavailable" style="display:none">
+        Web Bluetooth is not available in this browser. Use "Connect via Wi-Fi" to pair your device over the local network.
+      </div>
     </div>
 
     <div class="step hidden" id="step-pairing">
@@ -50,6 +81,7 @@
 
     <div class="step">
       <h3>4. ENTER PIN</h3>
+      <div class="transport-tag" id="transport-tag"></div>
       <input id="pin" type="password" placeholder="Device PIN" />
       <button class="btn" onclick="authPin()">AUTHENTICATE</button>
       <div id="auth" class="muted"></div>
@@ -70,7 +102,7 @@
          text-align:center; padding:12px;
          margin-top:8px; text-decoration:none;
          letter-spacing:.06em">
-        ⚙ DEVICE SETTINGS
+        DEVICE SETTINGS
       </a>
       <h4>KEYBOARD INPUT</h4>
       <textarea id="kb-input" placeholder="Type here &rarr; appears on device screen"></textarea>
@@ -87,8 +119,23 @@
   <script src="js/crypto.js"></script>
   <script src="js/ble.js"></script>
   <script>
-    const companion = new BitosCompanion();
+    let companion = null;
     let pairingActive = false;
+    const hasBLE = isBleAvailable();
+
+    // ── BLE availability ──
+    if (!hasBLE) {
+      document.getElementById('btn-ble-connect').disabled = true;
+      document.getElementById('btn-ble-connect').style.opacity = '0.4';
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      if (isIOS) {
+        document.getElementById('ble-warn').style.display = 'block';
+      } else {
+        document.getElementById('ble-unavailable').style.display = 'block';
+      }
+      // Make WiFi the visually primary button
+      document.getElementById('btn-wifi-connect').className = 'btn wide primary';
+    }
 
     // ── Parse QR pairing params ──
     const _qrParams = new URLSearchParams(window.location.search);
@@ -97,30 +144,76 @@
     const _qrExp = parseInt(_qrParams.get('exp') || '0', 10);
     const _qrVersion = parseInt(_qrParams.get('v') || '1', 10);
 
+    // Auto-fill host from URL param
+    if (_qrParams.get('host')) {
+      document.getElementById('device-host').value = _qrParams.get('host');
+    }
+    if (_qrParams.get('port')) {
+      document.getElementById('device-port').value = _qrParams.get('port');
+    }
+
     function isQrExpired() {
       return _qrVersion >= 2 && _qrExp > 0 && Math.floor(Date.now() / 1000) >= _qrExp;
     }
 
-    // Store pairing credentials on companion so ble.js can include them
-    if (_qrVersion >= 2 && _qrSession && _qrToken) {
-      companion._pairingSession = _qrSession;
-      companion._pairingToken = _qrToken;
+    function _applyPairingCredentials(comp) {
+      if (_qrVersion >= 2 && _qrSession && _qrToken) {
+        comp._pairingSession = _qrSession;
+        comp._pairingToken = _qrToken;
+      }
     }
 
+    function updateTransportTag() {
+      const tag = document.getElementById('transport-tag');
+      if (companion && companion.transport === 'http') {
+        tag.textContent = 'VIA WI-FI';
+      } else {
+        tag.textContent = 'VIA BLUETOOTH';
+      }
+    }
+
+    // ── BLE Connect ──
     async function connectDevice() {
       if (isQrExpired()) {
         document.getElementById('connect-status').innerHTML =
-          '<span class="err">QR expired — scan a new code on the device</span>';
+          '<span class="err">QR expired \u2014 scan a new code on the device</span>';
         return;
       }
       try {
-        document.getElementById('connect-status').textContent = 'Connecting...';
+        document.getElementById('connect-status').textContent = 'Connecting via Bluetooth...';
+        companion = new BitosCompanion();
+        _applyPairingCredentials(companion);
         await companion.connect();
-        document.getElementById('connect-status').innerHTML = '<span class="ok">Connected</span>';
-        // After connect, show pairing step and read device status
+        document.getElementById('connect-status').innerHTML = '<span class="ok">Connected via Bluetooth</span>';
+        updateTransportTag();
         showPairingStep();
       } catch (e) {
         document.getElementById('connect-status').innerHTML = '<span class="err">' + e.message + '</span>';
+      }
+    }
+
+    // ── HTTP/WiFi Connect ──
+    async function connectHTTP() {
+      if (isQrExpired()) {
+        document.getElementById('connect-status').innerHTML =
+          '<span class="err">QR expired \u2014 scan a new code on the device</span>';
+        return;
+      }
+      const host = document.getElementById('device-host').value.trim() || 'bitos.local';
+      const port = document.getElementById('device-port').value.trim() || '8080';
+      const baseUrl = 'http://' + host + ':' + port;
+      document.getElementById('connect-status').textContent = 'Connecting to ' + baseUrl + '...';
+      try {
+        companion = new BitosHttpCompanion(baseUrl);
+        _applyPairingCredentials(companion);
+        await companion.connect();
+        sessionStorage.setItem('bitos_provision_url', baseUrl);
+        document.getElementById('connect-status').innerHTML = '<span class="ok">Connected via Wi-Fi</span>';
+        updateTransportTag();
+        // Skip BLE pairing step for HTTP — go straight to PIN
+      } catch (e) {
+        document.getElementById('connect-status').innerHTML =
+          '<span class="err">Could not reach device at ' + baseUrl + '. Ensure both devices are on the same Wi-Fi network.</span>';
       }
     }
 
@@ -131,14 +224,14 @@
       document.getElementById('pairing-pin').textContent = 'WAITING FOR DEVICE...';
       document.getElementById('pairing-status').textContent =
         'Check your BITOS screen \u2014 codes must match';
-      // Poll device status for pairing state
       pollPairingStatus();
     }
 
     async function pollPairingStatus() {
       if (!pairingActive) return;
       try {
-        if (companion.chars && companion.chars.DEVICE_STATUS) {
+        if (companion && companion.transport === 'ble' &&
+            companion.chars && companion.chars.DEVICE_STATUS) {
           const raw = await companion.chars.DEVICE_STATUS.readValue();
           const status = JSON.parse(new TextDecoder().decode(raw));
           if (status.pairing_passkey) {
@@ -151,7 +244,6 @@
           }
         }
       } catch (_) {}
-      // Retry in 1s
       if (pairingActive) setTimeout(pollPairingStatus, 1000);
     }
 
@@ -183,7 +275,7 @@
     async function authPin() {
       if (isQrExpired()) {
         document.getElementById('auth').innerHTML =
-          '<span class="err">QR expired — scan a new code on the device</span>';
+          '<span class="err">QR expired \u2014 scan a new code on the device</span>';
         return;
       }
       try {
@@ -191,7 +283,10 @@
         await companion.authenticate(pin);
         const status = await companion.readStatus();
         document.getElementById('auth').innerHTML = '<span class="ok">Authenticated</span>';
-        document.getElementById('paired').textContent = 'battery: ' + status.battery + '% · wifi: ' + status.wifi + ' · ai: ' + status.ai;
+        const battStr = status.battery_pct != null ? status.battery_pct + '%' : (status.battery || '--');
+        const wifiStr = status.wifi_ssid || status.wifi || '--';
+        const aiStr = status.ai_online != null ? (status.ai_online ? 'online' : 'offline') : (status.ai || '--');
+        document.getElementById('paired').textContent = 'battery: ' + battStr + ' | wifi: ' + wifiStr + ' | ai: ' + aiStr;
       } catch (e) {
         document.getElementById('auth').textContent = e.message;
       }
@@ -211,7 +306,7 @@
 
     function disconnect() {
       pairingActive = false;
-      companion.disconnect();
+      if (companion) companion.disconnect();
       document.getElementById('connect-status').textContent = 'Disconnected';
       document.getElementById('auth').textContent = '';
       document.getElementById('paired').textContent = 'Authenticate to continue.';

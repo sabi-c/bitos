@@ -69,6 +69,7 @@ from bluetooth.characteristics import DeviceInfoCharacteristic, WiFiStatusCharac
 from bluetooth.constants import build_setup_url
 from bluetooth.network_manager import NetworkPriorityManager
 from bluetooth.wifi_manager import WiFiManager
+from device.http_provision import ProvisioningServer
 from device.ble.ble_service import get_ble_service
 from device.ble.pairing_manager import PairingManager
 from audio.pipeline import get_audio_pipeline
@@ -525,6 +526,23 @@ def main():
         on_pairing_complete=on_pairing_complete,
         device_info_characteristic=device_info_char,
     )
+
+    # HTTP provisioning server — WiFi fallback for iOS companion (no Web Bluetooth)
+    def _wifi_status_for_http() -> dict:
+        return json.loads(wifi_status_char.ReadValue(None).decode("utf-8"))
+
+    def _device_info_for_http() -> dict:
+        return json.loads(device_info_char.ReadValue(None).decode("utf-8"))
+
+    provision_server = ProvisioningServer(
+        auth_manager=auth_manager,
+        on_wifi_config=on_wifi_config,
+        wifi_status_fn=_wifi_status_for_http,
+        device_status_fn=_collect_device_status,
+        device_info_fn=_device_info_for_http,
+        on_keyboard_input=on_keyboard_input,
+    )
+
     outbound_queue = OutboundCommandQueue(repository)
     runtime_adapter = create_runtime_adapter()
     outbound_worker = OutboundCommandWorker(
@@ -1095,6 +1113,11 @@ def main():
     except Exception as exc:
         logger.error("[BITOS] GATT server failed to start: %s", exc)
 
+    try:
+        provision_server.start()
+    except Exception as exc:
+        logger.error("[BITOS] HTTP provisioning server failed to start: %s", exc)
+
     device_status_char.start_periodic_updates(_collect_device_status, interval_s=30)
 
     clock = pygame.time.Clock()
@@ -1154,8 +1177,8 @@ def main():
     led.off()
     device_status_char.stop_periodic_updates()
 
-    # Shutdown BLE subsystems safely — never let cleanup crash the shutdown sequence
-    for name, subsystem in [("pairing_mgr", pairing_mgr), ("ble_service", ble_service), ("gatt_server", gatt_server)]:
+    # Shutdown BLE + HTTP subsystems safely — never let cleanup crash the shutdown sequence
+    for name, subsystem in [("provision_server", provision_server), ("pairing_mgr", pairing_mgr), ("ble_service", ble_service), ("gatt_server", gatt_server)]:
         try:
             subsystem.stop()
         except Exception as exc:
