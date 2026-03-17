@@ -311,6 +311,11 @@ class BackendClient:
                 from audio.player import AudioPlayer
                 player = AudioPlayer()
                 player.set_volume(max(0, min(100, int(value))) / 100.0)
+
+            # Re-init TTS when voice settings change
+            if key in ("tts_engine", "voice_id", "voice_params"):
+                # The next speak() call will pick up new settings via TextToSpeech()
+                logging.info("voice_setting_changed: %s — TTS will reload on next speak", key)
         except Exception as exc:
             logging.warning("agent_setting_apply_failed: key=%s error=%s", key, exc)
 
