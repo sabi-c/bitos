@@ -53,6 +53,7 @@ RIGHT_PANEL_H = CONTENT_BOTTOM - CONTENT_TOP  # 208
 SLIDE_OFFSET_PX = 10        # Starting offset for slide-in (pixels)
 SLIDE_DURATION_S = 0.20     # 200ms — ~3 frames at 15 FPS
 FLASH_DURATION_S = 0.15     # 150ms sidebar highlight flash
+SIDEBAR_SCROLL_DURATION_S = 0.12  # 120ms smooth scroll between sidebar items
 
 
 class _Focus(Enum):
@@ -93,6 +94,11 @@ class CompositeScreen(BaseScreen):
         self._slide_direction = "enter"  # "enter" or "exit"
         # Sidebar flash: countdown timer for highlight flash on scroll
         self._flash_timer = 0.0
+        # Sidebar smooth scroll: animates between sidebar item positions
+        self._sidebar_scroll_active = False
+        self._sidebar_scroll_progress = 1.0
+        self._sidebar_scroll_from = 0  # previous selected index
+        self._sidebar_scroll_to = 0    # target selected index
 
     @property
     def focus(self) -> str:
@@ -100,6 +106,10 @@ class CompositeScreen(BaseScreen):
         return self._focus.value
 
     # ── Lifecycle ────────────────────────────────────────────────
+
+    def set_unread_count(self, count: int) -> None:
+        """Set the notification badge count on the status bar."""
+        self._status_bar.set_unread_count(count)
 
     def update(self, dt: float) -> None:
         # Advance panel slide transition
@@ -113,6 +123,16 @@ class CompositeScreen(BaseScreen):
         if self._flash_timer > 0.0:
             self._flash_timer = max(0.0, self._flash_timer - dt)
 
+        # Advance sidebar smooth scroll
+        if self._sidebar_scroll_active:
+            self._sidebar_scroll_progress += dt / SIDEBAR_SCROLL_DURATION_S
+            if self._sidebar_scroll_progress >= 1.0:
+                self._sidebar_scroll_progress = 1.0
+                self._sidebar_scroll_active = False
+
+        # Update breadcrumb in status bar
+        self._update_breadcrumb()
+
         if not self._sidebar.items:
             return
         idx = self._sidebar.selected_index % len(self._sidebar.items)
@@ -121,6 +141,27 @@ class CompositeScreen(BaseScreen):
         if panel is not None and hasattr(panel, "update"):
             panel.update(dt)
 
+    # ── Breadcrumb ────────────────────────────────────────────────
+
+    def _update_breadcrumb(self) -> None:
+        """Update status bar breadcrumb based on current focus and sidebar selection."""
+        if not self._sidebar.items:
+            self._status_bar.set_breadcrumb("")
+            return
+        idx = self._sidebar.selected_index % len(self._sidebar.items)
+        section = self._sidebar.items[idx]
+        if self._focus == _Focus.SUBMENU:
+            panel = self._right_panels.get(section)
+            if panel and hasattr(panel, "selected_index") and hasattr(panel, "items"):
+                si = panel.selected_index
+                if 0 <= si < len(panel.items):
+                    sub_label = panel.items[si].get("label", "")
+                    self._status_bar.set_breadcrumb(f"{section}>{sub_label}")
+                    return
+            self._status_bar.set_breadcrumb(section)
+        else:
+            self._status_bar.set_breadcrumb(section)
+
     # ── Transitions ───────────────────────────────────────────────
 
     def _start_slide(self, direction: str) -> None:
@@ -128,6 +169,25 @@ class CompositeScreen(BaseScreen):
         self._slide_active = True
         self._slide_progress = 0.0
         self._slide_direction = direction
+
+    def _start_sidebar_scroll(self, from_idx: int, to_idx: int) -> None:
+        """Kick off a smooth scroll animation between sidebar items."""
+        self._sidebar_scroll_active = True
+        self._sidebar_scroll_progress = 0.0
+        self._sidebar_scroll_from = from_idx
+        self._sidebar_scroll_to = to_idx
+
+    def _sidebar_highlight_y_offset(self) -> float:
+        """Compute interpolated Y offset for the sidebar highlight during scroll."""
+        if not self._sidebar_scroll_active:
+            return 0.0
+        # Ease-out: fast start, gentle settle
+        t = self._sidebar_scroll_progress
+        eased = 1.0 - (1.0 - t) ** 2
+        from device.ui.components.sidebar import ITEM_H
+        from_y = self._sidebar_scroll_from * ITEM_H
+        to_y = self._sidebar_scroll_to * ITEM_H
+        return from_y + (to_y - from_y) * eased - to_y  # delta from target
 
     def _snap_slide(self) -> None:
         """Instantly finish any in-progress slide (interruptibility)."""
@@ -155,7 +215,9 @@ class CompositeScreen(BaseScreen):
         self._status_bar.render(surface, y=SAFE_INSET, width=PHYSICAL_W)
 
         # Sidebar on left (84px wide, from y=36 to y=244)
-        self._sidebar.render(surface, x=0, y=CONTENT_TOP, height=RIGHT_PANEL_H)
+        scroll_offset = self._sidebar_highlight_y_offset()
+        self._sidebar.render(surface, x=0, y=CONTENT_TOP, height=RIGHT_PANEL_H,
+                             highlight_y_offset=scroll_offset)
 
         # Sidebar flash overlay: brief white highlight fading on newly selected item
         if self._flash_timer > 0.0:
@@ -207,10 +269,14 @@ class CompositeScreen(BaseScreen):
         if n == 0:
             return
         if action == "SHORT_PRESS":
+            old_idx = self._sidebar.selected_index
             self._sidebar.selected_index = (self._sidebar.selected_index + 1) % n
+            self._start_sidebar_scroll(old_idx, self._sidebar.selected_index)
             self._flash_timer = FLASH_DURATION_S
         elif action == "TRIPLE_PRESS":
+            old_idx = self._sidebar.selected_index
             self._sidebar.selected_index = (self._sidebar.selected_index - 1) % n
+            self._start_sidebar_scroll(old_idx, self._sidebar.selected_index)
             self._flash_timer = FLASH_DURATION_S
         elif action == "DOUBLE_PRESS":
             # Enter submenu mode if panel exists

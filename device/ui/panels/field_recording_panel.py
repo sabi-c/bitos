@@ -174,11 +174,15 @@ class FieldRecordingPanel(PreviewPanel):
         elif self._state == FieldRecState.DONE:
             self._render_done(surface)
         else:
-            # IDLE: title + submenu items
+            # IDLE: title + submenu items (with empty state hint)
             font = get_font(TITLE_FONT_SIZE)
             title_surf = font.render("RECORD", False, WHITE)
             surface.blit(title_surf, (TITLE_PAD_X, TITLE_PAD_Y))
             self._render_items(surface, y_offset=TITLE_H)
+            # Show empty state hint if only menu items (no recordings)
+            if len(self.items) <= 2:  # only NEW RECORDING + BACK
+                empty_y = TITLE_H + len(self.items) * ITEM_H + 8
+                self._render_empty_state(surface, "No recordings yet", y_offset=empty_y)
 
     def _render_recording(self, surface: pygame.Surface, w: int) -> None:
         """Full recording view: red dot + timer + hint."""

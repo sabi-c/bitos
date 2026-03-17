@@ -5,7 +5,7 @@ from __future__ import annotations
 import pygame
 
 from device.display.theme import get_font
-from device.display.tokens import WHITE, BLACK, DIM2, DIM3, HAIRLINE
+from device.display.tokens import WHITE, BLACK, DIM2, DIM3, DIM4, HAIRLINE
 
 
 ITEM_H = 22
@@ -13,6 +13,7 @@ FONT_SIZE = 11
 PAD_X = 6
 PAD_Y = 3
 INDICATOR = "> "
+EMPTY_STATE_FONT_SIZE = 9
 
 
 class PreviewPanel:
@@ -83,7 +84,19 @@ class PreviewPanel:
             selected = idx == self.selected_index
             label = item["label"]
 
+            # Determine item height first (needed for highlight)
+            item_h = ITEM_H
+            subtext = item.get("subtext")
+            if subtext:
+                item_h = ITEM_H + subtext_font.get_height() + 2
+
             if selected:
+                # Highlight background: subtle dark fill + left accent bar
+                highlight_color = (20, 20, 20)
+                pygame.draw.rect(surface, highlight_color,
+                                 (0, y, w, item_h))
+                # Left accent bar (2px white)
+                pygame.draw.rect(surface, WHITE, (0, y + 2, 2, item_h - 4))
                 text = INDICATOR + label
                 color = WHITE
             else:
@@ -93,13 +106,11 @@ class PreviewPanel:
             text_surf = font.render(text, False, color)
             surface.blit(text_surf, (PAD_X, y + PAD_Y))
 
-            item_h = ITEM_H
             # Render subtext if present
-            subtext = item.get("subtext")
             if subtext:
-                sub_surf = subtext_font.render("  " + subtext, False, DIM3)
+                sub_color = DIM2 if selected else DIM3
+                sub_surf = subtext_font.render("  " + subtext, False, sub_color)
                 surface.blit(sub_surf, (PAD_X, y + PAD_Y + font.get_height() + 1))
-                item_h = ITEM_H + subtext_font.get_height() + 2
 
             # Subtle separator
             if not selected and y + item_h - 1 < surface.get_height():
@@ -114,6 +125,30 @@ class PreviewPanel:
             indicator_y = y_offset + max_visible * ITEM_H - ITEM_H // 2
             ind_surf = font.render("▼", False, DIM2)
             surface.blit(ind_surf, (w - PAD_X - ind_surf.get_width(), indicator_y))
+
+    def _render_empty_state(self, surface: pygame.Surface, message: str,
+                            y_offset: int = 0) -> None:
+        """Render a centered empty-state message in dim text.
+
+        Useful when a panel has no data to display (e.g. 'No tasks yet').
+        """
+        font = get_font(EMPTY_STATE_FONT_SIZE)
+        w = surface.get_width()
+        h = surface.get_height()
+        text_surf = font.render(message, False, DIM4)
+        tx = (w - text_surf.get_width()) // 2
+        ty = y_offset + (h - y_offset) // 3
+        surface.blit(text_surf, (tx, ty))
+
+    def _render_loading(self, surface: pygame.Surface, y_offset: int = 0,
+                         label: str = "LOADING") -> None:
+        """Render an animated loading indicator (dots cycling 0-3)."""
+        import time
+        font = get_font(FONT_SIZE)
+        dot_count = int(time.time() * 3) % 4
+        dots = "." * dot_count
+        text_surf = font.render(label + dots, False, DIM3)
+        surface.blit(text_surf, (PAD_X, y_offset + PAD_Y))
 
     def update(self, dt: float) -> None:
         """Optional animation hook."""

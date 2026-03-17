@@ -69,7 +69,7 @@ class ActivityPreviewPanel(PreviewPanel):
                 surface.blit(surf, (PAD_X, y))
                 y += LINE_H
         else:
-            surf = count_font.render("All clear", False, DIM3)
+            surf = count_font.render("No new activity", False, DIM3)
             surface.blit(surf, (PAD_X, y))
 
         # Separator

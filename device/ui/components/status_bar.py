@@ -1,6 +1,7 @@
-"""Status bar component — 18px height, white bg, black text.
+"""Status bar component — 20px height, white bg, black text.
 
 Matches bitos-nav-v2.html .sbar specification.
+Shows: time (left) | breadcrumb (center) | status + notification badge (right).
 """
 
 from datetime import datetime
@@ -14,13 +15,27 @@ BAR_H = 20
 FONT_SIZE = FONT_SIZE_STATUS_BAR
 PAD_X = 6
 
+# Notification badge
+BADGE_COLOR = BLACK
+BADGE_RADIUS = 5
+
 
 class StatusBar:
-    """Renders the 18px status bar. Render-only."""
+    """Renders the 20px status bar with breadcrumb and notification badge."""
 
     def __init__(self):
         self.title = "BITOS"
         self.status_text = "AI\u00b7RDY"
+        self.breadcrumb: str = ""
+        self.unread_count: int = 0
+
+    def set_breadcrumb(self, crumb: str) -> None:
+        """Set the center breadcrumb text (e.g. 'HOME' or 'HOME > CHAT')."""
+        self.breadcrumb = crumb
+
+    def set_unread_count(self, count: int) -> None:
+        """Set unread notification count for the badge indicator."""
+        self.unread_count = max(0, count)
 
     def render(self, surface: pygame.Surface, y: int = 0, width: int = 240) -> None:
         """Draw status bar at y position across full width."""
@@ -35,15 +50,30 @@ class StatusBar:
         time_surf = font.render(time_str, False, BLACK)
         surface.blit(time_surf, (PAD_X, y + (BAR_H - time_surf.get_height()) // 2))
 
-        # Title (center)
-        title_surf = font.render(self.title, False, BLACK)
-        surface.blit(title_surf, ((width - title_surf.get_width()) // 2,
-                                   y + (BAR_H - title_surf.get_height()) // 2))
+        # Breadcrumb or title (center)
+        center_text = self.breadcrumb if self.breadcrumb else self.title
+        center_surf = font.render(center_text, False, BLACK)
+        surface.blit(center_surf, ((width - center_surf.get_width()) // 2,
+                                    y + (BAR_H - center_surf.get_height()) // 2))
 
-        # Status (right)
+        # Status + notification badge (right)
         status_surf = font.render(self.status_text, False, BLACK)
-        surface.blit(status_surf, (width - status_surf.get_width() - PAD_X,
-                                    y + (BAR_H - status_surf.get_height()) // 2))
+        status_x = width - status_surf.get_width() - PAD_X
+        status_y = y + (BAR_H - status_surf.get_height()) // 2
+        surface.blit(status_surf, (status_x, status_y))
+
+        # Notification badge dot (drawn left of status text)
+        if self.unread_count > 0:
+            badge_x = status_x - BADGE_RADIUS - 3
+            badge_y = y + BAR_H // 2
+            pygame.draw.circle(surface, BADGE_COLOR, (badge_x, badge_y), BADGE_RADIUS)
+            # Draw count inside if small enough
+            if self.unread_count <= 99:
+                badge_font = get_font(FONT_SIZE - 4)
+                count_str = str(self.unread_count)
+                count_surf = badge_font.render(count_str, False, WHITE)
+                surface.blit(count_surf, (badge_x - count_surf.get_width() // 2,
+                                          badge_y - count_surf.get_height() // 2))
 
         # Bottom border
         pygame.draw.line(surface, BLACK, (0, y + BAR_H - 1), (width, y + BAR_H - 1), 1)

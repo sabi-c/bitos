@@ -45,13 +45,14 @@ class TasksPreviewPanel(PreviewPanel):
         self._tasks = tasks
 
     def _get_tasks(self) -> list[dict]:
-        """Return tasks for display."""
+        """Return tasks for display, or empty list if none."""
         if self._tasks is not None:
             return self._tasks[:MAX_TASKS]
-        # Placeholder when no tasks are available
-        return [
-            {"title": "No tasks loaded", "done": False},
-        ]
+        return []
+
+    def _has_tasks(self) -> bool:
+        """Return True if there are tasks to display."""
+        return bool(self._tasks)
 
     def render(self, surface: pygame.Surface) -> None:
         w = surface.get_width()
@@ -62,26 +63,29 @@ class TasksPreviewPanel(PreviewPanel):
         header_surf = header_font.render("TODAY", False, WHITE)
         surface.blit(header_surf, (TASKS_PAD_X, TASKS_PAD_Y))
 
-        # ── Task items ──
+        # ── Task items or empty state ──
         tasks = self._get_tasks()
         y = TASKS_HEADER_H
-        for task in tasks:
-            if y + TASK_LINE_H > surface.get_height():
-                break
-            done = task.get("done", False)
-            checkbox = CHECK_DONE if done else CHECK_PENDING
-            color = DIM3 if done else DIM2
-            title = task.get("title", "")
-            if len(title) > 22:
-                title = title[:19] + "..."
-            text = f"{checkbox} {title}"
-            surf = task_font.render(text, False, color)
-            surface.blit(surf, (TASKS_PAD_X, y + TASKS_PAD_Y))
-            y += TASK_LINE_H
+        if not tasks:
+            self._render_empty_state(surface, "No tasks yet", y_offset=y)
+            sep_y = y + TASK_LINE_H * 2
+        else:
+            for task in tasks:
+                if y + TASK_LINE_H > surface.get_height():
+                    break
+                done = task.get("done", False)
+                checkbox = CHECK_DONE if done else CHECK_PENDING
+                color = DIM3 if done else DIM2
+                title = task.get("title", "")
+                if len(title) > 22:
+                    title = title[:19] + "..."
+                text = f"{checkbox} {title}"
+                surf = task_font.render(text, False, color)
+                surface.blit(surf, (TASKS_PAD_X, y + TASKS_PAD_Y))
+                y += TASK_LINE_H
+            sep_y = TASKS_HEADER_H + len(tasks) * TASK_LINE_H
 
         # Separator
-        displayed = self._get_tasks()
-        sep_y = TASKS_HEADER_H + len(displayed) * TASK_LINE_H
         pygame.draw.line(surface, HAIRLINE,
                          (TASKS_PAD_X, sep_y),
                          (w - TASKS_PAD_X, sep_y))
