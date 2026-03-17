@@ -22,6 +22,8 @@ from .constants import (
     DEVICE_STATUS_UUID,
     KEYBOARD_INPUT_UUID,
     PAIRING_MODE_TIMEOUT_SECONDS,
+    SETTINGS_READ_UUID,
+    SETTINGS_WRITE_UUID,
     WIFI_CONFIG_UUID,
     WIFI_STATUS_UUID,
 )
@@ -123,6 +125,9 @@ class BitosGATTServer:
         self._last_auth_result: bytes = b""
         self._last_auth_lock = threading.Lock()
 
+        # Settings read callback — returns dict of all device settings
+        self._settings_read_fn = None
+
         # Lazy-created characteristic helpers
         self._wifi_status_char = None
         self._wifi_config_char = None
@@ -194,6 +199,10 @@ class BitosGATTServer:
 
     def is_companion_connected(self) -> bool:
         return self._companion_connected
+
+    def set_settings_read_fn(self, fn) -> None:
+        """Set callback that returns dict of all device settings for BLE read."""
+        self._settings_read_fn = fn
 
     def get_device_address(self) -> str:
         if self._peripheral is not None:
@@ -370,6 +379,34 @@ class BitosGATTServer:
             notify_callback=None,
         )
 
+        # 8. SETTINGS_READ — READ
+        chr_id += 1
+        self._peripheral.add_characteristic(
+            srv_id=srv_id,
+            chr_id=chr_id,
+            uuid=SETTINGS_READ_UUID,
+            value=[],
+            notifying=False,
+            flags=["read"],
+            read_callback=self._read_settings,
+            write_callback=None,
+            notify_callback=None,
+        )
+
+        # 9. SETTINGS_WRITE — WRITE (protected, requires session token)
+        chr_id += 1
+        self._peripheral.add_characteristic(
+            srv_id=srv_id,
+            chr_id=chr_id,
+            uuid=SETTINGS_WRITE_UUID,
+            value=[],
+            notifying=False,
+            flags=["write", "write-without-response"],
+            read_callback=None,
+            write_callback=self._write_settings,
+            notify_callback=None,
+        )
+
         # Grab reference for notify pushes (DEVICE_STATUS is chr_id 6)
         try:
             self._bz_device_status_char = self._peripheral.services[srv_id].characteristics[6]
@@ -517,6 +554,44 @@ class BitosGATTServer:
         """Called when companion subscribes/unsubscribes to device status notifications."""
         del characteristic
         logger.debug("[BLE] Device status notify: %s", notifying)
+
+    def _read_settings(self) -> list[int]:
+        """SETTINGS_READ: return all device settings as JSON."""
+        try:
+            if self._settings_read_fn is not None:
+                settings = self._settings_read_fn()
+                payload = json.dumps(settings).encode("utf-8")
+                return list(payload)
+        except Exception as exc:
+            logger.error("[BLE] settings read error: %s", exc)
+        return list(json.dumps({}).encode("utf-8"))
+
+    def _write_settings(self, value, options=None) -> None:
+        """SETTINGS_WRITE: accept {session_token, key, value} or {session_token, settings: {...}}."""
+        del options
+        try:
+            raw = bytes(value)
+            payload = json.loads(raw.decode("utf-8"))
+
+            # Validate session token (protected characteristic)
+            token = payload.get("session_token", "")
+            if not self._auth_manager.validate_session_token(token):
+                logger.warning("[BLE] settings write rejected — invalid session token")
+                return
+
+            if self._on_settings_write is not None:
+                # Support both single {key, value} and batch {settings: {k: v, ...}}
+                if "settings" in payload:
+                    for k, v in payload["settings"].items():
+                        self._on_settings_write(k, v)
+                elif "key" in payload and "value" in payload:
+                    self._on_settings_write(payload["key"], payload["value"])
+                else:
+                    logger.warning("[BLE] settings write: missing key/value or settings dict")
+            else:
+                logger.warning("[BLE] settings write but no handler configured")
+        except Exception as exc:
+            logger.error("[BLE] settings write error: %s", exc)
 
     def _read_device_info(self) -> list[int]:
         """DEVICE_INFO read: return device metadata JSON."""

@@ -11,7 +11,15 @@ users:
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOoNVUv0P0BGNuh4sL1zmHtK2bv/b4COlW2IzRHeG4XW seb@bitos
 
 runcmd:
-  - sleep 30
-  - git clone https://github.com/sabi-c/bitos.git /home/pi/bitos
+  # Wait for network (up to 60s) before cloning
+  - |
+    for i in $(seq 1 60); do
+      if ping -c1 -W1 github.com >/dev/null 2>&1; then
+        echo "Network ready after ${i}s"
+        break
+      fi
+      sleep 1
+    done
+  - git clone https://github.com/sabi-c/bitos.git /home/pi/bitos || { echo "FATAL: git clone failed"; exit 1; }
   - chown -R pi:pi /home/pi/bitos
   - sudo -u pi bash /home/pi/bitos/scripts/install.sh --non-interactive

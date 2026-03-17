@@ -1,6 +1,28 @@
-pyaudio>=0.2.14
-qrcode==7.4.2
-httpx>=0.28.0
-edge-tts>=6.1.0
-pydub>=0.25.1
-bluezero>=0.8.0  # BLE GATT server — requires: sudo apt install python3-gi libgirepository1.0-dev
+# BITOS Device dependencies (Pi Zero 2W)
+# Install after requirements.txt: pip install -r requirements-device.txt
+
+# Hardware
+spidev>=3.6          # SPI display driver
+RPi.GPIO>=0.7.1      # Button + GPIO
+smbus2>=0.4.3        # I2C (PiSugar battery, WM8960)
+
+# Audio
+pyaudio>=0.2.14      # Audio playback
+sounddevice>=0.4.6   # Audio capture
+pydub>=0.25.1        # Audio processing
+
+# BLE
+bluezero>=0.8.0      # BLE GATT server — requires: sudo apt install python3-gi libgirepository1.0-dev
+
+# TTS
+edge-tts>=6.1.0      # Microsoft Edge TTS (free)
+
+# System
+psutil>=5.9.0        # System monitoring (CPU, memory, temp)
+bcrypt>=4.1.0        # PIN hash generation
+
+# UI
+qrcode==7.4.2        # QR code generation for pairing
+
+# Network
+httpx>=0.28.0        # HTTP client

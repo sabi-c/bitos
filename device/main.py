@@ -3,6 +3,7 @@ import json
 import logging
 import logging.handlers
 import os
+import subprocess
 import sys
 import threading
 
@@ -624,14 +625,22 @@ def main():
             "uptime_seconds": int(time.time() - start_time),
         }
 
+    def _on_settings_write_ble(key: str, value) -> None:
+        """Handle settings written via BLE companion — persist and apply."""
+        repository.set_setting(key, value)
+        logger.info("[BLE] Setting applied: %s = %s", key, value)
+
     gatt_server = get_gatt_server(
         auth_manager=auth_manager,
         on_wifi_config=on_wifi_config,
         on_keyboard_input=on_keyboard_input,
+        on_settings_write=_on_settings_write_ble,
         on_show_passkey=on_show_passkey,
         on_pairing_complete=on_pairing_complete,
         device_info_characteristic=device_info_char,
     )
+    # Wire settings read — returns all settings for companion to display
+    gatt_server.set_settings_read_fn(lambda: repository.get_all_settings())
 
     # HTTP provisioning server — WiFi fallback for iOS companion (no Web Bluetooth)
     def _wifi_status_for_http() -> dict:
@@ -644,6 +653,8 @@ def main():
         auth_manager=auth_manager,
         on_wifi_config=on_wifi_config,
         wifi_status_fn=_wifi_status_for_http,
+        wifi_list_fn=wifi_manager.list_networks,
+        wifi_remove_fn=wifi_manager.remove_network,
         device_status_fn=_collect_device_status,
         device_info_fn=_device_info_for_http,
         on_keyboard_input=on_keyboard_input,

@@ -14,47 +14,74 @@ STATUS_TIMEOUT_SECONDS = 3
 class WiFiManager:
     """Wraps nmcli for WiFi operations."""
 
+    def _connection_exists(self, ssid: str) -> bool:
+        """Check if a NetworkManager connection profile exists for this SSID."""
+        try:
+            result = subprocess.run(
+                ["nmcli", "-t", "-f", "NAME", "connection", "show"],
+                capture_output=True, text=True, timeout=NMCLI_TIMEOUT_SECONDS,
+            )
+            if result.returncode != 0:
+                return False
+            return ssid in result.stdout.splitlines()
+        except subprocess.TimeoutExpired:
+            return False
+
+    def _get_active_ssid(self) -> str:
+        """Return the SSID of the currently active WiFi connection, or ''."""
+        try:
+            result = subprocess.run(
+                ["nmcli", "-t", "-f", "ACTIVE,SSID", "dev", "wifi"],
+                capture_output=True, text=True, timeout=STATUS_TIMEOUT_SECONDS,
+            )
+            if result.returncode == 0:
+                for line in result.stdout.splitlines():
+                    parts = line.split(":")
+                    if parts and parts[0] == "yes" and len(parts) > 1:
+                        return parts[1]
+        except subprocess.TimeoutExpired:
+            pass
+        return ""
+
     def add_or_update_network(self, ssid: str, password: str, security: str, priority: int) -> bool:
         if os.environ.get("BITOS_WIFI") == "mock":
             logging.info("wifi_mock_add ssid=%s security=%s priority=%s", ssid, security, priority)
             return True
 
-        if security == "OPEN":
+        exists = self._connection_exists(ssid)
+
+        if exists:
+            # Update existing connection profile
             cmd = [
-                "nmcli",
-                "connection",
-                "add",
-                "type",
-                "wifi",
-                "ssid",
-                ssid,
-                "connection.autoconnect-priority",
-                str(priority),
-                "connection.autoconnect",
-                "yes",
+                "nmcli", "connection", "modify", ssid,
+                "connection.autoconnect-priority", str(priority),
+                "connection.autoconnect", "yes",
             ]
+            if security != "OPEN":
+                cmd += ["wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", password]
         else:
-            key_mgmt = "wpa-psk"
-            cmd = [
-                "nmcli",
-                "connection",
-                "add",
-                "type",
-                "wifi",
-                "ssid",
-                ssid,
-                "wifi-sec.key-mgmt",
-                key_mgmt,
-                "wifi-sec.psk",
-                password,
-                "connection.autoconnect-priority",
-                str(priority),
-                "connection.autoconnect",
-                "yes",
-            ]
+            # Create new connection profile
+            if security == "OPEN":
+                cmd = [
+                    "nmcli", "connection", "add",
+                    "type", "wifi",
+                    "ssid", ssid,
+                    "connection.autoconnect-priority", str(priority),
+                    "connection.autoconnect", "yes",
+                ]
+            else:
+                cmd = [
+                    "nmcli", "connection", "add",
+                    "type", "wifi",
+                    "ssid", ssid,
+                    "wifi-sec.key-mgmt", "wpa-psk",
+                    "wifi-sec.psk", password,
+                    "connection.autoconnect-priority", str(priority),
+                    "connection.autoconnect", "yes",
+                ]
 
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=NMCLI_TIMEOUT_SECONDS)
         except subprocess.TimeoutExpired:
             logging.warning("wifi_add_timeout ssid=%s", ssid)
             return False
@@ -70,6 +97,75 @@ class WiFiManager:
             return False
 
         return up.returncode == 0
+
+    def list_networks(self) -> list[dict]:
+        """Return saved WiFi connection profiles as a list of dicts."""
+        if os.environ.get("BITOS_WIFI") == "mock":
+            return [
+                {"ssid": "MOCK_NET", "priority": 100, "autoconnect": True, "active": True},
+                {"ssid": "MOCK_NET_2", "priority": 50, "autoconnect": True, "active": False},
+            ]
+
+        active_ssid = self._get_active_ssid()
+
+        try:
+            result = subprocess.run(
+                ["nmcli", "-t", "-f", "NAME,TYPE,AUTOCONNECT,AUTOCONNECT-PRIORITY", "connection", "show"],
+                capture_output=True, text=True, timeout=NMCLI_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired:
+            logging.warning("wifi_list_timeout")
+            return []
+
+        if result.returncode != 0:
+            logging.warning("wifi_list_failed stderr=%s", result.stderr.strip())
+            return []
+
+        networks = []
+        for line in result.stdout.splitlines():
+            parts = line.split(":")
+            if len(parts) < 4:
+                continue
+            name, conn_type, autoconnect, priority = parts[0], parts[1], parts[2], parts[3]
+            # Filter to wifi connections only
+            if "wireless" not in conn_type and "wifi" not in conn_type and "802-11" not in conn_type:
+                continue
+            networks.append({
+                "ssid": name,
+                "priority": int(priority) if priority.lstrip("-").isdigit() else 0,
+                "autoconnect": autoconnect.lower() == "yes",
+                "active": name == active_ssid,
+            })
+
+        return networks
+
+    def remove_network(self, ssid: str) -> bool:
+        """Remove a saved WiFi connection profile. Returns False if it's currently active."""
+        if os.environ.get("BITOS_WIFI") == "mock":
+            logging.info("wifi_mock_remove ssid=%s", ssid)
+            return True
+
+        # Don't allow removing the active connection
+        active_ssid = self._get_active_ssid()
+        if ssid == active_ssid:
+            logging.warning("wifi_remove_blocked ssid=%s reason=currently_active", ssid)
+            return False
+
+        try:
+            result = subprocess.run(
+                ["nmcli", "connection", "delete", ssid],
+                capture_output=True, text=True, timeout=NMCLI_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired:
+            logging.warning("wifi_remove_timeout ssid=%s", ssid)
+            return False
+
+        if result.returncode != 0:
+            logging.warning("wifi_remove_failed ssid=%s stderr=%s", ssid, result.stderr.strip())
+            return False
+
+        logging.info("wifi_removed ssid=%s", ssid)
+        return True
 
     def get_status(self) -> dict:
         if os.environ.get("BITOS_WIFI") == "mock":

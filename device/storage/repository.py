@@ -214,6 +214,12 @@ class DeviceRepository:
             return None, []
         return latest, self.list_messages(latest)
 
+    def get_all_settings(self) -> dict:
+        """Return all settings as a flat dict."""
+        with closing(self._connect()) as conn:
+            rows = conn.execute("SELECT key, value FROM settings").fetchall()
+        return {row["key"]: row["value"] for row in rows}
+
     def get_setting(self, key: str, default=None):
         with closing(self._connect()) as conn:
             row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()

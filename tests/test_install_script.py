@@ -30,10 +30,10 @@ def test_day_one_references_two_services():
 
 def test_day_one_health_wait_has_timeout():
     day_one = _read("scripts/day_one.sh")
-    assert "echo \"Waiting for server...\"" in day_one
-    assert "until curl -sf http://localhost:8000/health > /dev/null; do" in day_one
+    assert "Waiting for server..." in day_one
+    assert "curl -sf http://localhost:8000/health" in day_one
     assert "sleep 1" in day_one
-    assert "echo -n \".\"" in day_one
+    assert "Server not ready after 30s" in day_one
 
 
 def test_device_service_sets_pythonwarnings_runtimewarning_ignore():
