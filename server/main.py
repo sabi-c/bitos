@@ -1908,6 +1908,137 @@ async def ws_device(ws: WebSocket, device_id: str = "default"):
         _device_ws.unregister(device_id)
 
 
+# ── Quick Actions ────────────────────────────────────────────────────
+from activity_feed import (
+    log_activity,
+    update_activity,
+    get_recent as get_recent_activities,
+    get_by_type as get_activities_by_type,
+    get_by_id as get_activity_by_id,
+    register_ws as register_activity_ws,
+    unregister_ws as unregister_activity_ws,
+)
+
+QUICK_ACTIONS = {
+    "check_messages": {"tool": "read_imessages", "input": {"limit": 5}, "label": "Check Messages"},
+    "check_email": {"tool": "read_emails", "input": {"limit": 5, "unread_only": True}, "label": "Check Email"},
+    "today_tasks": {"tool": "get_tasks", "input": {"filter": "today"}, "label": "Today's Tasks"},
+    "today_calendar": {"tool": "get_calendar_events", "input": {"days_ahead": 1}, "label": "Today's Calendar"},
+    "battery_status": {"tool": "get_device_settings", "input": {}, "label": "Device Status"},
+    "send_daily_summary": {
+        "label": "Daily Summary",
+        "type": "llm_prompt",
+        "prompt": "Give me a brief daily summary: tasks, unread messages, calendar events for today.",
+    },
+}
+
+
+class QuickActionRequest(BaseModel):
+    action: str = Field(..., description="Quick action name to execute")
+
+
+@app.get("/actions")
+async def list_quick_actions():
+    """List all available quick actions."""
+    actions = []
+    for key, config in QUICK_ACTIONS.items():
+        actions.append({
+            "name": key,
+            "label": config.get("label", key),
+            "type": config.get("type", "tool"),
+        })
+    return {"actions": actions, "count": len(actions)}
+
+
+@app.post("/actions/run")
+async def run_quick_action(payload: QuickActionRequest):
+    """Execute a quick action by name, log to activity feed."""
+    action_name = payload.action
+    config = QUICK_ACTIONS.get(action_name)
+    if not config:
+        raise HTTPException(status_code=404, detail=f"Unknown action: {action_name}")
+
+    # Create activity entry
+    activity_id = log_activity(
+        "quick_action",
+        config.get("label", action_name),
+        metadata={"action": action_name, "config": config},
+    )
+    update_activity(activity_id, "running")
+
+    try:
+        if config.get("type") == "llm_prompt":
+            # Run through LLM
+            prompt = config["prompt"]
+            text = ""
+            for chunk in llm_bridge.stream_text(prompt):
+                text += chunk
+            result = {"type": "llm_response", "text": text}
+        else:
+            # Run as tool call
+            from agent_tools import _handle_tool_call_inner
+            tool_name = config["tool"]
+            tool_input = config.get("input", {})
+
+            # Build minimal device settings from cache
+            device_settings = dict(_device_settings_cache)
+            setting_changes: list[dict] = []
+
+            raw = _handle_tool_call_inner(
+                tool_name, tool_input, device_settings, setting_changes
+            )
+            result = {"type": "tool_result", "tool": tool_name, "data": json.loads(raw)}
+
+        update_activity(activity_id, "done", result=json.dumps(result)[:500])
+        return {"ok": True, "action": action_name, "activity_id": activity_id, "result": result}
+
+    except Exception as exc:
+        update_activity(activity_id, "failed", result=str(exc)[:500])
+        logger.error("quick_action_failed: %s error=%s", action_name, exc)
+        raise HTTPException(status_code=500, detail=f"Action failed: {exc}")
+
+
+# ── Activity Feed Endpoints ──────────────────────────────────────────
+
+@app.get("/activity")
+async def get_activity_feed(type: str = "", limit: int = 50):
+    """Recent agent activity log with optional type filter."""
+    if type:
+        items = get_activities_by_type(type, limit=limit)
+    else:
+        items = get_recent_activities(limit=limit)
+    return {"activities": items, "count": len(items)}
+
+
+@app.get("/activity/{activity_id}")
+async def get_activity_detail(activity_id: str):
+    """Get a single activity by ID."""
+    item = get_activity_by_id(activity_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Activity not found")
+    return item
+
+
+@app.websocket("/ws/activity")
+async def ws_activity(ws: WebSocket):
+    """Live activity feed updates for companion app."""
+    await ws.accept()
+    register_activity_ws(ws)
+    logger.info("[WS] Activity feed client connected")
+    try:
+        while True:
+            data = await ws.receive_json()
+            msg_type = data.get("type")
+            if msg_type == "ping":
+                await ws.send_json({"type": "pong"})
+    except WebSocketDisconnect:
+        logger.info("[WS] Activity feed client disconnected")
+    except Exception as exc:
+        logger.warning("[WS] Activity feed error: %s", exc)
+    finally:
+        unregister_activity_ws(ws)
+
+
 if __name__ == "__main__":
     import uvicorn
     from config import SERVER_HOST, SERVER_PORT

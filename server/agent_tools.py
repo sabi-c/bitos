@@ -263,6 +263,72 @@ DEVICE_TOOLS = [
             "required": [],
         },
     },
+    # ── Task Management Tools ──────────────────────────────────────────
+    {
+        "name": "create_task",
+        "description": (
+            "Create a new task in the task manager. Returns the created task "
+            "with its ID. Use this when the user wants to add a to-do, reminder, "
+            "or action item."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "The task title / what needs to be done.",
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Optional longer description or notes for the task.",
+                },
+                "due_date": {
+                    "type": "string",
+                    "description": "Optional due date in ISO format (e.g. 2026-03-17). Omit for no due date.",
+                },
+            },
+            "required": ["title"],
+        },
+    },
+    {
+        "name": "complete_task",
+        "description": (
+            "Mark a task as complete/done. Requires the task ID. "
+            "Use get_tasks first to find the ID if the user refers to a task by name."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task_id": {
+                    "type": "integer",
+                    "description": "The numeric ID of the task to complete.",
+                },
+            },
+            "required": ["task_id"],
+        },
+    },
+    {
+        "name": "get_tasks",
+        "description": (
+            "List tasks from the task manager. Returns task IDs, titles, "
+            "projects, and done status. Use filter to narrow results."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "filter": {
+                    "type": "string",
+                    "enum": ["today", "all", "overdue"],
+                    "description": "Filter: 'today' (default) for today's tasks, 'all' for everything, 'overdue' for past-due.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max tasks to return (default 20, max 50).",
+                },
+            },
+            "required": [],
+        },
+    },
 ]
 
 
@@ -333,6 +399,25 @@ def handle_tool_call(
     Returns:
         JSON string result for the tool_result message.
     """
+    # ── Activity feed tracking ──────────────────────────────────────
+    from activity_feed import track_tool_call
+
+    def _run_tool():
+        return _handle_tool_call_inner(
+            tool_name, tool_input, device_settings, setting_changes, approval_events
+        )
+
+    return track_tool_call(tool_name, tool_input, _run_tool)
+
+
+def _handle_tool_call_inner(
+    tool_name: str,
+    tool_input: dict,
+    device_settings: dict,
+    setting_changes: list[dict],
+    approval_events: list[dict] | None = None,
+) -> str:
+    """Inner tool handler — actual execution logic."""
     if tool_name == "get_device_settings":
         return json.dumps(device_settings, indent=2)
 
@@ -384,6 +469,16 @@ def handle_tool_call(
     if tool_name == "get_calendar_events":
         return _get_calendar_events(tool_input)
 
+    # ── Task management tools ────────────────────────────────────────
+    if tool_name == "create_task":
+        return _create_task(tool_input)
+
+    if tool_name == "complete_task":
+        return _complete_task(tool_input)
+
+    if tool_name == "get_tasks":
+        return _get_tasks(tool_input)
+
     return json.dumps({"error": f"Unknown tool: {tool_name}"})
 
 
@@ -393,6 +488,7 @@ import subprocess
 
 _bb: object | None = None
 _gmail: object | None = None
+_vikunja: object | None = None
 
 
 def _get_bb():
@@ -409,6 +505,14 @@ def _get_gmail():
         from integrations.gmail_adapter import GmailAdapter
         _gmail = GmailAdapter()
     return _gmail
+
+
+def _get_vikunja():
+    global _vikunja
+    if _vikunja is None:
+        from integrations.vikunja_adapter import VikunjaAdapter
+        _vikunja = VikunjaAdapter()
+    return _vikunja
 
 
 # ── Messaging tool handlers ─────────────────────────────────────────────
@@ -601,3 +705,79 @@ end tell
         return json.dumps({"events": events, "count": len(events)})
     except Exception as exc:
         return json.dumps({"error": f"Calendar read failed: {exc}"})
+
+
+# ── Task management tool handlers ────────────────────────────────────────
+
+def _create_task(tool_input: dict) -> str:
+    title = tool_input.get("title", "").strip()
+    if not title:
+        return json.dumps({"error": "title is required"})
+
+    description = tool_input.get("description", "")
+    # due_date passed through as metadata (Vikunja adapter handles it in body)
+
+    vikunja = _get_vikunja()
+    try:
+        task = vikunja.create_task(title, details=description or None)
+        if task is None:
+            return json.dumps({"error": "Failed to create task"})
+
+        logger.info("task_created: id=%s title=%s", task.get("id"), title[:40])
+        return json.dumps({
+            "success": True,
+            "task": {
+                "id": task.get("id"),
+                "title": task.get("title", title),
+                "mock": task.get("mock", False),
+            },
+        })
+    except Exception as exc:
+        logger.warning("create_task_error: %s", exc)
+        return json.dumps({"error": f"Failed to create task: {exc}"})
+
+
+def _complete_task(tool_input: dict) -> str:
+    task_id = tool_input.get("task_id")
+    if task_id is None:
+        return json.dumps({"error": "task_id is required"})
+
+    vikunja = _get_vikunja()
+    try:
+        ok = vikunja.complete_task(int(task_id))
+        if ok:
+            logger.info("task_completed: id=%s", task_id)
+            return json.dumps({"success": True, "task_id": task_id, "status": "done"})
+        return json.dumps({"error": f"Failed to complete task {task_id}"})
+    except Exception as exc:
+        logger.warning("complete_task_error: %s", exc)
+        return json.dumps({"error": f"Failed to complete task: {exc}"})
+
+
+def _get_tasks(tool_input: dict) -> str:
+    task_filter = tool_input.get("filter", "today")
+    limit = min(tool_input.get("limit", 20), 50)
+
+    vikunja = _get_vikunja()
+    try:
+        if task_filter == "today":
+            tasks = vikunja.get_today_tasks()
+        elif task_filter == "all":
+            tasks = vikunja.list_tasks()
+        elif task_filter == "overdue":
+            # Vikunja list + client-side filter for overdue
+            all_tasks = vikunja.list_tasks()
+            import datetime
+            now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            tasks = [
+                t for t in all_tasks
+                if t.get("due_date") and t["due_date"] < now and not t.get("done")
+            ]
+        else:
+            tasks = vikunja.get_today_tasks()
+
+        tasks = tasks[:limit]
+        return json.dumps({"tasks": tasks, "count": len(tasks), "filter": task_filter})
+    except Exception as exc:
+        logger.warning("get_tasks_error: %s", exc)
+        return json.dumps({"error": f"Failed to get tasks: {exc}"})
