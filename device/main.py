@@ -72,6 +72,7 @@ from bluetooth.wifi_manager import WiFiManager
 from device.ble.ble_service import get_ble_service
 from device.ble.pairing_manager import PairingManager
 from audio.pipeline import get_audio_pipeline
+from audio.recording_adapter import RecordingAdapter
 from hardware import StatusPoller, StatusState, SystemMonitor
 from power.battery import BatteryMonitor
 from power.idle import IdleManager
@@ -533,10 +534,18 @@ def main():
             "AGENT": open_agent_tasks,
             "ACTIVITY": open_activity,
         }
+        recording_adapter = RecordingAdapter(audio_pipeline)
+
+        def _stt_callable(path: str) -> str:
+            return audio_pipeline.transcribe(path)
+
         right_panels = create_right_panels(
             panel_openers=panel_openers,
             repository=repository,
             status_state=status_state,
+            audio_pipeline=recording_adapter,
+            stt_callable=_stt_callable,
+            led=led,
         )
 
         # Fetch greeting for chat preview
