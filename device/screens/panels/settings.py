@@ -41,6 +41,7 @@ class SettingsPanel(BaseScreen):
         on_open_font_picker=None,
         on_open_text_speed=None,
         on_open_bt_audio=None,
+        on_open_bluetooth=None,
         get_ble_address=None,
         on_set_discoverable=None,
         on_push_overlay=None,
@@ -63,6 +64,7 @@ class SettingsPanel(BaseScreen):
         self._on_open_font_picker = on_open_font_picker
         self._on_open_text_speed = on_open_text_speed
         self._on_open_bt_audio = on_open_bt_audio
+        self._on_open_bluetooth = on_open_bluetooth
         self._get_ble_address = get_ble_address or (lambda: "mock-BT-addr")
         self._on_set_discoverable = on_set_discoverable or (lambda _enabled, _timeout: None)
         self._on_push_overlay = on_push_overlay
@@ -101,6 +103,7 @@ class SettingsPanel(BaseScreen):
             NavItem(key="firmware", label="FIRMWARE", status="", action=self._check_firmware),
             NavItem(key="about", label="ABOUT", status="", action=self._open_about),
             NavItem(key="battery", label="BATTERY", status="", action=self._open_battery),
+            NavItem(key="bluetooth", label="BLUETOOTH", status="", action=self._open_bluetooth),
             NavItem(key="companion", label="COMPANION APP", status="", action=self._open_companion_app),
             NavItem(key="bt_audio", label="BT AUDIO", status="", action=self._open_bt_audio),
             NavItem(key="change_pin", label="CHANGE PIN", status="", action=self._open_change_pin),
@@ -165,6 +168,7 @@ class SettingsPanel(BaseScreen):
             "font": self._font_family_label() + " \u203a",
             "firmware": self._firmware_status,
             "about": "v1.0 \u203a",
+            "bluetooth": "\u203a",
             "companion": "PAIR \u203a",
             "bt_audio": "\u203a",
             "battery": "\u203a",
@@ -305,6 +309,10 @@ class SettingsPanel(BaseScreen):
         self._on_push_overlay(qr)
         self._on_set_discoverable(True, 120)
 
+
+    def _open_bluetooth(self):
+        if self._on_open_bluetooth:
+            self._on_open_bluetooth()
 
     def _open_bt_audio(self):
         if self._on_open_bt_audio:

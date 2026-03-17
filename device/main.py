@@ -97,6 +97,7 @@ from screens.panels.files_browser import FilesBrowserPanel
 from screens.panels.markdown_viewer import MarkdownViewerPanel
 from screens.panels.chat_history import ChatHistoryPanel
 from screens.panels.settings import SettingsPanel, ModelPickerPanel, AgentModePanel, SleepTimerPanel, AboutPanel, BatteryPanel, DevPanel, FontPickerPanel, TextSpeedPanel
+from screens.panels.bluetooth import BluetoothPanel
 from screens.panels.bt_audio import BluetoothAudioPanel
 from screens.panels.change_pin import ChangePinPanel
 from screens.subscreens.integration_detail import IntegrationDetailPanel
@@ -970,6 +971,7 @@ def main():
                 on_open_font_picker=open_font_picker,
                 on_open_text_speed=open_text_speed,
                 on_open_bt_audio=open_bt_audio,
+                on_open_bluetooth=open_bluetooth,
                 on_push_overlay=screen_mgr.push_overlay,
                 on_dismiss_overlay=screen_mgr.dismiss_overlay,
                 get_ble_address=gatt_server.get_device_address,
@@ -1004,6 +1006,16 @@ def main():
 
     def open_text_speed():
         screen_mgr.push(TextSpeedPanel(repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
+
+    def open_bluetooth():
+        screen_mgr.push(BluetoothPanel(
+            gatt_server=gatt_server,
+            auth_manager=auth_manager,
+            on_back=lambda: screen_mgr.pop(),
+            on_push_overlay=screen_mgr.push_overlay,
+            on_dismiss_overlay=screen_mgr.dismiss_overlay,
+            ui_settings=ui_settings,
+        ))
 
     def open_bt_audio():
         screen_mgr.push(BluetoothAudioPanel(bt_audio_manager=bt_audio_manager, repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))

@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import subprocess
 import threading
 import time
 from typing import Any
@@ -30,6 +31,55 @@ logger = logging.getLogger(__name__)
 # Retry configuration — mirrors NUS service
 _MAX_RETRIES = 3
 _RETRY_DELAY_SECONDS = 5
+
+
+def _set_adapter_discoverable(enabled: bool, timeout_s: int = PAIRING_MODE_TIMEOUT_SECONDS) -> None:
+    """Toggle BlueZ adapter discoverability via bluetoothctl.
+
+    This makes the device visible in iPhone Bluetooth settings and
+    allows Web Bluetooth / BLE scanning from companion apps.
+    """
+    try:
+        state = "on" if enabled else "off"
+        # Ensure adapter is powered on
+        subprocess.run(["bluetoothctl", "power", "on"], capture_output=True, timeout=5, check=False)
+        # Set discoverable with timeout
+        if enabled:
+            subprocess.run(
+                ["bluetoothctl", "discoverable-timeout", str(int(timeout_s))],
+                capture_output=True, timeout=5, check=False,
+            )
+        subprocess.run(["bluetoothctl", "discoverable", state], capture_output=True, timeout=5, check=False)
+        subprocess.run(["bluetoothctl", "pairable", state], capture_output=True, timeout=5, check=False)
+        if enabled:
+            # Register NoInputNoOutput agent for headless pairing (SSP)
+            subprocess.run(["bluetoothctl", "agent", "NoInputNoOutput"], capture_output=True, timeout=5, check=False)
+            subprocess.run(["bluetoothctl", "default-agent"], capture_output=True, timeout=5, check=False)
+        logger.info("[BLE] adapter discoverable=%s timeout=%ss", state, timeout_s if enabled else 0)
+    except FileNotFoundError:
+        logger.debug("[BLE] bluetoothctl not found — skipping adapter discoverability toggle")
+    except Exception as exc:
+        logger.warning("[BLE] failed to set adapter discoverable=%s: %s", enabled, exc)
+
+
+def get_connected_companions() -> list[dict]:
+    """Return list of currently connected Bluetooth devices via bluetoothctl."""
+    devices: list[dict] = []
+    try:
+        result = subprocess.run(
+            ["bluetoothctl", "devices", "Connected"],
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+        for line in result.stdout.strip().splitlines():
+            # Format: "Device AA:BB:CC:DD:EE:FF DeviceName"
+            parts = line.split(maxsplit=2)
+            if len(parts) >= 3 and parts[0] == "Device":
+                devices.append({"address": parts[1], "name": parts[2]})
+    except FileNotFoundError:
+        logger.debug("[BLE] bluetoothctl not found — cannot list connected devices")
+    except Exception as exc:
+        logger.debug("[BLE] failed to list connected devices: %s", exc)
+    return devices
 
 
 class BitosGATTServer:
@@ -114,6 +164,19 @@ class BitosGATTServer:
             self._pairing_until = time.time() + max(1, int(timeout_s))
         else:
             self._pairing_until = 0.0
+        # Actually toggle BlueZ adapter discoverability via bluetoothctl
+        _set_adapter_discoverable(enabled, timeout_s)
+
+    @property
+    def is_discoverable(self) -> bool:
+        """True if the device is currently in pairing/discoverable mode."""
+        if self._discoverable and self._pairing_until > 0:
+            if time.time() > self._pairing_until:
+                # Timeout expired — turn off
+                self._discoverable = False
+                self._pairing_until = 0.0
+                _set_adapter_discoverable(False)
+        return self._discoverable
 
     def notify_device_status(self, status: dict) -> None:
         """Push a device status update to connected companion via notify."""
@@ -511,6 +574,10 @@ class MockGATTServer:
         self._discoverable = bool(enabled)
         self._timeout_s = int(timeout_s)
         logging.info("[BLE][MOCK] set_discoverable enabled=%s timeout=%s", enabled, timeout_s)
+
+    @property
+    def is_discoverable(self) -> bool:
+        return self._discoverable
 
     def notify_device_status(self, status: dict) -> None:
         logging.info("[BLE][MOCK] notify_device_status %s", status)
