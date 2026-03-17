@@ -37,7 +37,7 @@ def test_speaking_overlay_gesture_short_press_dismisses():
     overlay = SpeakingOverlay()
     overlay.show()
     result = overlay.handle_action("SHORT_PRESS")
-    assert result == "dismiss"
+    assert result == "skip"  # SHORT_PRESS skips TTS playback
 
 
 def test_speaking_overlay_gesture_hold_start_replies():
