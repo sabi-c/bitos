@@ -1,11 +1,13 @@
 """BITOS Home panel with button-first sidebar navigation."""
 
+from datetime import datetime
+
 import pygame
 
 from screens.base import BaseScreen
 from display.tokens import BLACK, WHITE, DIM2, DIM3, HAIRLINE, PHYSICAL_W, PHYSICAL_H, STATUS_BAR_H, ROW_H_MIN
 from display.theme import merge_runtime_ui_settings, load_ui_font
-from screens.components import NavItem, VerticalNavController
+from screens.components import NavItem, VerticalNavController, Widget, WidgetStrip
 
 
 class HomePanel(BaseScreen):
@@ -51,6 +53,17 @@ class HomePanel(BaseScreen):
         self._font_hint = load_ui_font("hint", self._ui_settings)
         self._capture_count = 0
         self._capture_refresh_elapsed = 5.0
+        self._widget_strip = WidgetStrip([
+            Widget(key="time", label="TIME", value=datetime.now().strftime("%H:%M")),
+            Widget(key="weather", label="WEATHER", value="--"),
+            Widget(key="unread", label="UNREAD", value="0"),
+        ])
+        self._widget_fonts = {
+            "hint": self._font_hint,
+            "small": self._font_small,
+        }
+        self._ticker_text: str = ""
+        self._ticker_offset: int = 0
         self._nav = VerticalNavController(
             [
                 NavItem(key="chat", label="CHAT", status="READY", action=self._open_chat),
@@ -76,6 +89,18 @@ class HomePanel(BaseScreen):
         if self._capture_refresh_elapsed >= 5.0:
             self._refresh_capture_count()
 
+        # Update time widget
+        self._widget_strip.update_widget("time", value=datetime.now().strftime("%H:%M"))
+
+        # Update unread widget from status_state
+        msg_unread = int(getattr(self._status_state, "imessage_unread", 0)) if self._status_state else 0
+        mail_unread = int(getattr(self._status_state, "gmail_unread", 0)) if self._status_state else 0
+        self._widget_strip.update_widget("unread", value=str(msg_unread + mail_unread))
+
+        # Advance ticker scroll
+        if self._ticker_text:
+            self._ticker_offset += 1
+
     def handle_action(self, action: str):
         if action == "SHORT_PRESS":
             self._nav.move(1)
@@ -100,6 +125,7 @@ class HomePanel(BaseScreen):
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
 
+        # Status bar (20px)
         pygame.draw.rect(surface, WHITE, pygame.Rect(0, 0, PHYSICAL_W, STATUS_BAR_H))
         title = self._font_small.render("HOME", False, BLACK)
         surface.blit(title, (6, (STATUS_BAR_H - title.get_height()) // 2))
@@ -107,7 +133,13 @@ class HomePanel(BaseScreen):
         health_surface = self._font_small.render(health, False, BLACK)
         surface.blit(health_surface, (PHYSICAL_W - health_surface.get_width() - 6, (STATUS_BAR_H - health_surface.get_height()) // 2))
 
-        y = STATUS_BAR_H + 2
+        # Widget strip (y=22, h=50)
+        widget_y = STATUS_BAR_H + 2
+        widget_h = 50
+        self._widget_strip.render(surface, widget_y, PHYSICAL_W, widget_h, fonts=self._widget_fonts)
+
+        # Nav list (starts below widget strip)
+        y = widget_y + widget_h + 4  # y=76
         for idx, item in enumerate(self._nav.items):
             focused = idx == self._nav.focus_index
             if focused:
@@ -133,8 +165,19 @@ class HomePanel(BaseScreen):
                 pygame.draw.line(surface, HAIRLINE, (0, y + ROW_H_MIN - 1), (PHYSICAL_W, y + ROW_H_MIN - 1))
             y += ROW_H_MIN
 
+        # Headlines ticker (scrolling, above hint bar)
         hint = self._font_hint.render("SHORT:NEXT · DBL:SEL · LONG:BACK", False, DIM3)
-        surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, PHYSICAL_H - hint.get_height() - 2))
+        hint_y = PHYSICAL_H - hint.get_height() - 2
+        if self._ticker_text:
+            ticker_y = hint_y - self._font_hint.get_height() - 4
+            ticker_surf = self._font_hint.render(self._ticker_text, False, DIM2)
+            ticker_w = ticker_surf.get_width()
+            # Scroll offset wraps around total width + screen width
+            offset = self._ticker_offset % (ticker_w + PHYSICAL_W)
+            surface.blit(ticker_surf, (PHYSICAL_W - offset, ticker_y))
+
+        # Hint bar at bottom
+        surface.blit(hint, ((PHYSICAL_W - hint.get_width()) // 2, hint_y))
 
     def _open_chat(self):
         # VERIFIED: HOME CHAT nav opens ChatPanel.
