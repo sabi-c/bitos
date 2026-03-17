@@ -24,6 +24,7 @@ from config import (
     NANOCLAW_BASE_URL,
     NANOCLAW_MODEL,
 )
+from security import redact_sensitive
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,7 @@ class AnthropicBridge(LLMBridge):
         try:
             with client.messages.stream(**kwargs) as stream:
                 for text in stream.text_stream:
-                    yield text
+                    yield redact_sensitive(text)
         except anthropic.AuthenticationError as exc:
             logger.error("anthropic_auth_error: %s", exc)
             raise RuntimeError("Invalid API key") from exc
@@ -146,7 +147,7 @@ class AnthropicBridge(LLMBridge):
                 for block in response.content:
                     assistant_content.append(block)
                     if block.type == "text":
-                        yield block.text
+                        yield redact_sensitive(block.text)
                     elif block.type == "tool_use":
                         has_tool_use = True
                         logger.info("tool_call: name=%s input=%s", block.name, json.dumps(block.input)[:200])
@@ -207,7 +208,7 @@ class AnthropicBridge(LLMBridge):
             system=system_prompt or SYSTEM_PROMPT,
         )
         text = "".join(block.text for block in response.content if hasattr(block, "text"))
-        return text, response.usage.input_tokens, response.usage.output_tokens
+        return redact_sensitive(text), response.usage.input_tokens, response.usage.output_tokens
 
 
 class OpenAICompatibleBridge(LLMBridge):

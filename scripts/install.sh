@@ -129,6 +129,12 @@ echo "[9/9] Validating installation..."
 # Remove any one-shot boot fix scripts
 sudo rm -f /boot/firmware/fix_bt.sh /boot/fix_bt.sh 2>/dev/null || true
 
+# Set secure file permissions
+sudo chmod 600 /etc/bitos/secrets 2>/dev/null || true
+# Database directory permissions (will be created on first run)
+mkdir -p "$BITOS_DIR/server/data"
+chmod 700 "$BITOS_DIR/server/data"
+
 # Mark as configured
 sudo touch /etc/bitos/configured
 

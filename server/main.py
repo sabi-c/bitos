@@ -473,9 +473,20 @@ def _init_subtask_table():
 
 _init_subtask_table()
 
+_cors_origins = [
+    "http://localhost:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "https://bitos-p8xw.onrender.com",  # companion app
+]
+_extra_origins = os.environ.get("BITOS_CORS_ORIGINS", "")
+if _extra_origins:
+    _cors_origins.extend([o.strip() for o in _extra_origins.split(",") if o.strip()])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -1866,7 +1877,8 @@ async def chat(payload: ChatRequest):
                 setting_changes = e.value or []
             except Exception as tool_exc:
                 logger.error("[BITOS] Tool-use chat failed: %s", tool_exc)
-                yield to_sse_data(f"[Error: {str(tool_exc)[:100]}]")
+                from security import sanitize_tool_error
+                yield to_sse_data(f"[Error: {sanitize_tool_error(tool_exc)}]")
 
             # Emit setting changes as SSE events for the device to apply
             for change in setting_changes:
@@ -2070,6 +2082,14 @@ async def get_device_logs(lines: int = 100, level: str = ""):
 @app.websocket("/ws/device")
 async def ws_device(ws: WebSocket, device_id: str = "default"):
     """Real-time notification push to BITOS hardware devices."""
+    # Check device token for WebSocket connections
+    expected_token = os.environ.get("BITOS_DEVICE_TOKEN", "")
+    if expected_token:
+        # WebSocket clients send token as query param: ?token=xxx
+        provided = ws.query_params.get("token", "")
+        if provided != expected_token:
+            await ws.close(code=1008)  # Policy Violation
+            return
     await ws.accept()
     _device_ws.register(ws, device_id)
     logger.info("[WS] Device %s connected to /ws/device", device_id)
@@ -2206,6 +2226,13 @@ async def get_activity_detail(activity_id: str):
 @app.websocket("/ws/activity")
 async def ws_activity(ws: WebSocket):
     """Live activity feed updates for companion app."""
+    # Check device token for WebSocket connections
+    expected_token = os.environ.get("BITOS_DEVICE_TOKEN", "")
+    if expected_token:
+        provided = ws.query_params.get("token", "")
+        if provided != expected_token:
+            await ws.close(code=1008)  # Policy Violation
+            return
     await ws.accept()
     register_activity_ws(ws)
     logger.info("[WS] Activity feed client connected")
@@ -2226,6 +2253,13 @@ async def ws_activity(ws: WebSocket):
 @app.websocket("/ws/proactive")
 async def ws_proactive(ws: WebSocket):
     """WebSocket endpoint for proactive heartbeat messages to devices."""
+    # Check device token for WebSocket connections
+    expected_token = os.environ.get("BITOS_DEVICE_TOKEN", "")
+    if expected_token:
+        provided = ws.query_params.get("token", "")
+        if provided != expected_token:
+            await ws.close(code=1008)  # Policy Violation
+            return
     await ws.accept()
     register_proactive_ws(ws)
     logger.info("[WS] Proactive client connected")

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 import time
 
@@ -21,6 +22,11 @@ class DeviceWSClient:
     """Persistent WebSocket connection with auto-reconnect and exponential backoff."""
 
     def __init__(self, url: str, device_id: str = "bitos_main"):
+        # Append device token as query param for WebSocket auth
+        token = os.environ.get("BITOS_DEVICE_TOKEN", "")
+        if token:
+            sep = "&" if "?" in url else "?"
+            url = f"{url}{sep}token={token}"
         self._url = url
         self._device_id = device_id
         self._connected = False
