@@ -4,10 +4,15 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import Any
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+# Chat GUID for agent-initiated messages (e.g. proactive heartbeat via iMessage).
+# Set via BLUEBUBBLES_SELF_CHAT_GUID env var, or use the API to look up by address.
+_DEFAULT_SELF_CHAT_GUID = os.environ.get("BLUEBUBBLES_SELF_CHAT_GUID", "")
 
 
 class BlueBubblesAdapter:
@@ -132,6 +137,51 @@ class BlueBubblesAdapter:
         )
         response.raise_for_status()
         return True
+
+    async def send_message_async(self, chat_id: str, text: str) -> bool:
+        """Async version of send_message for use in async contexts."""
+        if self._mock:
+            logger.info("mock_send_async chat=%s", chat_id[:30])
+            return True
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{self._base}/api/v1/message/text",
+                params=self._p(),
+                json={"chatGuid": chat_id, "message": text},
+                timeout=10,
+            )
+            return response.status_code == 200
+
+    @property
+    def self_chat_guid(self) -> str:
+        """The chat GUID to use for agent-initiated messages to the owner.
+
+        Configured via BLUEBUBBLES_SELF_CHAT_GUID env var.
+        """
+        return _DEFAULT_SELF_CHAT_GUID
+
+    def get_chat_guid_for_address(self, address: str) -> str | None:
+        """Look up a chat GUID by phone number or email address.
+
+        Returns the chat GUID string, or None if not found.
+        """
+        if self._mock:
+            # Return a mock GUID matching the address pattern
+            return f"iMessage;+;{address}"
+        try:
+            response = httpx.post(
+                f"{self._base}/api/v1/chat/query",
+                params=self._p(),
+                json={"with": [{"address": address}], "limit": 1},
+                timeout=10,
+            )
+            response.raise_for_status()
+            chats = response.json().get("data", [])
+            if chats:
+                return chats[0].get("guid")
+        except Exception as exc:
+            logger.warning("get_chat_guid_for_address failed: %s", exc)
+        return None
 
     def _normalize_chat(self, chat: dict) -> dict:
         return {
