@@ -888,8 +888,8 @@ end tell
 @app.get("/tasks/today")
 async def get_today_tasks():
     try:
-        adapter = VikunjaAdapter()
-        tasks = adapter.get_today_tasks()
+        import task_store
+        tasks = task_store.get_today_tasks()
         return {"tasks": tasks, "count": len(tasks)}
     except Exception as exc:
         logger.error("tasks_today_failed: %s", exc)
@@ -897,6 +897,186 @@ async def get_today_tasks():
             status_code=502,
             content={"error": "Tasks unavailable", "detail": str(exc)[:100]},
         )
+
+
+@app.get("/tasks/overdue")
+async def get_overdue_tasks_endpoint():
+    try:
+        import task_store
+        tasks = task_store.get_overdue_tasks()
+        return {"tasks": tasks, "count": len(tasks)}
+    except Exception as exc:
+        logger.error("tasks_overdue_failed: %s", exc)
+        return JSONResponse(
+            status_code=502,
+            content={"error": "Tasks unavailable", "detail": str(exc)[:100]},
+        )
+
+
+@app.get("/tasks/{task_id}")
+async def get_task_endpoint(task_id: str):
+    try:
+        import task_store
+        task = task_store.get_task(task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+        return task
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("task_get_failed: %s", exc)
+        return JSONResponse(status_code=500, content={"error": str(exc)[:100]})
+
+
+@app.get("/tasks")
+async def list_tasks_endpoint(
+    request: Request,
+    status: str | None = None,
+    project: str | None = None,
+    due_before: str | None = None,
+    due_after: str | None = None,
+    q: str | None = None,
+    parent_id: str | None = None,
+    limit: int = 50,
+):
+    try:
+        import task_store
+        pid = parent_id if parent_id is not None else "TOP_LEVEL"
+        tasks = task_store.list_tasks(
+            status=status,
+            project=project,
+            due_before=due_before,
+            due_after=due_after,
+            query=q,
+            parent_id=pid,
+            limit=min(limit, 100),
+        )
+        return {"tasks": tasks, "count": len(tasks)}
+    except Exception as exc:
+        logger.error("tasks_list_failed: %s", exc)
+        return JSONResponse(status_code=500, content={"error": str(exc)[:100]})
+
+
+class TaskCreateRequest(BaseModel):
+    title: str
+    notes: str = ""
+    priority: int = 3
+    due_date: str | None = None
+    due_time: str | None = None
+    reminder_at: str | None = None
+    project: str = "INBOX"
+    tags: list[str] = Field(default_factory=list)
+    parent_id: str | None = None
+    source: str = "companion"
+
+
+@app.post("/tasks")
+async def create_task_endpoint(body: TaskCreateRequest):
+    try:
+        import task_store
+        task = task_store.create_task(
+            title=body.title,
+            notes=body.notes,
+            priority=body.priority,
+            due_date=body.due_date,
+            due_time=body.due_time,
+            reminder_at=body.reminder_at,
+            project=body.project,
+            tags=body.tags,
+            parent_id=body.parent_id,
+            source=body.source,
+        )
+        return task
+    except Exception as exc:
+        logger.error("task_create_failed: %s", exc)
+        return JSONResponse(status_code=500, content={"error": str(exc)[:100]})
+
+
+class TaskUpdateRequest(BaseModel):
+    title: str | None = None
+    notes: str | None = None
+    priority: int | None = None
+    status: str | None = None
+    due_date: str | None = None
+    due_time: str | None = None
+    reminder_at: str | None = None
+    project: str | None = None
+    tags: list[str] | None = None
+
+
+@app.put("/tasks/{task_id}")
+async def update_task_endpoint(task_id: str, body: TaskUpdateRequest):
+    try:
+        import task_store
+        fields = {k: v for k, v in body.model_dump().items() if v is not None}
+        task = task_store.update_task(task_id, **fields)
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+        return task
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("task_update_failed: %s", exc)
+        return JSONResponse(status_code=500, content={"error": str(exc)[:100]})
+
+
+@app.delete("/tasks/{task_id}")
+async def delete_task_endpoint(task_id: str):
+    try:
+        import task_store
+        ok = task_store.delete_task(task_id)
+        if not ok:
+            raise HTTPException(status_code=404, detail="Task not found")
+        return {"ok": True, "task_id": task_id}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("task_delete_failed: %s", exc)
+        return JSONResponse(status_code=500, content={"error": str(exc)[:100]})
+
+
+@app.post("/tasks/{task_id}/complete")
+async def complete_task_endpoint(task_id: str):
+    try:
+        import task_store
+        task = task_store.complete_task(task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+        return task
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("task_complete_failed: %s", exc)
+        return JSONResponse(status_code=500, content={"error": str(exc)[:100]})
+
+
+@app.get("/living-doc")
+async def get_living_doc_endpoint():
+    try:
+        import task_store
+        doc = task_store.get_living_doc()
+        if not doc:
+            return {"document": None}
+        return {"document": doc}
+    except Exception as exc:
+        logger.error("living_doc_get_failed: %s", exc)
+        return JSONResponse(status_code=500, content={"error": str(exc)[:100]})
+
+
+class LivingDocRequest(BaseModel):
+    content: str
+    title: str = "Weekly Plan"
+
+
+@app.put("/living-doc")
+async def update_living_doc_endpoint(body: LivingDocRequest):
+    try:
+        import task_store
+        doc = task_store.update_living_doc(content=body.content, title=body.title)
+        return {"document": doc}
+    except Exception as exc:
+        logger.error("living_doc_update_failed: %s", exc)
+        return JSONResponse(status_code=500, content={"error": str(exc)[:100]})
 
 
 @app.get("/messages")
