@@ -20,7 +20,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 
 # ── 1. System packages ──────────────────────────────────────
 echo ""
-echo "[1/9] Installing system packages..."
+echo "[1/10] Installing system packages..."
 sudo apt-get update -qq
 sudo apt-get install -y -qq \
     build-essential python3-dev python3-venv python3-pip \
@@ -35,7 +35,7 @@ echo "  System packages ✓"
 
 # ── 2. Bluetooth audio (PipeWire) ───────────────────────────
 echo ""
-echo "[2/9] Installing Bluetooth audio stack..."
+echo "[2/10] Installing Bluetooth audio stack..."
 if dpkg -l 2>/dev/null | grep -q "libspa-0.2-bluetooth"; then
     echo "  PipeWire Bluetooth already installed ✓"
 else
@@ -57,7 +57,7 @@ fi
 
 # ── 3. Python venv + packages ───────────────────────────────
 echo ""
-echo "[3/9] Setting up Python environment..."
+echo "[3/10] Setting up Python environment..."
 if [ ! -d .venv ]; then
     python3 -m venv .venv --system-site-packages
 fi
@@ -80,12 +80,12 @@ echo "  Python venv ✓"
 
 # ── 4. Whisplay driver + WM8960 audio ──────────────────────
 echo ""
-echo "[4/9] Setting up audio hardware..."
+echo "[4/10] Setting up audio hardware..."
 if [ ! -d /home/pi/Whisplay ]; then
     echo "  Cloning Whisplay driver..."
-    git clone https://github.com/sabi-c/Whisplay.git /home/pi/Whisplay || {
-        echo "  WARNING: Whisplay clone failed — audio may not work"
-    }
+    git clone https://github.com/sabi-c/Whisplay.git /home/pi/Whisplay 2>/dev/null || \
+    git clone https://github.com/PiSugar/Whisplay.git /home/pi/Whisplay 2>/dev/null || \
+    echo "  WARNING: Whisplay clone failed (both sabi-c and PiSugar) — audio HAT may not work"
 fi
 if [ -f /home/pi/Whisplay/install_wm8960_drive.sh ]; then
     bash /home/pi/Whisplay/install_wm8960_drive.sh || true
@@ -95,7 +95,7 @@ echo "  Audio hardware ✓"
 
 # ── 5. Secrets ──────────────────────────────────────────────
 echo ""
-echo "[5/9] Initializing secrets..."
+echo "[5/10] Initializing secrets..."
 sudo mkdir -p /etc/bitos
 sudo chmod 755 /etc/bitos
 bash scripts/setup/02b_secrets.sh
@@ -103,19 +103,66 @@ echo "  Secrets ✓"
 
 # ── 6. Network (NetworkManager) ─────────────────────────────
 echo ""
-echo "[6/9] Configuring network..."
+echo "[6/10] Configuring network..."
 bash scripts/setup/05_network_priority.sh || true
 echo "  Network ✓"
 
+# ── 6b. USB gadget networking (SSH over USB fallback) ─────
+echo ""
+echo "[7/10] Configuring USB gadget networking..."
+BOOT_CONFIG="/boot/firmware/config.txt"
+BOOT_CMDLINE="/boot/firmware/cmdline.txt"
+
+# Add dwc2 overlay (remove any host-mode variant first)
+if [ -f "$BOOT_CONFIG" ]; then
+    sudo sed -i '/^dtoverlay=dwc2,dr_mode=host/d' "$BOOT_CONFIG"
+    if ! grep -q "^dtoverlay=dwc2$" "$BOOT_CONFIG"; then
+        echo "dtoverlay=dwc2" | sudo tee -a "$BOOT_CONFIG" > /dev/null
+        echo "  Added dtoverlay=dwc2 to config.txt"
+    fi
+fi
+
+# Add modules-load to kernel command line
+if [ -f "$BOOT_CMDLINE" ]; then
+    if ! grep -q "modules-load=dwc2,g_ether" "$BOOT_CMDLINE"; then
+        sudo sed -i 's/$/ modules-load=dwc2,g_ether/' "$BOOT_CMDLINE"
+        echo "  Added modules-load=dwc2,g_ether to cmdline.txt"
+    fi
+fi
+
+# Create NetworkManager connection for usb0 with link-local IP
+USB_NM_FILE="/etc/NetworkManager/system-connections/usb0-gadget.nmconnection"
+if [ ! -f "$USB_NM_FILE" ]; then
+    sudo tee "$USB_NM_FILE" > /dev/null <<'USBEOF'
+[connection]
+id=usb0-gadget
+type=ethernet
+interface-name=usb0
+autoconnect=true
+autoconnect-priority=10
+
+[ipv4]
+method=manual
+addresses=169.254.6.1/16
+
+[ipv6]
+method=disabled
+USBEOF
+    sudo chmod 600 "$USB_NM_FILE"
+    echo "  Created usb0 gadget connection (169.254.6.1)"
+fi
+
+echo "  USB gadget networking ✓ (ssh pi@169.254.6.1 after reboot)"
+
 # ── 7. Resilience (watchdog, log2ram, tmpfs) ────────────────
 echo ""
-echo "[7/9] Configuring resilience..."
+echo "[8/10] Configuring resilience..."
 bash scripts/setup/03_resilience.sh
 echo "  Resilience ✓"
 
 # ── 8. Systemd services ────────────────────────────────────
 echo ""
-echo "[8/9] Installing systemd services..."
+echo "[9/10] Installing systemd services..."
 sudo cp docs/pi_config/bitos-server.service /etc/systemd/system/bitos-server.service
 sudo cp docs/pi_config/bitos-device.service /etc/systemd/system/bitos-device.service
 sudo systemctl daemon-reload
@@ -124,7 +171,7 @@ echo "  Services ✓"
 
 # ── 9. Cleanup + validation ─────────────────────────────────
 echo ""
-echo "[9/9] Validating installation..."
+echo "[10/10] Validating installation..."
 
 # Remove any one-shot boot fix scripts
 sudo rm -f /boot/firmware/fix_bt.sh /boot/fix_bt.sh 2>/dev/null || true
