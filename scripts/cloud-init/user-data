@@ -10,13 +10,44 @@ users:
     ssh_authorized_keys:
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOoNVUv0P0BGNuh4sL1zmHtK2bv/b4COlW2IzRHeG4XW seb@bitos
 
+# WiFi config — flash_sd.sh writes the real NM connection file to rootfs,
+# but if that didn't happen, this placeholder reminds you to configure WiFi
+# via Pi Imager's gear icon or by writing the NM file manually.
+# To add WiFi here, uncomment and fill in:
+# write_files:
+#   - path: /etc/NetworkManager/system-connections/wifi-bitos.nmconnection
+#     permissions: '0600'
+#     content: |
+#       [connection]
+#       id=wifi-bitos
+#       type=wifi
+#       autoconnect=true
+#       [wifi]
+#       ssid=YOUR_SSID
+#       mode=infrastructure
+#       [wifi-security]
+#       key-mgmt=wpa-psk
+#       psk=YOUR_PASSWORD
+#       [ipv4]
+#       method=auto
+#       [ipv6]
+#       method=disabled
+
 runcmd:
-  # Wait for network (up to 60s) before cloning
+  # Ensure NetworkManager is managing WiFi (Bookworm sometimes uses dhcpcd)
+  - systemctl enable NetworkManager 2>/dev/null || true
+  - systemctl start NetworkManager 2>/dev/null || true
+  # Restart NM to pick up any connection files written to rootfs during flash
+  - nmcli general reload 2>/dev/null || true
+  # Wait for network (up to 90s) before cloning
   - |
-    for i in $(seq 1 60); do
+    for i in $(seq 1 90); do
       if ping -c1 -W1 github.com >/dev/null 2>&1; then
         echo "Network ready after ${i}s"
         break
+      fi
+      if [ "$i" -eq 90 ]; then
+        echo "WARNING: Network not available after 90s — clone will likely fail"
       fi
       sleep 1
     done
