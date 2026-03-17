@@ -36,3 +36,27 @@ from .auth import AuthError, AuthManager
 from .server import BitosGATTServer, MockGATTServer, get_gatt_server
 
 __all__ += ["AuthError", "AuthManager", "BitosGATTServer", "MockGATTServer", "get_gatt_server"]
+
+# Optional BT connection manager + AAP client — requires dbus-next / bluetooth sockets
+from .bt_service import _DBUS_AVAILABLE as _HAS_DBUS  # noqa: F401
+from .aap_client import _BT_AVAILABLE as _HAS_BLUETOOTH  # noqa: F401
+
+try:
+    from .bt_service import BTService, BTState, BTDeviceInfo, get_bt_service
+    __all__ += ["BTService", "BTState", "BTDeviceInfo", "get_bt_service"]
+except Exception:
+    pass
+
+try:
+    from .aap_client import (
+        AAPClient, AAPPressType, AAPBatteryStatus, AAPEarDetection,
+        EarState, NoiseControlMode, press_type_name,
+    )
+    __all__ += [
+        "AAPClient", "AAPPressType", "AAPBatteryStatus", "AAPEarDetection",
+        "EarState", "NoiseControlMode", "press_type_name",
+    ]
+except Exception:
+    pass
+
+__all__ += ["_HAS_DBUS", "_HAS_BLUETOOTH"]

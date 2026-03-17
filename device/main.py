@@ -1308,6 +1308,74 @@ def main():
         daemon=True,
     ).start()
 
+    # AVRCP media key listener — captures AirPods tap gestures as device actions
+    # Falls back to AVRCP when AAP is not connected (see AAP setup below).
+    from input.media_keys import MediaKeyListener
+    media_key_listener = MediaKeyListener(
+        on_play_pause=lambda: _on_button(ButtonEvent.DOUBLE_PRESS),
+        on_next=lambda: _on_button(ButtonEvent.SHORT_PRESS),
+        on_prev=lambda: _on_button(ButtonEvent.LONG_PRESS),
+    )
+    try:
+        media_key_listener.start()
+    except Exception as exc:
+        logger.error("[BITOS] Media key listener failed to start: %s", exc)
+
+    # --- AAP gesture detection (AirPods stem press via L2CAP) ---
+    # When AAP is connected, stem presses are detected with full fidelity
+    # (single/double/triple/long) and routed as button events.
+    # AVRCP media keys remain as fallback for non-AirPods BT audio.
+    from bluetooth.bt_service import get_bt_service
+    from bluetooth.aap_client import AAPClient
+    from bluetooth.aap_gesture_mapper import AAPGestureMapper
+
+    _aap_client = AAPClient()
+    _aap_mapper = AAPGestureMapper(on_button=_on_button)
+
+    async def _aap_on_device_connect(address: str, device_info: dict):
+        """When a BT audio device connects, start AAP if it's AirPods."""
+        name = device_info.get("name", "")
+        if "airpods" in name.lower():
+            logger.info("[BITOS] AirPods detected (%s), starting AAP client...", name)
+            success = await _aap_client.connect(address)
+            if success:
+                _aap_client.on_stem_press = _aap_mapper.on_stem_press
+                _aap_mapper.active = True
+                logger.info("[BITOS] AAP connected — stem gestures active")
+            else:
+                logger.warning("[BITOS] AAP connection failed — using AVRCP fallback")
+
+    async def _aap_on_device_disconnect(address: str):
+        """When BT audio device disconnects, stop AAP client."""
+        if _aap_client.connected_mac == address:
+            _aap_client.disconnect()
+            _aap_mapper.active = False
+            logger.info("[BITOS] AAP disconnected — reverting to AVRCP")
+
+    try:
+        _bt_conn_service = get_bt_service()
+        _bt_conn_service.on_connect = _aap_on_device_connect
+        _bt_conn_service.on_disconnect = _aap_on_device_disconnect
+
+        async def _start_bt_conn_service():
+            started = await _bt_conn_service.start()
+            if started:
+                logger.info("[BITOS] BT connection manager started")
+            else:
+                logger.info("[BITOS] BT connection manager unavailable (no dbus-next)")
+
+        import asyncio as _aio
+        try:
+            loop = _aio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(_start_bt_conn_service())
+            else:
+                loop.run_until_complete(_start_bt_conn_service())
+        except RuntimeError:
+            _aio.run(_start_bt_conn_service())
+    except Exception as exc:
+        logger.error("[BITOS] BT connection manager failed to initialize: %s", exc)
+
     try:
         provision_server.start()
     except Exception as exc:
