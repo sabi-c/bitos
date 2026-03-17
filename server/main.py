@@ -56,6 +56,7 @@ from integrations.vikunja_adapter import VikunjaAdapter
 from integrations.gmail_adapter import GmailAdapter
 
 from notifications.dispatcher import NotificationDispatcher
+from notifications.integration_bridge import IntegrationBridge
 from notifications.queue_store import QueueStore
 from notifications.ws_handler import DeviceWSHandler
 
@@ -388,6 +389,27 @@ _notif_store = QueueStore(_notif_db_path)
 _notif_dispatcher = NotificationDispatcher(_notif_store)
 _device_ws = DeviceWSHandler(_notif_dispatcher)
 
+# ── Integration bridge (polls adapters → dispatcher) ──
+_integration_bridge = IntegrationBridge(
+    _notif_dispatcher,
+    adapters={
+        "bluebubbles": BlueBubblesAdapter(),
+        "gmail": GmailAdapter(),
+        "vikunja": VikunjaAdapter(),
+    },
+)
+
+
+async def _integration_poll_loop():
+    """Background loop: poll integrations every 30s."""
+    while True:
+        try:
+            await _integration_bridge.poll_once()
+        except Exception:
+            logging.getLogger(__name__).exception("integration poll error")
+        await asyncio.sleep(30)
+
+
 # ── Agent subtask database ──
 _SUBTASK_DB_PATH = os.environ.get("DATABASE_PATH", str(SERVER_DIR / "data" / "subtasks.db"))
 
@@ -465,6 +487,16 @@ async def require_device_token(request: Request, call_next):
         return JSONResponse(status_code=401, content={"detail": "Unauthorized device"})
 
     return await call_next(request)
+
+
+_integration_poll_task = None
+
+
+@app.on_event("startup")
+async def _start_integration_poll():
+    global _integration_poll_task
+    _integration_poll_task = asyncio.create_task(_integration_poll_loop())
+    logger.info("integration_bridge: background poll started (30s interval)")
 
 
 @app.get("/health")
