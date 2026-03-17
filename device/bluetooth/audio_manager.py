@@ -108,8 +108,8 @@ class BluetoothAudioManager:
             # Power on adapter (agent is registered by GATT server — don't duplicate)
             self._run_bluetoothctl(["power", "on"])
 
-            # Start scanning
-            self._run_bluetoothctl(["scan", "on"], timeout=2, ignore_errors=True)
+            # Start scanning — use longer timeout for slow adapters/AirPods
+            self._run_bluetoothctl(["scan", "on"], timeout=5, ignore_errors=True)
 
             # Poll for devices over the scan window
             deadline = time.monotonic() + timeout

@@ -26,7 +26,11 @@ if [ $secrets_status -ne 0 ]; then
 fi
 
 echo ""
-echo "Step 3: Start services..."
+echo "Step 3: Fix Bluetooth for AirPods..."
+bash ~/bitos/scripts/setup/fix_bt_airpods.sh
+
+echo ""
+echo "Step 4: Start services..."
 sudo systemctl enable bitos-server bitos-device
 sudo systemctl start bitos-server
 echo "Waiting for server..."
@@ -38,7 +42,7 @@ echo " OK"
 sudo systemctl start bitos-device
 
 echo ""
-echo "Step 4: Run smoke test..."
+echo "Step 5: Run smoke test..."
 bash ~/bitos/scripts/smoke_test.sh
 
 echo ""
