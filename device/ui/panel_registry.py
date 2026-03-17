@@ -33,7 +33,8 @@ _GENERIC_CONFIGS = {
 
 def create_right_panels(panel_openers: dict | None = None, repository=None,
                         status_state=None, audio_pipeline=None,
-                        stt_callable=None, led=None) -> dict:
+                        stt_callable=None, led=None,
+                        on_volume_change=None) -> dict:
     """Create preview panels keyed by sidebar label.
 
     Args:
@@ -180,6 +181,7 @@ def create_right_panels(panel_openers: dict | None = None, repository=None,
         on_action=settings_action,
         status_state=status_state,
         repository=repository,
+        on_volume_change=on_volume_change,
     )
 
     # ── Record: field recording panel ──

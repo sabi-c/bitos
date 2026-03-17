@@ -334,6 +334,13 @@ def main():
 
     client.on_test_typewriter = _show_test_typewriter
 
+    # Wire volume HUD overlay
+    def _show_volume_hud(vol_pct: int):
+        from overlays.volume import show_volume_overlay
+        show_volume_overlay(vol_pct, screen_mgr)
+
+    client.on_volume_change = _show_volume_hud
+
     def _active_screen_name() -> str:
         current = screen_mgr.current
         if current is None:
@@ -700,6 +707,7 @@ def main():
             audio_pipeline=recording_adapter,
             stt_callable=_stt_callable,
             led=led,
+            on_volume_change=_show_volume_hud,
         )
 
         # Fetch greeting for chat preview

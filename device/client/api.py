@@ -30,6 +30,7 @@ class BackendClient:
         self.device_token = os.environ.get("BITOS_DEVICE_TOKEN", "")
         self.on_approval_request = None  # Callable[[str, str, list[str]], None] or None
         self.on_test_typewriter: callable | None = None
+        self.on_volume_change: callable | None = None  # Callable[[int], None] or None
         self._conversation_id: str | None = None  # Multi-turn conversation tracking
         if not self.device_token:
             logging.warning("[BITOS] BITOS_DEVICE_TOKEN is not set; running in dev mode without device token auth")
@@ -306,11 +307,14 @@ class BackendClient:
             repo.set_setting(key, value)
             logging.info("agent_setting_applied: %s=%s", key, value)
 
-            # For volume changes, also update ALSA immediately
+            # For volume changes, also update ALSA immediately + show HUD
             if key == "volume":
                 from audio.player import AudioPlayer
                 player = AudioPlayer()
-                player.set_volume(max(0, min(100, int(value))) / 100.0)
+                vol_int = max(0, min(100, int(value)))
+                player.set_volume(vol_int / 100.0)
+                if self.on_volume_change:
+                    self.on_volume_change(vol_int)
 
             # Re-init TTS when voice settings change
             if key in ("tts_engine", "voice_id", "voice_params"):

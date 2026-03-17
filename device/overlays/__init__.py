@@ -6,5 +6,6 @@ from .notification import NotificationQueue, NotificationRecord, NotificationSha
 from .passkey import PasskeyOverlay
 from .qr_code import QROverlay
 from .quick_capture import QuickCaptureOverlay
+from .volume import VolumeOverlay, show_volume_overlay
 
-__all__ = ["AgentOverlay", "ApprovalOverlay", "NotificationToast", "NotificationQueue", "NotificationRecord", "NotificationShade", "PasskeyOverlay", "QROverlay", "QuickCaptureOverlay"]
+__all__ = ["AgentOverlay", "ApprovalOverlay", "NotificationToast", "NotificationQueue", "NotificationRecord", "NotificationShade", "PasskeyOverlay", "QROverlay", "QuickCaptureOverlay", "VolumeOverlay", "show_volume_overlay"]

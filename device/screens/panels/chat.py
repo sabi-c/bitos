@@ -1369,6 +1369,8 @@ class ChatPanel(BaseScreen):
                     level = max(0, min(100, int(val)))
                     if self._repository:
                         self._repository.set_setting("volume", level)
+                    if self._client and self._client.on_volume_change:
+                        self._client.on_volume_change(level)
                     logger.info("volume_set=%d via agent command", level)
                 except (ValueError, TypeError):
                     pass

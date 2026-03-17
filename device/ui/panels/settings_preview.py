@@ -40,10 +40,11 @@ _TOGGLE_ACTIONS = {"toggle_voice", "toggle_mode", "toggle_volume"}
 class SettingsPreviewPanel(PreviewPanel):
     """Preview panel for SETTINGS sidebar item."""
 
-    def __init__(self, on_action: callable, status_state=None, repository=None):
+    def __init__(self, on_action: callable, status_state=None, repository=None, on_volume_change=None):
         super().__init__(items=SETTINGS_ITEMS, on_action=on_action)
         self._status_state = status_state
         self._repository = repository
+        self.on_volume_change: callable | None = on_volume_change
         self._refresh_labels()
 
     def on_enter(self) -> None:
@@ -98,6 +99,8 @@ class SettingsPreviewPanel(PreviewPanel):
             idx = VOLUME_OPTIONS.index(cur) if cur in VOLUME_OPTIONS else 0
             nxt = VOLUME_OPTIONS[(idx + 1) % len(VOLUME_OPTIONS)]
             self._repository.set_setting("volume", nxt)
+            if self.on_volume_change:
+                self.on_volume_change(nxt)
         except (ValueError, TypeError, Exception):
             pass
         self._refresh_labels()
