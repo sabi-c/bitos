@@ -325,6 +325,14 @@ def main():
     from bluetooth.audio_manager import BluetoothAudioManager
     bt_audio_manager = BluetoothAudioManager(repository=repository)
 
+    # Audio router — manages input/output routing + music ducking
+    from bluetooth.audio_router import AudioRouter
+    audio_router = AudioRouter(bt_audio_manager, repository=repository)
+
+    # Wire audio router into TTS pipeline for automatic music ducking
+    if hasattr(audio_pipeline, '_audio_router'):
+        audio_pipeline._audio_router = audio_router
+
     # NOTE: BT audio auto-reconnect moved to after GATT server start (see below)
     # to avoid D-Bus contention with bluezero's GLib main loop.
 
@@ -1404,6 +1412,8 @@ def main():
     async def _aap_on_device_connect(address: str, device_info: dict):
         """When a BT audio device connects, start AAP if it's AirPods."""
         name = device_info.get("name", "")
+        # Update audio router with device connection
+        audio_router.on_bt_connect(address, device_info)
         if "airpods" in name.lower():
             logger.info("[BITOS] AirPods detected (%s), starting AAP client...", name)
             success = await _aap_client.connect(address)
@@ -1416,6 +1426,7 @@ def main():
 
     async def _aap_on_device_disconnect(address: str):
         """When BT audio device disconnects, stop AAP client."""
+        audio_router.on_bt_disconnect(address)
         if _aap_client.connected_mac == address:
             _aap_client.disconnect()
             _aap_mapper.active = False

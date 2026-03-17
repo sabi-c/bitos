@@ -105,12 +105,13 @@ class WM8960Pipeline(AudioPipeline):
     PLAYBACK_CHANNELS = 2
     FORMAT = "S16_LE"
 
-    def __init__(self):
+    def __init__(self, audio_router=None):
         self._rec_proc: subprocess.Popen | None = None
         self._speak_proc: subprocess.Popen | None = None
         self._rec_path: str | None = None
         self._player: "AudioPlayer | None" = None
         self._speaking_flag = False
+        self._audio_router = audio_router
 
     def record(self, max_seconds: int = 60) -> str | None:
         """Record until button released or max_seconds.
@@ -219,6 +220,16 @@ class WM8960Pipeline(AudioPipeline):
         player = AudioPlayer()
         self._player = player  # keep reference so stop_speaking() can reach it
         self._speaking_flag = True
+
+        # Duck music if audio router is available and music is playing
+        ducked = False
+        if self._audio_router and self._audio_router.airpod_mode:
+            try:
+                self._audio_router.duck_audio()
+                ducked = True
+            except Exception as exc:
+                logger.warning("wm8960_speak: duck_audio failed: %s", exc)
+
         try:
             tts = TextToSpeech(player)
             logger.info("wm8960_speak: engine=%s volume=%.0f%%", tts.engine, tts.player._volume * 100)
@@ -227,6 +238,12 @@ class WM8960Pipeline(AudioPipeline):
         finally:
             self._speaking_flag = False
             self._player = None
+            # Restore music volume after speaking
+            if ducked:
+                try:
+                    self._audio_router.restore_audio()
+                except Exception as exc:
+                    logger.warning("wm8960_speak: restore_audio failed: %s", exc)
 
     def _play_audio(self, path: str, timeout: int) -> None:
         self._speak_proc = subprocess.Popen(
@@ -276,9 +293,9 @@ class WM8960Pipeline(AudioPipeline):
         return True
 
 
-def get_audio_pipeline() -> AudioPipeline:
+def get_audio_pipeline(audio_router=None) -> AudioPipeline:
     mode = os.environ.get("BITOS_AUDIO", "mock").strip().lower()
     if not mode or mode == "mock":
         return MockAudioPipeline()
     # Any hw: or "default" device → real pipeline
-    return WM8960Pipeline()
+    return WM8960Pipeline(audio_router=audio_router)
