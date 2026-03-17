@@ -378,6 +378,11 @@ def _run_ota_update(target: str) -> dict:
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="BITOS Server", version=__version__)
+
+# ── 01-compatible WebSocket endpoint ──
+from endpoints.ws_01_compat import router as ws_01_router
+app.include_router(ws_01_router)
+
 settings_store = UISettingsStore(UI_SETTINGS_FILE)
 llm_bridge = create_llm_bridge()
 _token_warning_logged = False
