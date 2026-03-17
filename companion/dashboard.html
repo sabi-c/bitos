@@ -80,6 +80,22 @@
     </div>
   </div>
 
+  <!-- Quick connect (shown when offline) -->
+  <div class="card subtle" id="connect-card" style="display:none">
+    <h2>CONNECT TO DEVICE</h2>
+    <div style="font-size:11px;color:#888;margin-bottom:8px;line-height:1.5">
+      Could not reach device automatically. Enter the device IP address:
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <input type="text" id="dash-device-ip" placeholder="e.g. 192.168.1.42"
+             style="flex:1;background:#111;border:1px solid #444;color:#fff;font-family:monospace;font-size:13px;padding:8px;outline:none">
+      <button class="secondary" onclick="dashManualConnect()" style="width:auto;padding:8px 14px;margin:0;font-size:11px;white-space:nowrap">
+        CONNECT
+      </button>
+    </div>
+    <div class="status" id="dash-connect-status" style="min-height:0;padding:2px 0"></div>
+  </div>
+
   <!-- Activity feed -->
   <div class="card subtle" id="feed-card">
     <h2>RECENT ACTIVITY</h2>
@@ -257,6 +273,7 @@
       }
 
       updateConnectionBadge(serverOk, deviceOk);
+      updateConnectCard(serverOk, deviceOk);
     }
 
     // ── Fetch context (weather + events) ──
@@ -385,6 +402,56 @@
       const d = document.createElement('div');
       d.textContent = s;
       return d.innerHTML;
+    }
+
+    // ── Manual connect from dashboard ──
+    async function dashManualConnect() {
+      const ip = document.getElementById('dash-device-ip').value.trim();
+      const statusEl = document.getElementById('dash-connect-status');
+      if (!ip) {
+        statusEl.textContent = 'Enter an IP address';
+        statusEl.className = 'status error';
+        return;
+      }
+      statusEl.textContent = 'Connecting...';
+      statusEl.className = 'status';
+      try {
+        const r = await fetch(`http://${ip}:8080/api/health`, { signal: AbortSignal.timeout(5000) });
+        if (r.ok) {
+          statusEl.textContent = 'Connected!';
+          statusEl.className = 'status ok';
+          // Save to connMgr
+          connMgr.updateSettings({ deviceIp: ip, port: 8080 });
+          sessionStorage.setItem('bitos_provision_url', `http://${ip}:8080`);
+          document.getElementById('connect-card').style.display = 'none';
+          // Re-fetch everything
+          fetchStatus();
+          fetchContext();
+          fetchActivity();
+        } else {
+          statusEl.textContent = 'Device responded with error (HTTP ' + r.status + ')';
+          statusEl.className = 'status error';
+        }
+      } catch (e) {
+        statusEl.textContent = 'Cannot reach ' + ip + ':8080 -- check IP and ensure device is on';
+        statusEl.className = 'status error';
+      }
+    }
+
+    // ── Show/hide connect card based on connectivity ──
+    function updateConnectCard(serverOk, deviceOk) {
+      const card = document.getElementById('connect-card');
+      if (!serverOk && !deviceOk) {
+        card.style.display = 'block';
+        // Pre-fill saved IP if available
+        const s = connMgr.settings;
+        const ipInput = document.getElementById('dash-device-ip');
+        if (ipInput && !ipInput.value && s.deviceIp && s.deviceIp !== 'bitos.local') {
+          ipInput.value = s.deviceIp;
+        }
+      } else {
+        card.style.display = 'none';
+      }
     }
 
     // ── Init ──

@@ -156,6 +156,22 @@ class ProvisioningHandler(BaseHTTPRequestHandler):
             else:
                 self._json_response(200, {"networks": []})
 
+        elif path == "/api/settings/schema":
+            # Return setting definitions with types/defaults for UI generation
+            schema = []
+            for key, default in _KNOWN_SETTINGS:
+                entry = {"key": key, "default": default}
+                if isinstance(default, bool):
+                    entry["type"] = "bool"
+                elif isinstance(default, int):
+                    entry["type"] = "int"
+                elif isinstance(default, float):
+                    entry["type"] = "float"
+                else:
+                    entry["type"] = "str"
+                schema.append(entry)
+            self._json_response(200, {"settings": schema})
+
         else:
             self._json_response(404, {"error": "not found"})
 
@@ -272,6 +288,24 @@ class ProvisioningHandler(BaseHTTPRequestHandler):
                 self._json_response(200, {"ok": ok, "ssid": ssid})
             except Exception as exc:
                 self._json_response(500, {"error": str(exc)})
+
+        elif path == "/api/wifi/test":
+            # Test internet connectivity from the device
+            try:
+                import urllib.request
+                start = __import__("time").monotonic()
+                req = urllib.request.Request(
+                    "http://connectivitycheck.gstatic.com/generate_204",
+                    method="GET",
+                )
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    latency = round((__import__("time").monotonic() - start) * 1000)
+                    self._json_response(200, {
+                        "ok": resp.status == 204 or resp.status == 200,
+                        "latency_ms": latency,
+                    })
+            except Exception as exc:
+                self._json_response(200, {"ok": False, "error": str(exc)})
 
         elif path == "/api/keyboard/input":
             try:

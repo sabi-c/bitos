@@ -295,4 +295,41 @@ class BitosHttpCompanion {
     }
     throw new Error('Timeout \u2014 device did not confirm WiFi');
   }
+
+  async readWifiNetworks() {
+    const resp = await this._fetch('/api/wifi/networks');
+    if (!resp.ok) throw new Error('Failed to read WiFi networks');
+    const data = await resp.json();
+    return data.networks || [];
+  }
+
+  async removeWifiNetwork(ssid) {
+    const resp = await this._fetch('/api/wifi/remove', {
+      method: 'POST',
+      body: JSON.stringify({ ssid }),
+    });
+    if (!resp.ok) throw new Error('Failed to remove network');
+    return resp.json();
+  }
+
+  async readWifiStatus() {
+    const resp = await this._fetch('/api/wifi/status');
+    if (!resp.ok) throw new Error('Failed to read WiFi status');
+    return resp.json();
+  }
+
+  async readSettings() {
+    const resp = await this._fetch('/api/settings');
+    if (!resp.ok) throw new Error('Failed to read settings');
+    return resp.json();
+  }
+
+  async writeSetting(key, value) {
+    const resp = await this._fetch('/api/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ key, value }),
+    });
+    if (!resp.ok) throw new Error('Failed to write setting');
+    return resp.json();
+  }
 }

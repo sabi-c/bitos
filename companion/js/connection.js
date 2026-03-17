@@ -163,7 +163,15 @@ class ConnectionManager {
       this._emit();
       return true;
     } catch (e) {
-      this._log('WARN', `HTTP failed: ${e.message}`);
+      const ip = this._settings.deviceIp || 'bitos.local';
+      const port = this._settings.port || 8080;
+      if (e.name === 'AbortError' || e.name === 'TimeoutError') {
+        this._log('WARN', `HTTP timeout at ${baseUrl} -- device may be off or on a different network`);
+      } else if (e.message && e.message.includes('Failed to fetch')) {
+        this._log('WARN', `Cannot reach ${ip}:${port} -- check that your phone is on the same WiFi as the device`);
+      } else {
+        this._log('WARN', `HTTP failed: ${e.message}`);
+      }
       return false;
     }
   }
@@ -303,6 +311,45 @@ class ConnectionManager {
     const c = this.companion;
     if (!c) throw new Error('Not connected');
     await c.sendKeyboardInput(text);
+  }
+
+  // ── WiFi network management ──
+
+  async readWifiNetworks() {
+    if (this._http && this._http.connected && this._http.readWifiNetworks) {
+      return this._http.readWifiNetworks();
+    }
+    throw new Error('Not connected via HTTP');
+  }
+
+  async removeWifiNetwork(ssid) {
+    if (this._http && this._http.connected && this._http.removeWifiNetwork) {
+      return this._http.removeWifiNetwork(ssid);
+    }
+    throw new Error('Not connected via HTTP');
+  }
+
+  async readWifiStatus() {
+    if (this._http && this._http.connected && this._http.readWifiStatus) {
+      return this._http.readWifiStatus();
+    }
+    throw new Error('Not connected via HTTP');
+  }
+
+  // ── Settings via device provisioning ──
+
+  async readDeviceSettings() {
+    if (this._http && this._http.connected && this._http.readSettings) {
+      return this._http.readSettings();
+    }
+    throw new Error('Not connected via HTTP');
+  }
+
+  async writeDeviceSetting(key, value) {
+    if (this._http && this._http.connected && this._http.writeSetting) {
+      return this._http.writeSetting(key, value);
+    }
+    throw new Error('Not connected via HTTP');
   }
 
   // ── Disconnect ──

@@ -470,6 +470,16 @@
           <span class="info-key">Current network</span>
           <span class="info-val" id="wifi-current-ssid">--</span>
         </div>
+        <div class="info-row">
+          <span class="info-key">Signal</span>
+          <span class="info-val" id="wifi-signal">--</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">IP address</span>
+          <span class="info-val" id="wifi-ip">--</span>
+        </div>
+        <div class="status" id="wifi-test-status" style="min-height:0;padding:4px 0"></div>
+        <button class="secondary" onclick="testWifiNetworkConnection()" style="margin-top:4px;font-size:11px">TEST INTERNET CONNECTION</button>
         <div id="wifi-saved-list" style="margin:10px 0"></div>
         <div style="margin-top:12px;border-top:1px solid #222;padding-top:12px">
           <div style="font-size:11px;color:#888;margin-bottom:8px;letter-spacing:.04em">ADD NETWORK</div>
@@ -771,9 +781,27 @@
       </div>
     </div>
 
+    <div class="card" id="card-meta-prompt">
+      <div class="card-header" onclick="toggleCard('card-meta-prompt')">
+        <h2>META PROMPT</h2>
+        <span class="card-chevron">&#9660;</span>
+      </div>
+      <div class="card-body">
+        <div style="font-size:10px;color:#666;margin-bottom:8px;line-height:1.5">
+          Custom instruction prepended to every conversation. Leave as "default assistant" for standard behavior.
+        </div>
+        <textarea id="meta-prompt-input"
+          style="width:100%;min-height:80px;background:#111;border:1px solid #444;color:#fff;
+                 font-family:monospace;font-size:12px;padding:10px;outline:none;resize:vertical"
+          placeholder="default assistant"></textarea>
+        <button class="secondary" onclick="saveMetaPrompt()" style="margin-top:4px">SAVE META PROMPT</button>
+        <div class="status" id="meta-prompt-status" style="min-height:0;padding:4px 0"></div>
+      </div>
+    </div>
+
     <div class="card" id="card-prompt">
       <div class="card-header" onclick="toggleCard('card-prompt')">
-        <h2>SYSTEM PROMPT</h2>
+        <h2>SYSTEM PROMPT PREVIEW</h2>
         <span class="card-chevron">&#9660;</span>
       </div>
       <div class="card-body">
@@ -1603,6 +1631,12 @@
         const wifiEl = document.getElementById('wifi-current-ssid');
         if (wifiEl) wifiEl.textContent = status.wifi_connected ? status.wifi_ssid : '--';
       }
+
+      // Meta prompt
+      const metaInput = document.getElementById('meta-prompt-input');
+      if (metaInput && settings.meta_prompt && metaInput !== document.activeElement) {
+        metaInput.value = settings.meta_prompt === 'default assistant' ? '' : settings.meta_prompt;
+      }
     }
 
     function syncToggle(id, value) {
@@ -1626,6 +1660,7 @@
       }
       // Defaults for new settings
       const defaults = {
+        voice_enabled: false,
         heartbeat_enabled: true,
         heartbeat_interval: 60,
         morning_greeting_time: '08:00',
@@ -1648,6 +1683,7 @@
         wake_word_sensitivity: 0.5,
         sleep_timeout_seconds: 60,
         safe_shutdown_pct: 5,
+        meta_prompt: 'default assistant',
       };
       for (const agent of SUB_AGENTS) {
         defaults['agent_' + agent.key] = true;
@@ -2433,6 +2469,28 @@
 
     async function refreshWifiNetworks() {
       const list = document.getElementById('wifi-saved-list');
+
+      // Fetch WiFi status for current connection info
+      try {
+        const sr = await fetch(`${getDeviceUrl()}/api/wifi/status`, { signal: AbortSignal.timeout(3000) });
+        if (sr.ok) {
+          const ws = await sr.json();
+          const ssidEl = document.getElementById('wifi-current-ssid');
+          const sigEl = document.getElementById('wifi-signal');
+          const ipEl = document.getElementById('wifi-ip');
+          if (ws.connected && ws.ssid) {
+            ssidEl.textContent = ws.ssid;
+            ssidEl.style.color = '#4f4';
+          } else {
+            ssidEl.textContent = ws.last_error || 'Not connected';
+            ssidEl.style.color = ws.last_error ? '#f44' : '';
+          }
+          sigEl.textContent = ws.signal || '--';
+          ipEl.textContent = ws.ip || '--';
+        }
+      } catch (_) {}
+
+      // Fetch saved networks list
       try {
         const r = await fetch(`${getDeviceUrl()}/api/wifi/networks`, { signal: AbortSignal.timeout(3000) });
         if (r.ok) {
@@ -2462,6 +2520,37 @@
       }
     }
 
+    async function testWifiNetworkConnection() {
+      const statusEl = document.getElementById('wifi-test-status');
+      statusEl.textContent = 'Testing internet connectivity...';
+      statusEl.className = 'status';
+      try {
+        // Ask device to test its own internet connection via the provisioning server
+        const r = await fetch(`${getDeviceUrl()}/api/wifi/test`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(10000),
+        });
+        if (r.ok) {
+          const d = await r.json();
+          if (d.ok) {
+            statusEl.textContent = 'Internet connection OK' + (d.latency_ms ? ' (' + d.latency_ms + 'ms)' : '');
+            statusEl.className = 'status ok';
+          } else {
+            statusEl.textContent = 'No internet: ' + (d.error || 'check WiFi settings');
+            statusEl.className = 'status error';
+          }
+        } else {
+          // Fallback: if endpoint doesn't exist, just check if device is reachable
+          statusEl.textContent = 'Device reachable (test endpoint not available)';
+          statusEl.className = 'status ok';
+        }
+      } catch (e) {
+        statusEl.textContent = 'Cannot reach device: ' + (e.message || 'offline');
+        statusEl.className = 'status error';
+      }
+    }
+
     function getDeviceUrl() {
       // Use connMgr settings (saved via saveDeviceIp/saveDevicePort)
       // rather than separate localStorage keys that are never written.
@@ -2469,6 +2558,17 @@
       const ip = s.deviceIp || 'bitos.local';
       const port = s.port || 8080;
       return 'http://' + ip + ':' + port;
+    }
+
+    // ── Meta prompt save ───────────────────────────────────
+
+    async function saveMetaPrompt() {
+      const val = document.getElementById('meta-prompt-input').value.trim() || 'default assistant';
+      const statusEl = document.getElementById('meta-prompt-status');
+      mgr.setSetting('meta_prompt', val);
+      statusEl.textContent = 'Saved';
+      statusEl.className = 'status ok';
+      setTimeout(() => { statusEl.textContent = ''; }, 2000);
     }
 
     // ── Location management ─────────────────────────────────
@@ -2604,6 +2704,7 @@
     checkVersion();
     refreshIntegrations();
     fetchDebugInfo();
+    refreshWifiNetworks();
 
     // Pause polling when hidden
     document.addEventListener('visibilitychange', () => {

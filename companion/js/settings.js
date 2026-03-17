@@ -112,6 +112,36 @@ class BitosSettings {
         deviceOk = deviceCheck.online;
         if (deviceOk) {
           this.deviceStatus.device_online = true;
+
+          // Try to read settings from device provisioning server
+          const deviceUrl = typeof getDeviceUrl === 'function' ? getDeviceUrl() : null;
+          if (deviceUrl) {
+            try {
+              const devSettingsResp = await fetch(`${deviceUrl}/api/settings`, { signal: AbortSignal.timeout(3000) });
+              if (devSettingsResp.ok) {
+                const devSettings = await devSettingsResp.json();
+                // Merge device settings (don't override server settings)
+                for (const [k, v] of Object.entries(devSettings)) {
+                  if (this.settings[k] === undefined || this.settings[k] === null) {
+                    this.settings[k] = v;
+                  }
+                }
+              }
+            } catch (_) {}
+
+            // Fetch WiFi status from device
+            try {
+              const wifiResp = await fetch(`${deviceUrl}/api/wifi/status`, { signal: AbortSignal.timeout(3000) });
+              if (wifiResp.ok) {
+                const ws = await wifiResp.json();
+                if (ws.connected) {
+                  this.deviceStatus.wifi_connected = true;
+                  this.deviceStatus.wifi_ssid = ws.ssid || this.deviceStatus.wifi_ssid;
+                }
+              }
+            } catch (_) {}
+          }
+
           // Fetch richer status from device if server was unreachable
           if (!httpOk && typeof fetchDeviceStatus === 'function') {
             const devStatus = await fetchDeviceStatus();
@@ -144,7 +174,7 @@ class BitosSettings {
     this.settings[key] = value;
     this._emit();
 
-    // Try the specific device settings endpoint first
+    // Try the specific device settings endpoint first (main server on port 8000)
     // Server expects { key: "setting_name", value: <val> }
     try {
       const resp = await fetch(`${this.server}/settings/device`, {
@@ -174,6 +204,20 @@ class BitosSettings {
       } catch (_) {}
     }
 
+    // Fallback: try the device provisioning server (port 8080) /api/settings endpoint
+    try {
+      const deviceUrl = typeof getDeviceUrl === 'function' ? getDeviceUrl() : null;
+      if (deviceUrl) {
+        const resp = await fetch(`${deviceUrl}/api/settings`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key, value }),
+          signal: AbortSignal.timeout(5000),
+        });
+        if (resp.ok) return true;
+      }
+    } catch (_) {}
+
     return false;
   }
 
@@ -200,6 +244,7 @@ const SETTING_GROUPS = [
     id: 'voice',
     label: 'VOICE',
     settings: [
+      { key: 'voice_enabled', label: 'Voice output', type: 'toggle', default: false },
       { key: 'voice_mode', label: 'Voice mode', type: 'picker', options: ['off', 'on', 'auto'], default: 'auto' },
       { key: 'volume', label: 'Volume', type: 'slider', min: 0, max: 100, step: 5, default: 70 },
       { key: 'tts_engine', label: 'TTS engine', type: 'picker', options: ['auto', 'speechify', 'chatterbox', 'piper', 'openai', 'espeak'], default: 'auto' },
