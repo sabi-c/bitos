@@ -30,7 +30,9 @@ _GENERIC_CONFIGS = {
 }
 
 
-def create_right_panels(panel_openers: dict | None = None, repository=None, status_state=None) -> dict:
+def create_right_panels(panel_openers: dict | None = None, repository=None,
+                        status_state=None, audio_pipeline=None,
+                        stt_callable=None, led=None) -> dict:
     """Create preview panels keyed by sidebar label.
 
     Args:
@@ -58,6 +60,14 @@ def create_right_panels(panel_openers: dict | None = None, repository=None, stat
     # ── Chat: custom preview panel ──
     def chat_action(action_key):
         if action_key == "back":
+            return
+        if action_key == "respond_with_text":
+            # Inline recording completed — pass transcribed text to chat opener
+            panel = panels.get("CHAT")
+            text = panel._transcribed_text if panel else None
+            opener = openers.get("CHAT_RESPOND_TEXT") or openers.get("CHAT_GREETING") or openers.get("CHAT")
+            if opener is not None:
+                opener(text=text)
             return
         if action_key == "respond":
             opener = openers.get("CHAT_GREETING") or openers.get("CHAT")
@@ -88,7 +98,13 @@ def create_right_panels(panel_openers: dict | None = None, repository=None, stat
         if opener is not None:
             opener()
 
-    panels["CHAT"] = ChatPreviewPanel(on_action=chat_action, repository=repository)
+    panels["CHAT"] = ChatPreviewPanel(
+        on_action=chat_action,
+        repository=repository,
+        audio_pipeline=audio_pipeline,
+        stt_callable=stt_callable,
+        led=led,
+    )
 
     # ── Tasks: custom preview panel ──
     def tasks_action(action_key):

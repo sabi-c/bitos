@@ -235,7 +235,14 @@ class CompositeScreen(BaseScreen):
 
     def _handle_submenu_action(self, action: str) -> None:
         if action == "LONG_PRESS":
-            # Back to sidebar
+            # If panel is in a recording state, route LONG to panel (cancel), not exit
+            panel = self._active_panel()
+            if panel and hasattr(panel, '_rec_state'):
+                from device.ui.panels.chat_preview import RecState
+                if panel._rec_state in (RecState.RECORDING, RecState.ERROR):
+                    panel.handle_action(action)
+                    self._update_rec_action_hints(panel)
+                    return
             self._exit_submenu()
             return
 
@@ -243,11 +250,16 @@ class CompositeScreen(BaseScreen):
         if panel is not None and hasattr(panel, "handle_action"):
             # Check if the action is "back" before routing
             if action == "DOUBLE_PRESS" and hasattr(panel, "items") and hasattr(panel, "selected_index"):
-                item = panel.items[panel.selected_index]
-                if item.get("action") == "back":
-                    self._exit_submenu()
-                    return
+                idx = panel.selected_index
+                if 0 <= idx < len(panel.items):
+                    item = panel.items[idx]
+                    if item.get("action") == "back":
+                        self._exit_submenu()
+                        return
             panel.handle_action(action)
+            # Update hints if panel has recording state
+            if hasattr(panel, '_rec_state'):
+                self._update_rec_action_hints(panel)
 
     def handle_input(self, event: pygame.event.Event) -> None:
         """Keyboard support for desktop testing."""
@@ -275,12 +287,39 @@ class CompositeScreen(BaseScreen):
         ("hold", "BACK"),
     ]
 
+    _REC_ACTIONS = [
+        ("tap", "STOP"),
+        ("hold", "CANCEL"),
+    ]
+
+    _REC_ERROR_ACTIONS = [
+        ("tap", "RETRY"),
+        ("hold", "CANCEL"),
+    ]
+
     def _update_action_bar_hint(self) -> None:
         """Set action bar icons+labels based on current focus mode."""
         if self._focus == _Focus.SUBMENU:
+            # Check for recording state on active panel
+            panel = self._active_panel()
+            if panel and hasattr(panel, '_rec_state'):
+                self._update_rec_action_hints(panel)
+                return
             self._action_bar.set_actions(self._SUBMENU_ACTIONS)
         else:
             self._action_bar.set_actions(self._SIDEBAR_ACTIONS)
+
+    def _update_rec_action_hints(self, panel) -> None:
+        """Update action bar for recording states."""
+        from device.ui.panels.chat_preview import RecState
+        if panel._rec_state == RecState.RECORDING:
+            self._action_bar.set_actions(self._REC_ACTIONS)
+        elif panel._rec_state in (RecState.TRANSCRIBING, RecState.LAUNCHING):
+            self._action_bar.set_actions([])
+        elif panel._rec_state == RecState.ERROR:
+            self._action_bar.set_actions(self._REC_ERROR_ACTIONS)
+        else:
+            self._action_bar.set_actions(self._SUBMENU_ACTIONS)
 
     # ── Hints / breadcrumb ───────────────────────────────────────
 
