@@ -74,6 +74,7 @@ def get_system_prompt(
     location: dict | None = None,
     response_format_hint: str = "",
     activity_summary: dict | None = None,
+    meta_prompt: str | None = None,
 ) -> str:
     """Build the full system prompt for a selected agent mode with optional live context."""
     base = BASE_CONTEXT.format(date=date.today().strftime("%A, %B %d %Y"))
@@ -136,5 +137,9 @@ def get_system_prompt(
     # Device format hint (volume, voice, screen constraints)
     if response_format_hint:
         prompt += "\n\n" + response_format_hint
+
+    # User-defined meta prompt (custom instructions)
+    if meta_prompt and meta_prompt.strip():
+        prompt += "\n\nUSER INSTRUCTIONS (meta_prompt):\n" + meta_prompt.strip()
 
     return prompt

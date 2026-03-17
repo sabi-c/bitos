@@ -35,7 +35,7 @@ class LLMBridge:
     provider: str
     model: str
 
-    def stream_text(self, message: str, system_prompt: str | None = None, model_override: str | None = None, extended_thinking: bool = False) -> Generator[str, None, None]:
+    def stream_text(self, message: str, system_prompt: str | None = None, model_override: str | None = None, extended_thinking: bool = False, messages: list[dict] | None = None) -> Generator[str, None, None]:
         raise NotImplementedError
 
     def complete_text(self, prompt: str, system_prompt: str | None = None, model_override: str | None = None) -> tuple[str, int, int]:
@@ -49,17 +49,22 @@ class AnthropicBridge(LLMBridge):
         super().__init__(provider="anthropic", model=model)
         self._api_key = api_key
 
-    def stream_text(self, message: str, system_prompt: str | None = None, model_override: str | None = None, extended_thinking: bool = False) -> Generator[str, None, None]:
+    def stream_text(self, message: str, system_prompt: str | None = None, model_override: str | None = None, extended_thinking: bool = False, messages: list[dict] | None = None) -> Generator[str, None, None]:
         if not self._api_key:
             raise RuntimeError("ANTHROPIC_API_KEY not configured")
 
         active_model = model_override or self.model
         client = anthropic.Anthropic(api_key=self._api_key)
 
+        if messages:
+            msg_list = messages + [{"role": "user", "content": message}]
+        else:
+            msg_list = [{"role": "user", "content": message}]
+
         kwargs: dict = {
             "model": active_model,
             "max_tokens": 1024,
-            "messages": [{"role": "user", "content": message}],
+            "messages": msg_list,
             "system": system_prompt or SYSTEM_PROMPT,
         }
 
@@ -94,6 +99,7 @@ class AnthropicBridge(LLMBridge):
         system_prompt: str | None = None,
         model_override: str | None = None,
         extended_thinking: bool = False,
+        messages: list[dict] | None = None,
     ) -> Generator[str | dict, None, list[dict]]:
         """Stream with tool_use support. Yields text chunks or SSE event dicts, returns setting changes.
 
@@ -110,7 +116,10 @@ class AnthropicBridge(LLMBridge):
         client = anthropic.Anthropic(api_key=self._api_key)
         setting_changes: list[dict] = []
 
-        messages = [{"role": "user", "content": message}]
+        if messages:
+            conv_messages = messages + [{"role": "user", "content": message}]
+        else:
+            conv_messages = [{"role": "user", "content": message}]
         sys = system_prompt or SYSTEM_PROMPT
 
         try:
@@ -118,7 +127,7 @@ class AnthropicBridge(LLMBridge):
                 kwargs: dict = {
                     "model": active_model,
                     "max_tokens": 1024,
-                    "messages": messages,
+                    "messages": conv_messages,
                     "system": sys,
                     "tools": tools,
                 }
@@ -169,8 +178,8 @@ class AnthropicBridge(LLMBridge):
                     return setting_changes
 
                 # Continue conversation with tool results
-                messages.append({"role": "assistant", "content": assistant_content})
-                messages.append({"role": "user", "content": tool_results})
+                conv_messages.append({"role": "assistant", "content": assistant_content})
+                conv_messages.append({"role": "user", "content": tool_results})
 
             logger.warning("tool_loop_exhausted: hit 5-round limit")
             return setting_changes
@@ -216,19 +225,23 @@ class OpenAICompatibleBridge(LLMBridge):
         self._api_key = api_key
         self._base_url = _normalise_base_url(base_url)
 
-    def stream_text(self, message: str, system_prompt: str | None = None, model_override: str | None = None) -> Generator[str, None, None]:
+    def stream_text(self, message: str, system_prompt: str | None = None, model_override: str | None = None, messages: list[dict] | None = None) -> Generator[str, None, None]:
         url = f"{self._base_url}/chat/completions"
         headers: dict[str, str] = {"Content-Type": "application/json"}
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
 
         active_model = model_override or self.model
-        body = {
-            "model": active_model,
-            "messages": [
+        if messages:
+            msg_list = [{"role": "system", "content": system_prompt or SYSTEM_PROMPT}] + messages + [{"role": "user", "content": message}]
+        else:
+            msg_list = [
                 {"role": "system", "content": system_prompt or SYSTEM_PROMPT},
                 {"role": "user", "content": message},
-            ],
+            ]
+        body = {
+            "model": active_model,
+            "messages": msg_list,
             "temperature": 0.2,
             "stream": True,
         }
@@ -277,8 +290,8 @@ class EchoBridge(LLMBridge):
     def __init__(self):
         super().__init__(provider="echo", model="echo-v1")
 
-    def stream_text(self, message: str, system_prompt: str | None = None, model_override: str | None = None) -> Generator[str, None, None]:
-        _ = system_prompt, model_override
+    def stream_text(self, message: str, system_prompt: str | None = None, model_override: str | None = None, messages: list[dict] | None = None) -> Generator[str, None, None]:
+        _ = system_prompt, model_override, messages
         out = f"[echo] {message.strip()}"
         for token in out.split(" "):
             if token:

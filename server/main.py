@@ -62,6 +62,13 @@ from notifications.ws_handler import DeviceWSHandler
 
 from agent_modes import get_system_prompt
 from config import UI_SETTINGS_FILE
+from conversation_store import (
+    create_conversation,
+    add_message,
+    get_messages as get_conv_messages,
+    list_conversations,
+    get_conversation,
+)
 from llm_bridge import create_llm_bridge, to_sse_data
 from perception import classify as classify_perception
 from ui_settings import UISettingsStore, UISettingsValidationError
@@ -126,6 +133,8 @@ class ChatRequest(BaseModel):
     voice_mode: str = "auto"
     extended_thinking: bool = False
     response_format_hint: str = ""
+    meta_prompt: str | None = None
+    conversation_id: str | None = None
 
 
 class MessageSendRequest(BaseModel):
@@ -1055,9 +1064,9 @@ async def get_dashboard():
     }
 
 
-@app.get("/activity")
-async def get_activity_feed():
-    """Unified activity feed: recent messages, emails, tasks, events — for device notification view."""
+@app.get("/activity/notifications")
+async def get_activity_notifications():
+    """Unified notification feed: recent messages, emails, tasks, events — for device notification view."""
     items: list[dict] = []
 
     # Recent iMessages
@@ -1651,6 +1660,7 @@ async def chat(payload: ChatRequest):
         location=payload.location,
         response_format_hint=payload.response_format_hint,
         activity_summary=activity_summary,
+        meta_prompt=payload.meta_prompt,
     )
 
     # Map short model names to full Anthropic model IDs
@@ -1691,8 +1701,20 @@ async def chat(payload: ChatRequest):
     # Only include tools when perception says they're needed
     use_tools = perception.needs_tools
 
+    # ── Conversation history ──
+    conv_id = payload.conversation_id
+    if conv_id:
+        history = get_conv_messages(conv_id)
+    else:
+        history = []
+
+    # Build message list with history for multi-turn
+    history_messages = [{"role": m["role"], "content": m["content"]} for m in history]
+
     def stream_response():
         from agent_tools import DEVICE_TOOLS
+
+        full_response_parts: list[str] = []
 
         # Use tool-aware streaming for Anthropic provider
         if hasattr(llm_bridge, "stream_with_tools") and use_tools:
@@ -1706,6 +1728,7 @@ async def chat(payload: ChatRequest):
                 system_prompt=system_prompt,
                 model_override=model_override,
                 extended_thinking=payload.extended_thinking,
+                messages=history_messages if history_messages else None,
             )
 
             # Consume generator — yields text (str) or SSE event dicts
@@ -1716,6 +1739,7 @@ async def chat(payload: ChatRequest):
                         # Special SSE event (e.g., approval_request)
                         yield f"data: {json.dumps(chunk)}\n\n"
                     else:
+                        full_response_parts.append(chunk)
                         yield to_sse_data(chunk)
             except StopIteration as e:
                 setting_changes = e.value or []
@@ -1733,8 +1757,23 @@ async def chat(payload: ChatRequest):
                 system_prompt=system_prompt,
                 model_override=model_override,
                 extended_thinking=payload.extended_thinking,
+                messages=history_messages if history_messages else None,
             ):
+                full_response_parts.append(text)
                 yield to_sse_data(text)
+
+        # ── Save conversation turn ──
+        nonlocal conv_id
+        full_response = "".join(full_response_parts)
+        if full_response.strip():
+            if not conv_id:
+                conv_id = create_conversation()
+            add_message(conv_id, "user", message)
+            add_message(conv_id, "assistant", full_response)
+
+        # Emit conversation_id so client can continue the conversation
+        if conv_id:
+            yield f"data: {json.dumps({'conversation_id': conv_id})}\n\n"
 
         # Emit perception metadata for device-side use
         yield f"data: {json.dumps({'perception': perception.raw})}\n\n"
@@ -1755,6 +1794,24 @@ async def chat(payload: ChatRequest):
             status_code=502,
             content={"error": "Chat failed", "detail": str(exc)[:200]},
         )
+
+
+# ── Conversation history endpoints ────────────────────────────────────
+
+
+@app.get("/conversations")
+async def conversations_list(limit: int = 20):
+    """Return recent conversations with message count and preview."""
+    return {"conversations": list_conversations(limit=min(limit, 100))}
+
+
+@app.get("/conversations/{conv_id}")
+async def conversation_detail(conv_id: str):
+    """Return full message history for a conversation."""
+    conv = get_conversation(conv_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return conv
 
 
 @app.get("/logs")
