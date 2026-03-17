@@ -40,6 +40,7 @@ class SettingsPanel(BaseScreen):
         on_open_dev=None,
         on_open_font_picker=None,
         on_open_text_speed=None,
+        on_open_bt_audio=None,
         get_ble_address=None,
         on_set_discoverable=None,
         on_push_overlay=None,
@@ -61,6 +62,7 @@ class SettingsPanel(BaseScreen):
         self._on_open_dev = on_open_dev
         self._on_open_font_picker = on_open_font_picker
         self._on_open_text_speed = on_open_text_speed
+        self._on_open_bt_audio = on_open_bt_audio
         self._get_ble_address = get_ble_address or (lambda: "mock-BT-addr")
         self._on_set_discoverable = on_set_discoverable or (lambda _enabled, _timeout: None)
         self._on_push_overlay = on_push_overlay
@@ -100,6 +102,7 @@ class SettingsPanel(BaseScreen):
             NavItem(key="about", label="ABOUT", status="", action=self._open_about),
             NavItem(key="battery", label="BATTERY", status="", action=self._open_battery),
             NavItem(key="companion", label="COMPANION APP", status="", action=self._open_companion_app),
+            NavItem(key="bt_audio", label="BT AUDIO", status="", action=self._open_bt_audio),
             NavItem(key="change_pin", label="CHANGE PIN", status="", action=self._open_change_pin),
             NavItem(key="dev", label="DEV MODE", status="", action=self._open_dev),
             NavItem(key="integrations_header", label="─ INTEGRATIONS ─", status="", enabled=False),
@@ -163,6 +166,7 @@ class SettingsPanel(BaseScreen):
             "firmware": self._firmware_status,
             "about": "v1.0 \u203a",
             "companion": "PAIR \u203a",
+            "bt_audio": "\u203a",
             "battery": "\u203a",
             "change_pin": "\u203a",
             "dev": "\u203a",
@@ -301,6 +305,10 @@ class SettingsPanel(BaseScreen):
         self._on_push_overlay(qr)
         self._on_set_discoverable(True, 120)
 
+
+    def _open_bt_audio(self):
+        if self._on_open_bt_audio:
+            self._on_open_bt_audio()
 
     def _refresh_firmware_status(self):
         """Check server for firmware version info."""

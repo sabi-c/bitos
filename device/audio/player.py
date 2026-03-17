@@ -1,6 +1,8 @@
 """Audio playback helpers for WM8960 (card 0, device 0).
 
 Uses aplay (ALSA) on Pi hardware, pygame.mixer as fallback for desktop.
+When Bluetooth audio is connected, routes playback through PulseAudio
+(paplay) so audio reaches the BT device via the default PulseAudio sink.
 """
 
 from __future__ import annotations
@@ -18,6 +20,21 @@ CHANNELS = int(os.getenv("AUDIO_CHANNELS", "2"))
 
 # Use aplay on Pi (real ALSA device), pygame on desktop
 _USE_APLAY = os.getenv("BITOS_AUDIO", "").strip().lower() not in ("", "mock")
+
+
+def _is_bt_audio_active() -> bool:
+    """Check if Bluetooth audio is the current PulseAudio default sink."""
+    try:
+        result = subprocess.run(
+            ["pactl", "get-default-sink"],
+            capture_output=True, text=True, timeout=3,
+        )
+        if result.returncode == 0:
+            sink = result.stdout.strip().lower()
+            return "bluez" in sink or "bluetooth" in sink
+    except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
+        pass
+    return False
 
 
 _alsa_initialized = False
@@ -86,6 +103,11 @@ class AudioPlayer:
             return False
 
         self._stopped = False
+
+        # When BT audio is connected, use paplay (PulseAudio) so audio
+        # routes through the default PulseAudio sink to the BT device.
+        if _USE_APLAY and _is_bt_audio_active():
+            return self._play_paplay(str(audio))
         if _USE_APLAY:
             return self._play_aplay(str(audio))
         return self._play_pygame(str(audio))
@@ -117,6 +139,36 @@ class AudioPlayer:
         except Exception as exc:
             logger.error("aplay_error: %s", exc)
             return False
+        finally:
+            self._proc = None
+
+    def _play_paplay(self, path: str) -> bool:
+        """Play WAV file via PulseAudio paplay (routes to BT audio sink)."""
+        cmd = ["paplay", path]
+        logger.info("paplay_start: path=%s (BT audio active)", path)
+        try:
+            self._proc = subprocess.Popen(
+                cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+            )
+            _, stderr = self._proc.communicate(timeout=60)
+            rc = self._proc.returncode
+            if rc != 0:
+                err = stderr.decode(errors="replace").strip()[:120] if stderr else ""
+                logger.error("paplay_failed: rc=%d stderr=%s", rc, err)
+                # Fall back to aplay if paplay fails
+                return self._play_aplay(path)
+            logger.info("paplay_done: path=%s", path)
+            return True
+        except subprocess.TimeoutExpired:
+            self.stop()
+            logger.error("paplay_timeout: path=%s", path)
+            return False
+        except FileNotFoundError:
+            logger.warning("paplay_not_found: falling back to aplay")
+            return self._play_aplay(path)
+        except Exception as exc:
+            logger.error("paplay_error: %s — falling back to aplay", exc)
+            return self._play_aplay(path)
         finally:
             self._proc = None
 

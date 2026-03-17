@@ -97,6 +97,7 @@ from screens.panels.files_browser import FilesBrowserPanel
 from screens.panels.markdown_viewer import MarkdownViewerPanel
 from screens.panels.chat_history import ChatHistoryPanel
 from screens.panels.settings import SettingsPanel, ModelPickerPanel, AgentModePanel, SleepTimerPanel, AboutPanel, BatteryPanel, DevPanel, FontPickerPanel, TextSpeedPanel
+from screens.panels.bt_audio import BluetoothAudioPanel
 from screens.panels.change_pin import ChangePinPanel
 from screens.subscreens.integration_detail import IntegrationDetailPanel
 from overlays.power import PowerOverlay
@@ -240,6 +241,17 @@ def main():
     client = BackendClient()
     repository = DeviceRepository()
     repository.initialize()
+
+    # Bluetooth audio manager — scans, pairs, routes audio to BT devices
+    from bluetooth.audio_manager import BluetoothAudioManager
+    bt_audio_manager = BluetoothAudioManager(repository=repository)
+
+    # Auto-reconnect to last BT audio device in background
+    threading.Thread(
+        target=bt_audio_manager.auto_reconnect_last,
+        name="bt-audio-reconnect",
+        daemon=True,
+    ).start()
 
     # Detect timezone from IP geolocation in background (like greeting fetch)
     threading.Thread(
@@ -957,6 +969,7 @@ def main():
                 on_open_dev=open_dev,
                 on_open_font_picker=open_font_picker,
                 on_open_text_speed=open_text_speed,
+                on_open_bt_audio=open_bt_audio,
                 on_push_overlay=screen_mgr.push_overlay,
                 on_dismiss_overlay=screen_mgr.dismiss_overlay,
                 get_ble_address=gatt_server.get_device_address,
@@ -991,6 +1004,9 @@ def main():
 
     def open_text_speed():
         screen_mgr.push(TextSpeedPanel(repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
+
+    def open_bt_audio():
+        screen_mgr.push(BluetoothAudioPanel(bt_audio_manager=bt_audio_manager, repository=repository, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
 
     def open_dev():
         screen_mgr.push(DevPanel(system_monitor=monitor, on_back=lambda: screen_mgr.pop(), ui_settings=ui_settings))
