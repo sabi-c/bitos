@@ -4,7 +4,7 @@ SECRETS=${BITOS_SECRETS_FILE:-/etc/bitos/secrets}
 MISSING=0
 
 check() {
-  if grep -q "^$1=" "$SECRETS" 2>/dev/null; then
+  if sudo grep -q "^$1=" "$SECRETS" 2>/dev/null; then
     echo "  ✓ $1"
   else
     echo "  ✗ $1 MISSING"
@@ -15,8 +15,8 @@ check() {
 echo "Checking $SECRETS..."
 
 # Check ANTHROPIC_API_KEY exists AND has a real value (not placeholder)
-if grep -q '^ANTHROPIC_API_KEY=' "$SECRETS" 2>/dev/null; then
-  KEY_VAL=$(grep '^ANTHROPIC_API_KEY=' "$SECRETS" | cut -d= -f2)
+if sudo grep -q '^ANTHROPIC_API_KEY=' "$SECRETS" 2>/dev/null; then
+  KEY_VAL=$(sudo grep '^ANTHROPIC_API_KEY=' "$SECRETS" | cut -d= -f2)
   if [[ "$KEY_VAL" == "sk-ant-"* ]] || [[ "$KEY_VAL" == "sk-"* ]]; then
     echo "  ✓ ANTHROPIC_API_KEY (real key)"
   else

@@ -19,8 +19,8 @@ def _configure_device_logging():
     log_dir = os.environ.get("BITOS_LOG_DIR", "/var/log/bitos")
     try:
         os.makedirs(log_dir, exist_ok=True)
-    except PermissionError:
-        # Fall back to local dir if /var/log not writable
+    except (PermissionError, OSError):
+        # Fall back to local dir if /var/log not writable (e.g. log2ram not mounted yet)
         log_dir = os.path.join(os.path.dirname(__file__), "logs")
         os.makedirs(log_dir, exist_ok=True)
 

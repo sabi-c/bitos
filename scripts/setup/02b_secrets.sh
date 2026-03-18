@@ -18,7 +18,7 @@ run_privileged touch "$SECRETS"
 # Only chown on real Pi (skip in CI/test mode)
 if [ -n "${BITOS_SUDO_BIN:-sudo}" ]; then
   ${BITOS_SUDO_BIN:-sudo} chown root:root "$SECRETS"
-  ${BITOS_SUDO_BIN:-sudo} chmod 600 "$SECRETS"
+  ${BITOS_SUDO_BIN:-sudo} chmod 644 "$SECRETS"
 else
   chmod 600 "$SECRETS" 2>/dev/null || true
 fi

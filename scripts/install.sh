@@ -87,7 +87,10 @@ if [ ! -d /home/pi/Whisplay ]; then
     git clone https://github.com/PiSugar/Whisplay.git /home/pi/Whisplay 2>/dev/null || \
     echo "  WARNING: Whisplay clone failed (both sabi-c and PiSugar) — audio HAT may not work"
 fi
-if [ -f /home/pi/Whisplay/install_wm8960_drive.sh ]; then
+if [ -d /home/pi/Whisplay/Driver ]; then
+    echo "  Installing WM8960 driver (from Driver/ subdirectory)..."
+    (cd /home/pi/Whisplay/Driver && sudo bash install_wm8960_drive.sh) || true
+elif [ -f /home/pi/Whisplay/install_wm8960_drive.sh ]; then
     bash /home/pi/Whisplay/install_wm8960_drive.sh || true
 fi
 bash scripts/set_audio_levels.sh || true
@@ -107,7 +110,14 @@ echo "[6/10] Configuring network..."
 bash scripts/setup/05_network_priority.sh || true
 echo "  Network ✓"
 
-# ── 6b. USB gadget networking (SSH over USB fallback) ─────
+# ── 6b. Enable I2C + SPI (needed for OLED, PiSugar, sensors) ──
+echo ""
+echo "[6b/10] Enabling I2C and SPI..."
+sudo raspi-config nonint do_i2c 0 2>/dev/null || true
+sudo raspi-config nonint do_spi 0 2>/dev/null || true
+echo "  I2C + SPI enabled ✓"
+
+# ── 6c. USB gadget networking (SSH over USB fallback) ─────
 echo ""
 echo "[7/10] Configuring USB gadget networking..."
 BOOT_CONFIG="/boot/firmware/config.txt"
@@ -176,11 +186,16 @@ echo "[10/10] Validating installation..."
 # Remove any one-shot boot fix scripts
 sudo rm -f /boot/firmware/fix_bt.sh /boot/fix_bt.sh 2>/dev/null || true
 
-# Set secure file permissions
-sudo chmod 600 /etc/bitos/secrets 2>/dev/null || true
-# Database directory permissions (will be created on first run)
+# Set secure file permissions (644 so check_secrets.sh can read as pi user)
+sudo chmod 644 /etc/bitos/secrets 2>/dev/null || true
+
+# Create required runtime directories
 mkdir -p "$BITOS_DIR/server/data"
 chmod 700 "$BITOS_DIR/server/data"
+mkdir -p "$BITOS_DIR/device/data"
+mkdir -p "$BITOS_DIR/device/logs"
+sudo mkdir -p /var/log/bitos
+sudo chown pi:pi /var/log/bitos 2>/dev/null || true
 
 # Mark as configured
 sudo touch /etc/bitos/configured
