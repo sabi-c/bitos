@@ -19,6 +19,10 @@ def _configure_device_logging():
     log_dir = os.environ.get("BITOS_LOG_DIR", "/var/log/bitos")
     try:
         os.makedirs(log_dir, exist_ok=True)
+        # Test that we can actually write to this dir (log2ram may be read-only)
+        test_file = os.path.join(log_dir, ".write_test")
+        open(test_file, "w").close()
+        os.remove(test_file)
     except (PermissionError, OSError):
         # Fall back to local dir if /var/log not writable (e.g. log2ram not mounted yet)
         log_dir = os.path.join(os.path.dirname(__file__), "logs")
