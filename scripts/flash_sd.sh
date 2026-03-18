@@ -36,6 +36,10 @@ echo "Copying cloud-init config..."
 cp "$CLOUD_INIT" /Volumes/bootfs/user-data
 echo "  cloud-init copied"
 
+# Enable SSH on first boot (critical — without this, SSH is disabled)
+touch /Volumes/bootfs/ssh
+echo "  SSH enabled"
+
 # ── WiFi configuration ───────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

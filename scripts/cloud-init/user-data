@@ -2,10 +2,15 @@
 hostname: bitos
 manage_etc_hosts: true
 
+# Enable SSH on first boot
+ssh_pwauth: true
+
 users:
   - name: pi
     shell: /bin/bash
     sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: false
+    passwd: $6$bitos$kD3x8Y5z5QJZ5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5.
     groups: [adm, dialout, cdrom, audio, video, plugdev, users, netdev, spi, i2c, gpio]
     ssh_authorized_keys:
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOoNVUv0P0BGNuh4sL1zmHtK2bv/b4COlW2IzRHeG4XW seb@bitos
@@ -34,6 +39,9 @@ users:
 #       method=disabled
 
 runcmd:
+  # Enable SSH immediately (critical for remote access)
+  - systemctl enable ssh
+  - systemctl start ssh
   # Ensure NetworkManager is managing WiFi (Bookworm sometimes uses dhcpcd)
   - systemctl enable NetworkManager 2>/dev/null || true
   - systemctl start NetworkManager 2>/dev/null || true
