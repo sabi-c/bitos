@@ -34,3 +34,12 @@ NANOCLAW_MODEL = os.environ.get("NANOCLAW_MODEL", "nanoclaw-default")
 SPOTIFY_CLIENT_ID = os.environ.get("SPOTIFY_CLIENT_ID", "")
 SPOTIFY_CLIENT_SECRET = os.environ.get("SPOTIFY_CLIENT_SECRET", "")
 SPOTIFY_REDIRECT_URI = os.environ.get("SPOTIFY_REDIRECT_URI", "http://localhost:8000/callback/spotify")
+
+# ── Antigravity Bridge ──────────────────────────────────────────────
+AG_BRIDGE_URL = os.environ.get("AG_BRIDGE_URL", "http://localhost:3000")
+AG_RESPONSE_TIMEOUT_MS = int(os.environ.get("AG_RESPONSE_TIMEOUT_MS", "120000"))
+AG_POLL_INTERVAL_MS = int(os.environ.get("AG_POLL_INTERVAL_MS", "500"))
+
+# STT (Speech-to-Text)
+DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY", "")
+STT_PROVIDER = os.environ.get("STT_PROVIDER", "deepgram")  # "deepgram" or "whisper"

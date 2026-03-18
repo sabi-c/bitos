@@ -415,6 +415,10 @@ from endpoints.spotify_auth import router as spotify_router
 app.include_router(ws_01_router)
 app.include_router(spotify_router)
 
+# ── Antigravity voice/text pipeline ──
+from ag_voice_handler import router as ag_voice_router
+app.include_router(ag_voice_router)
+
 # ── SMS/iMessage webhook endpoint ──
 from endpoints.webhook_sms import router as webhook_sms_router
 app.include_router(webhook_sms_router)
