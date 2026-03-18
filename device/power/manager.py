@@ -87,8 +87,8 @@ class PowerManager:
         commands = [
             # Disable HDMI output (Pi Zero has no display connected)
             ["tvservice", "-o"],
-            # Disable Bluetooth (not used — we use WiFi only)
-            ["rfkill", "block", "bluetooth"],
+            # Bluetooth is managed by audio_manager — do NOT rfkill block
+            # ["rfkill", "block", "bluetooth"],  # removed: BT needed for AirPods
             # Enable WiFi power management (idle power saving)
             ["iwconfig", "wlan0", "power", "on"],
         ]
