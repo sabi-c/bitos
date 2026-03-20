@@ -412,8 +412,10 @@ app = FastAPI(title="BITOS Server", version=__version__)
 # ── 01-compatible WebSocket endpoint ──
 from endpoints.ws_01_compat import router as ws_01_router
 from endpoints.spotify_auth import router as spotify_router
+from endpoints.codex_remote import router as codex_remote_router
 app.include_router(ws_01_router)
 app.include_router(spotify_router)
+app.include_router(codex_remote_router)
 
 # ── Antigravity voice/text pipeline ──
 from ag_voice_handler import router as ag_voice_router

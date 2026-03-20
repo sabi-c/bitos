@@ -20,21 +20,17 @@ BITOS has broad feature coverage but too many remote-control integration paths. 
 
 ## 2) Immediate next implementation target
 
-### CODEX-UI-002 — Vertical slice implementation
+### CODEX-UI-003 — Real transport integration
 
 Deliver this next:
-1. Add `server/codex_app_client.py` adapter interface with mock transport.
-2. Add `server/endpoints/codex_remote.py` routes:
-   - `POST /api/codex/sessions`
-   - `POST /api/codex/sessions/{id}/turns`
-   - `GET /api/codex/sessions/{id}/events`
-   - `POST /api/codex/approvals/{id}`
-3. Register endpoint router in `server/main.py`.
-4. Add focused tests for session lifecycle + approval loop.
+1. Keep endpoint contract in `server/endpoints/codex_remote.py` stable (`/api/codex/...`).
+2. Add a real transport-backed client (App Server stdio first, websocket optional) behind `server/codex_app_client.py` interface.
+3. Add configuration switch between mock and real transport for safe rollout.
+4. Extend tests with transport-level failure cases (disconnect, timeout, invalid approval replay).
 
 ### Suggested acceptance checks
 - `pytest -q tests/test_codex_remote_endpoints.py`
-- `pytest -q tests/test_server_chat_bridge_api.py`
+- add focused tests for transport failure and reconnect handling
 
 ---
 
