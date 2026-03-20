@@ -217,3 +217,15 @@ Create a lightweight ADR folder (`docs/adr/`) and capture decisions for:
 - retry/backoff semantics
 
 A single paragraph per decision is enough, but document the trade-off and fallback.
+
+## 9) Phase 11 Add-on: Codex Remote Control Unification
+
+To reduce architecture churn and accelerate delivery of a reliable web control surface, Phase 11 work should converge on a single remote-control contract using Codex App Server via a BITOS BFF layer.
+
+Execution order:
+1. Discovery + architecture lock (`docs/planning/CODEX_REMOTE_CONTROL_MIGRATION.md`).
+2. Vertical slice (session, turn, stream, approvals).
+3. Feature-flagged cutover and legacy path deprecation.
+
+Operational rule:
+- Any new remote-control UI behavior must land against the BFF/App Server path first; legacy endpoints receive fixes only.
