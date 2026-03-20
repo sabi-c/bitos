@@ -117,6 +117,7 @@ Useful commands:
 | `IMPLEMENTATION_PLAN_NEXT.md` | Sequenced execution plan for current phases. |
 | `MAC_AI_SERVICE.md` | Phase 10 multi-agent Mac service plan. |
 | `OFFLINE_AI.md` | Offline AI strategy (Piper/whisper.cpp/llama.cpp). |
+| `CODEX_REMOTE_CONTROL_MIGRATION.md` | Migration plan for unified Codex App Server remote-control architecture. |
 | `SECURITY_DECISIONS.md` | Security decision log (SD-001 through SD-010). |
 | `TASK_TRACKER.md` | Canonical backlog and iteration log. |
 
