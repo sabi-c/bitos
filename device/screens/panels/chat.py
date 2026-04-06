@@ -28,6 +28,7 @@ from display.tokens import (
     SAFE_INSET,
 )
 from display.animator import blink_cursor
+from display.tool_status_anim import ToolStatusAnimation
 from display.pagination import split_into_pages as _shared_split_into_pages
 from display.pagination import wrap_text as _shared_wrap_text
 from display.typewriter import TypewriterRenderer, TypewriterConfig
@@ -147,6 +148,8 @@ class ChatPanel(BaseScreen):
         self._health_checked = False
         self._speaking_overlay = SpeakingOverlay()
         self._tool_status: str = ""
+        self._tool_status_anim = ToolStatusAnimation()
+        self._last_render_tick: int = 0
 
         # Pagination state
         self._pages: list[list[str]] = []
@@ -598,6 +601,10 @@ class ChatPanel(BaseScreen):
         return _shared_split_into_pages(lines, lines_per_page, max_pages)
 
     def render(self, surface: pygame.Surface):
+        now = pygame.time.get_ticks()
+        dt_ms = now - self._last_render_tick if self._last_render_tick else 66
+        self._last_render_tick = now
+
         surface.fill(BLACK)
 
         # ── Status bar (20px) ──
@@ -630,11 +637,21 @@ class ChatPanel(BaseScreen):
         else:
             self._render_conversation(surface, msg_area_top, msg_area_bottom)
 
-        # ── Streaming indicator ──
+        # ── Streaming indicator (animated tool status) ──
         if self._is_streaming:
-            dots = "." * ((pygame.time.get_ticks() // 400) % 4)
-            indicator = self._font_small.render(dots, False, DIM3)
-            surface.blit(indicator, (SAFE_INSET, msg_area_bottom - 14))
+            with self._messages_lock:
+                tool_status = self._tool_status
+
+            if tool_status:
+                self._tool_status_anim.set_status(tool_status)
+            elif not self._tool_status_anim.active:
+                self._tool_status_anim.set_status("Thinking")
+
+            self._tool_status_anim.update(dt_ms)
+            self._tool_status_anim.render(surface, SAFE_INSET, msg_area_bottom - 20)
+        else:
+            if self._tool_status_anim.active:
+                self._tool_status_anim.clear()
 
         # ── Overlays (on top of page content) ──
         if self._mode == ChatMode.ACTIONS:
