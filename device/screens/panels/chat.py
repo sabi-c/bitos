@@ -146,6 +146,7 @@ class ChatPanel(BaseScreen):
         self._health = ServiceHealth()
         self._health_checked = False
         self._speaking_overlay = SpeakingOverlay()
+        self._tool_status: str = ""
 
         # Pagination state
         self._pages: list[list[str]] = []
@@ -1216,8 +1217,14 @@ class ChatPanel(BaseScreen):
 
             _last_page_build_len = 0
             for chunk in result:
+                if isinstance(chunk, dict):
+                    if "tool_status" in chunk:
+                        with self._messages_lock:
+                            self._tool_status = chunk["tool_status"]
+                    continue
                 response_text += chunk
                 with self._messages_lock:
+                    self._tool_status = ""  # clear when text starts flowing
                     self._messages[-1]["text"] = response_text
 
                 # Progressive pagination: rebuild pages as text grows so new

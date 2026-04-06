@@ -182,7 +182,7 @@ class BackendClient:
         voice_mode: str = "auto",
         extended_thinking: bool = False,
         meta_prompt: str = "",
-    ) -> Generator[str, None, None]:
+    ) -> Generator[str | dict, None, None]:
         """Yield text chunks from the /chat SSE stream in real time."""
         payload: dict = {
             "message": message,
@@ -245,6 +245,8 @@ class BackendClient:
                             # Server assigned/confirmed conversation_id for multi-turn
                             self._conversation_id = chunk["conversation_id"]
                             logging.debug("conversation_id: %s", self._conversation_id)
+                        elif "tool_status" in chunk:
+                            yield {"tool_status": chunk["tool_status"]}
                         elif "perception" in chunk:
                             # Perception metadata — log but don't yield as text
                             logging.debug("perception: %s", chunk["perception"])
