@@ -32,8 +32,9 @@ class BluetoothAudioPanel(BaseScreen):
     """Bluetooth audio device management panel."""
     _owns_status_bar = True
 
-    def __init__(self, bt_audio_manager, repository=None, on_back=None, ui_settings=None):
+    def __init__(self, bt_audio_manager, bt_service=None, repository=None, on_back=None, ui_settings=None):
         self._bt = bt_audio_manager
+        self._bt_service = bt_service
         self._repo = repository
         self._on_back = on_back
 
@@ -50,6 +51,11 @@ class BluetoothAudioPanel(BaseScreen):
         self._status_message: str = ""
         self._status_timeout: float = 0.0
         self._scroll_offset = 0
+
+        # BTService state tracking
+        self._bt_state = None
+        self._connected_device_name = ""
+        self._reconnect_attempt = 0
 
         # Main menu nav
         self._nav = self._build_main_nav()
@@ -68,9 +74,22 @@ class BluetoothAudioPanel(BaseScreen):
         items.append(NavItem(key="back", label="BACK", status="SETTINGS", action=self._go_back))
         return VerticalNavController(items)
 
+    def _get_connection_status_text(self) -> str:
+        """Return human-readable connection status from BTService state."""
+        from bluetooth.bt_service import BTState
+        if self._bt_state == BTState.CONNECTED or self._bt_state == BTState.PLAYING:
+            return self._connected_device_name or "CONNECTED"
+        if self._bt_state == BTState.CONNECTING:
+            return f"RECONNECTING... (#{self._reconnect_attempt})"
+        return "NO DEVICE"
+
     def on_enter(self):
         self._mode = _MODE_MAIN
         self._connected_device = self._bt.get_connected_device()
+        if self._bt_service:
+            self._bt_state = self._bt_service.state
+            dev = self._bt_service.connected_device
+            self._connected_device_name = dev.name if dev else ""
         self._nav = self._build_main_nav()
         self._scroll_offset = 0
 
@@ -116,6 +135,20 @@ class BluetoothAudioPanel(BaseScreen):
             self._go_back()
 
     def update(self, dt: float):
+        # Poll BTService state
+        if self._bt_service:
+            self._bt_state = self._bt_service.state
+            dev = self._bt_service.connected_device
+            if dev:
+                self._connected_device_name = dev.name
+                if not self._connected_device:
+                    self._connected_device = dev.to_dict()
+                    self._nav = self._build_main_nav()
+            elif self._connected_device:
+                self._connected_device = None
+                self._connected_device_name = ""
+                self._nav = self._build_main_nav()
+
         # Check if async scan completed
         if self._mode == _MODE_SCANNING and not self._bt.is_scanning:
             self._scan_results = self._bt.get_scan_results()
@@ -147,17 +180,30 @@ class BluetoothAudioPanel(BaseScreen):
         y = STATUS_BAR_H + 4
 
         # Connection status line
-        if self._connected_device:
-            status_text = self._connected_device.get("name", "Unknown")
-            status_label = "CONNECTED"
-            label_surf = self._font_small.render(status_label, False, DIM2)
+        status_text = self._get_connection_status_text()
+        from bluetooth.bt_service import BTState
+        if self._bt_state in (BTState.CONNECTED, BTState.PLAYING):
+            label_surf = self._font_small.render("CONNECTED", False, DIM2)
             name_surf = self._font_body.render(status_text, False, WHITE)
             surface.blit(label_surf, (8, y))
             y += label_surf.get_height() + 2
             surface.blit(name_surf, (8, y))
             y += name_surf.get_height() + 4
+        elif self._bt_state == BTState.CONNECTING:
+            recon_surf = self._font_body.render(status_text, False, DIM2)
+            surface.blit(recon_surf, (8, y))
+            y += recon_surf.get_height() + 4
+        elif self._connected_device:
+            # Fallback: BTService not available but bt_audio_manager has a device
+            fallback_name = self._connected_device.get("name", "Unknown")
+            label_surf = self._font_small.render("CONNECTED", False, DIM2)
+            name_surf = self._font_body.render(fallback_name, False, WHITE)
+            surface.blit(label_surf, (8, y))
+            y += label_surf.get_height() + 2
+            surface.blit(name_surf, (8, y))
+            y += name_surf.get_height() + 4
         else:
-            no_dev = self._font_body.render("NO DEVICE", False, DIM2)
+            no_dev = self._font_body.render(status_text, False, DIM2)
             surface.blit(no_dev, (8, y))
             y += no_dev.get_height() + 4
 
