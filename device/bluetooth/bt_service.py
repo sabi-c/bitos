@@ -348,11 +348,10 @@ class BTService:
                 self._ensure_acl_connection(address)
                 logger.info("[BT] Pairing with %s...", address)
                 await device_iface.call_pair()
-
-            # Trust the device for auto-reconnect
-            await props_iface.call_set(
-                _DEVICE_IFACE, "Trusted", Variant("b", True)
-            )
+                # Trust the device for auto-reconnect (only on first pairing)
+                await props_iface.call_set(
+                    _DEVICE_IFACE, "Trusted", Variant("b", True)
+                )
 
             # Connect
             logger.info("[BT] Connecting to %s...", address)

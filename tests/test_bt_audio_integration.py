@@ -404,5 +404,37 @@ class TestAudioFiltering(unittest.TestCase):
         self.assertEqual(BTService._filter_audio_devices([]), [])
 
 
+class TestBTSecurityPolicy(unittest.TestCase):
+    """Security: trust is only set during explicit pairing."""
+
+    def test_trust_call_inside_not_paired_block(self):
+        """Verify trust is set conditionally in pair_and_connect source."""
+        import inspect
+        from bluetooth.bt_service import BTService
+        source = inspect.getsource(BTService.pair_and_connect)
+        # Find the trust line and verify it's indented inside the not-paired block
+        lines = source.split('\n')
+        trust_line_idx = None
+        not_paired_idx = None
+        for i, line in enumerate(lines):
+            if 'not paired.value' in line:
+                not_paired_idx = i
+            # call_set and "Trusted" may be split across continuation lines
+            if '"Trusted"' in line:
+                trust_line_idx = i
+        self.assertIsNotNone(trust_line_idx, "Trust call not found in pair_and_connect")
+        self.assertIsNotNone(not_paired_idx, "not paired check not found")
+        # Trust must come after the not-paired check
+        self.assertGreater(trust_line_idx, not_paired_idx)
+        # Verify trust line is indented MORE than the not-paired check
+        # (i.e., it's inside the if block, not at the same level)
+        not_paired_indent = len(lines[not_paired_idx]) - len(lines[not_paired_idx].lstrip())
+        trust_indent = len(lines[trust_line_idx]) - len(lines[trust_line_idx].lstrip())
+        self.assertGreater(
+            trust_indent, not_paired_indent,
+            "Trust call must be indented inside the 'if not paired' block"
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
