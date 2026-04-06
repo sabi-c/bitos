@@ -63,6 +63,7 @@ import pygame
 
 from display.corner_mask import CornerMask
 from display.driver import create_driver
+from display.screen_recorder import ScreenRecorder
 import display.tokens as tokens
 from display.tokens import FPS
 from input.handler import ButtonEvent, create_button_handler
@@ -351,6 +352,7 @@ def main():
     status_state = StatusState()
     screen_mgr = ScreenManager(notification_queue=notification_queue, status_state=status_state)
     idle_mgr = IdleManager(driver, repository, screen_manager=screen_mgr)
+    screen_recorder = ScreenRecorder()
     power_mgr = PowerManager()
     power_mgr.system_power_save()
 
@@ -1493,6 +1495,18 @@ def main():
                     running = False
                     break
 
+                # Screen capture shortcuts (desktop testing)
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_F5:
+                        screen_recorder.screenshot(surface)
+                    elif event.key == pygame.K_F6:
+                        if screen_recorder.is_recording:
+                            rec_path = screen_recorder.stop_recording()
+                            logger.info("[BITOS] Recording saved: %s", rec_path)
+                        else:
+                            screen_recorder.start_recording()
+                            logger.info("[BITOS] Recording started")
+
                 consumed = button.handle_pygame_event(event)
                 if not consumed:
                     screen_mgr.handle_input(event)
@@ -1521,6 +1535,10 @@ def main():
                 power_overlay.render(surface, tokens)
             corner_mask.apply(surface)
             driver.update()
+
+            # Screen recorder — capture frames when recording
+            if screen_recorder.is_recording:
+                screen_recorder.capture_frame(surface)
 
             clock.tick(power_mgr.get_target_fps())
             _consecutive_errors = 0  # Reset on successful frame
