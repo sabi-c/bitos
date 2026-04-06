@@ -462,8 +462,17 @@ class BluetoothAudioManager:
         logger.info("[BT-AUDIO] auto-reconnecting to %s", address)
         return self.connect(str(address))
 
-    def switch_sink_to_bt(self) -> None:
-        """Switch audio output to the Bluetooth device (public API for BTService)."""
+    def switch_sink_to_bt(self, address: str | None = None) -> None:
+        """Switch audio output to the Bluetooth device (public API for BTService).
+
+        If ``address`` is provided and no device is tracked yet, a minimal
+        record is created so the ALSA fallback path can write .asoundrc.
+        """
+        if address and not self._connected_device:
+            with self._lock:
+                self._connected_device = BTAudioDevice(
+                    name="", address=address, connected=True,
+                )
         self._switch_audio_to_bt()
 
     def switch_sink_to_speaker(self) -> None:

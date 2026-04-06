@@ -362,14 +362,6 @@ class BTService:
 
             self._handle_device_connected(address)
 
-            if self.on_connect:
-                try:
-                    result = self.on_connect(address, (info.to_dict() if info else {}))
-                    if asyncio.iscoroutine(result):
-                        await result
-                except Exception as exc:
-                    logger.error("[BT] on_connect callback error: %s", exc)
-
             logger.info("[BT] Connected to %s (%s)", info.name if info else address, address)
             return True
 
@@ -461,9 +453,14 @@ class BTService:
         # Route audio to Bluetooth
         if self._audio_manager is not None:
             try:
-                self._audio_manager.switch_sink_to_bt()
+                self._audio_manager.switch_sink_to_bt(address)
             except Exception as exc:
                 logger.error("[BT] audio_manager.switch_sink_to_bt failed: %s", exc)
+
+        # Fire on_connect callback
+        if self.on_connect:
+            info = self._known_devices.get(address)
+            self._safe_callback(self.on_connect, address, info.to_dict() if info else {})
 
     def _handle_device_disconnected(self, address: str) -> None:
         """Update state for a disconnected device and revert audio sink.
@@ -738,9 +735,9 @@ class BTService:
 _instance: BTService | None = None
 
 
-def get_bt_service() -> BTService:
+def get_bt_service(audio_manager=None) -> BTService:
     """Get or create the singleton BTService instance."""
     global _instance
     if _instance is None:
-        _instance = BTService()
+        _instance = BTService(audio_manager=audio_manager)
     return _instance
