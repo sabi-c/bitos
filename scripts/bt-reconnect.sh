@@ -1,9 +1,11 @@
 #!/bin/bash
-# Bluetooth auto-reconnect daemon for AirPods
-# Monitors D-Bus for device state changes and reconnects when AirPods wake up.
-# Based on: https://github.com/thevar1able/airpods-helper
-#
-# Runs as a persistent systemd user service.
+# DEPRECATED: This script is superseded by BTService (device/bluetooth/bt_service.py)
+# which handles auto-reconnect with exponential backoff via D-Bus signals.
+# Kept for reference only. Do not install as a systemd service.
+echo "WARNING: bt-reconnect.sh is deprecated. BTService handles reconnection now."
+exit 0
+
+# ── Original script below (kept for reference) ──────────────────────────
 
 MAC="04:9D:05:6F:ED:D5"
 DBUS_PATH="/org/bluez/hci0/dev_${MAC//:/_}"

@@ -90,27 +90,31 @@ if ! command -v expect &>/dev/null; then
     sudo apt install -y expect
 fi
 
-# ── Step 6: Install boot reconnect service ────────────────────────────
-if [ -f /home/pi/bitos/scripts/bt-reconnect.sh ]; then
-    mkdir -p ~/.config/systemd/user/
-    cat > ~/.config/systemd/user/bitos-bt-reconnect.service << 'SVCEOF'
-[Unit]
-Description=Reconnect Bluetooth Audio Devices
-After=wireplumber.service
-Wants=wireplumber.service
-
-[Service]
-Type=oneshot
-ExecStart=/home/pi/bitos/scripts/bt-reconnect.sh
-RemainAfterExit=yes
-
-[Install]
-WantedBy=default.target
-SVCEOF
-    systemctl --user daemon-reload
-    systemctl --user enable bitos-bt-reconnect.service
-    echo "[BT] Boot reconnect service enabled ✓"
-fi
+# ── Step 6: Boot reconnect service (DEPRECATED) ──────────────────────
+# NOTE: bt-reconnect.sh systemd service is no longer needed.
+# BTService (device/bluetooth/bt_service.py) handles auto-reconnect
+# with exponential backoff via D-Bus signals.
+#
+# if [ -f /home/pi/bitos/scripts/bt-reconnect.sh ]; then
+#     mkdir -p ~/.config/systemd/user/
+#     cat > ~/.config/systemd/user/bitos-bt-reconnect.service << 'SVCEOF'
+# [Unit]
+# Description=Reconnect Bluetooth Audio Devices
+# After=wireplumber.service
+# Wants=wireplumber.service
+#
+# [Service]
+# Type=oneshot
+# ExecStart=/home/pi/bitos/scripts/bt-reconnect.sh
+# RemainAfterExit=yes
+#
+# [Install]
+# WantedBy=default.target
+# SVCEOF
+#     systemctl --user daemon-reload
+#     systemctl --user enable bitos-bt-reconnect.service
+#     echo "[BT] Boot reconnect service enabled ✓"
+# fi
 
 echo ""
 echo "[BT] Bluetooth audio setup complete ✓"
