@@ -258,8 +258,9 @@ class BTService:
             self._discovery_active = False
 
             # Enumerate discovered devices via ObjectManager
-            discovered = await self._enumerate_devices()
-            logger.info("[BT] Discovery complete: %d devices", len(discovered))
+            all_devices = await self._enumerate_devices()
+            discovered = self._filter_audio_devices(all_devices)
+            logger.info("[BT] Discovery complete: %d audio devices (of %d total)", len(discovered), len(all_devices))
 
         except Exception as exc:
             logger.error("[BT] Discovery error: %s", exc)
@@ -344,6 +345,7 @@ class BTService:
             # Check if already paired
             paired = await props_iface.call_get(_DEVICE_IFACE, "Paired")
             if not paired.value:
+                self._ensure_acl_connection(address)
                 logger.info("[BT] Pairing with %s...", address)
                 await device_iface.call_pair()
 
@@ -431,6 +433,31 @@ class BTService:
         except Exception as exc:
             logger.error("[BT] Forget failed for %s: %s", address, exc)
             return False
+
+    # ------------------------------------------------------------------
+    # Internal: ACL connection for BR/EDR devices (e.g. AirPods)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _ensure_acl_connection(address: str) -> None:
+        """Create an ACL (BR/EDR) connection via hcitool before pairing.
+
+        AirPods and similar devices require an explicit ACL connection
+        before bluetoothctl pair will succeed.
+        """
+        import subprocess
+        try:
+            subprocess.run(
+                ["sudo", "hcitool", "cc", address],
+                capture_output=True, timeout=10,
+            )
+            logger.info("[BT] ACL connection established for %s", address)
+        except FileNotFoundError:
+            logger.debug("[BT] hcitool not available — skipping ACL step")
+        except subprocess.TimeoutExpired:
+            logger.warning("[BT] hcitool cc timed out for %s", address)
+        except Exception as exc:
+            logger.debug("[BT] ACL connection failed for %s: %s", address, exc)
 
     # ------------------------------------------------------------------
     # Internal: connection state helpers

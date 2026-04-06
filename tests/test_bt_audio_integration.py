@@ -222,6 +222,27 @@ class TestBTServiceAudioManagerIntegration(unittest.TestCase):
             self.assertEqual(mgr._connected_device.address, "AA:BB:CC:DD:EE:FF")
 
 
+class TestACLConnection(unittest.TestCase):
+    """Verify _ensure_acl_connection calls hcitool cc before pairing."""
+
+    def test_acl_connection_attempted(self):
+        """_ensure_acl_connection calls subprocess.run with hcitool cc."""
+        from bluetooth.bt_service import BTService
+        with unittest.mock.patch("subprocess.run") as mock_run:
+            BTService._ensure_acl_connection("AA:BB:CC:DD:EE:FF")
+            mock_run.assert_called_once_with(
+                ["sudo", "hcitool", "cc", "AA:BB:CC:DD:EE:FF"],
+                capture_output=True, timeout=10,
+            )
+
+    def test_acl_connection_graceful_when_hcitool_missing(self):
+        """FileNotFoundError from missing hcitool doesn't crash."""
+        from bluetooth.bt_service import BTService
+        with unittest.mock.patch("subprocess.run", side_effect=FileNotFoundError):
+            # Should not raise
+            BTService._ensure_acl_connection("AA:BB:CC:DD:EE:FF")
+
+
 class TestBTServiceRepositoryIntegration(unittest.TestCase):
     """BTService accepts a repository and persists/reads bt_audio_device."""
 
