@@ -462,6 +462,14 @@ class BluetoothAudioManager:
         logger.info("[BT-AUDIO] auto-reconnecting to %s", address)
         return self.connect(str(address))
 
+    def switch_sink_to_bt(self) -> None:
+        """Switch audio output to the Bluetooth device (public API for BTService)."""
+        self._switch_audio_to_bt()
+
+    def switch_sink_to_speaker(self) -> None:
+        """Switch audio output back to the built-in speaker (public API for BTService)."""
+        self._switch_audio_to_speaker()
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

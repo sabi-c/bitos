@@ -116,7 +116,7 @@ class BTService:
     RECONNECT_MAX_BACKOFF = 60.0
     SCAN_TIMEOUT = 30.0
 
-    def __init__(self):
+    def __init__(self, audio_manager=None):
         self._bus: Any = None
         self._adapter: Any = None
         self._adapter_props: Any = None
@@ -127,6 +127,7 @@ class BTService:
         self._discovery_active = False
         self._running = False
         self._loop: asyncio.AbstractEventLoop | None = None  # stored on start() for thread-safe callbacks
+        self._audio_manager = audio_manager
 
         # Event callbacks
         self.on_state_change: BTEventCallback | None = None
@@ -358,21 +359,16 @@ class BTService:
             info = await self._get_device_info(device_path)
             if info:
                 self._known_devices[address] = info
-                self._connected_device = info
-                self._set_state(BTState.CONNECTED)
 
-                # Cancel any reconnect task for this device
-                if address in self._reconnect_tasks:
-                    self._reconnect_tasks[address].cancel()
-                    del self._reconnect_tasks[address]
+            self._handle_device_connected(address)
 
-                if self.on_connect:
-                    try:
-                        result = self.on_connect(address, info.to_dict())
-                        if asyncio.iscoroutine(result):
-                            await result
-                    except Exception as exc:
-                        logger.error("[BT] on_connect callback error: %s", exc)
+            if self.on_connect:
+                try:
+                    result = self.on_connect(address, (info.to_dict() if info else {}))
+                    if asyncio.iscoroutine(result):
+                        await result
+                except Exception as exc:
+                    logger.error("[BT] on_connect callback error: %s", exc)
 
             logger.info("[BT] Connected to %s (%s)", info.name if info else address, address)
             return True
@@ -444,6 +440,57 @@ class BTService:
             return False
 
     # ------------------------------------------------------------------
+    # Internal: connection state helpers
+    # ------------------------------------------------------------------
+
+    def _handle_device_connected(self, address: str) -> None:
+        """Update state for a newly connected device and switch audio sink.
+
+        This is synchronous — safe to call from D-Bus signal handlers.
+        """
+        if address in self._known_devices:
+            self._known_devices[address].connected = True
+            self._connected_device = self._known_devices[address]
+        self._set_state(BTState.CONNECTED)
+
+        # Cancel any reconnect task for this device
+        if address in self._reconnect_tasks:
+            self._reconnect_tasks[address].cancel()
+            del self._reconnect_tasks[address]
+
+        # Route audio to Bluetooth
+        if self._audio_manager is not None:
+            try:
+                self._audio_manager.switch_sink_to_bt()
+            except Exception as exc:
+                logger.error("[BT] audio_manager.switch_sink_to_bt failed: %s", exc)
+
+    def _handle_device_disconnected(self, address: str) -> None:
+        """Update state for a disconnected device and revert audio sink.
+
+        This is synchronous — safe to call from D-Bus signal handlers.
+        """
+        if address in self._known_devices:
+            self._known_devices[address].connected = False
+        if self._connected_device and self._connected_device.address == address:
+            self._connected_device = None
+        self._set_state(BTState.DISCONNECTED)
+
+        # Route audio back to speaker
+        if self._audio_manager is not None:
+            try:
+                self._audio_manager.switch_sink_to_speaker()
+            except Exception as exc:
+                logger.error("[BT] audio_manager.switch_sink_to_speaker failed: %s", exc)
+
+        # Start reconnect for trusted devices
+        if address in self._known_devices and self._known_devices[address].trusted:
+            self._start_reconnect(address)
+
+        if self.on_disconnect:
+            self._safe_callback(self.on_disconnect, address)
+
+    # ------------------------------------------------------------------
     # Internal: thread-safe callback dispatch
     # ------------------------------------------------------------------
 
@@ -497,30 +544,10 @@ class BTService:
             connected = changed["Connected"].value
             if connected:
                 logger.info("[BT] Device connected: %s", address)
-                # Update state
-                if address in self._known_devices:
-                    self._known_devices[address].connected = True
-                    self._connected_device = self._known_devices[address]
-                self._set_state(BTState.CONNECTED)
-
-                # Cancel reconnect task
-                if address in self._reconnect_tasks:
-                    self._reconnect_tasks[address].cancel()
-                    del self._reconnect_tasks[address]
+                self._handle_device_connected(address)
             else:
                 logger.info("[BT] Device disconnected: %s", address)
-                if address in self._known_devices:
-                    self._known_devices[address].connected = False
-                if self._connected_device and self._connected_device.address == address:
-                    self._connected_device = None
-                self._set_state(BTState.DISCONNECTED)
-
-                # Start reconnect for trusted devices
-                if address in self._known_devices and self._known_devices[address].trusted:
-                    self._start_reconnect(address)
-
-                if self.on_disconnect:
-                    self._safe_callback(self.on_disconnect, address)
+                self._handle_device_disconnected(address)
 
         # Track newly discovered devices
         if "Name" in changed or "RSSI" in changed:
