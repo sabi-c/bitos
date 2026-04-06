@@ -116,7 +116,7 @@ class BTService:
     RECONNECT_MAX_BACKOFF = 60.0
     SCAN_TIMEOUT = 30.0
 
-    def __init__(self, audio_manager=None):
+    def __init__(self, audio_manager=None, repository=None):
         self._bus: Any = None
         self._adapter: Any = None
         self._adapter_props: Any = None
@@ -128,6 +128,7 @@ class BTService:
         self._running = False
         self._loop: asyncio.AbstractEventLoop | None = None  # stored on start() for thread-safe callbacks
         self._audio_manager = audio_manager
+        self._repository = repository
 
         # Event callbacks
         self.on_state_change: BTEventCallback | None = None
@@ -457,6 +458,13 @@ class BTService:
             except Exception as exc:
                 logger.error("[BT] audio_manager.switch_sink_to_bt failed: %s", exc)
 
+        # Persist last connected device for reconnect fallback
+        if self._repository:
+            try:
+                self._repository.set_setting("bt_audio_device", address)
+            except Exception as exc:
+                logger.error("[BT] Failed to save last device: %s", exc)
+
         # Fire on_connect callback
         if self.on_connect:
             info = self._known_devices.get(address)
@@ -600,11 +608,18 @@ class BTService:
         """On startup, try reconnecting all trusted audio devices."""
         try:
             devices = await self._enumerate_devices()
-            for dev in devices:
-                if dev.trusted and dev.is_audio and not dev.connected:
-                    logger.info("[BT] Attempting reconnect to trusted device: %s (%s)",
-                                dev.name, dev.address)
-                    self._start_reconnect(dev.address)
+            trusted_audio = [d for d in devices if d.trusted and d.is_audio and not d.connected]
+            for dev in trusted_audio:
+                logger.info("[BT] Attempting reconnect to trusted device: %s (%s)",
+                            dev.name, dev.address)
+                self._start_reconnect(dev.address)
+
+            # Fallback: if BlueZ has no trusted audio devices, try saved device
+            if not trusted_audio and self._repository:
+                saved = self._repository.get_setting("bt_audio_device")
+                if saved:
+                    logger.info("[BT] No trusted devices enumerated, trying saved: %s", saved)
+                    self._start_reconnect(str(saved))
         except Exception as exc:
             logger.error("[BT] Failed to enumerate trusted devices: %s", exc)
 
@@ -735,9 +750,9 @@ class BTService:
 _instance: BTService | None = None
 
 
-def get_bt_service(audio_manager=None) -> BTService:
+def get_bt_service(audio_manager=None, repository=None) -> BTService:
     """Get or create the singleton BTService instance."""
     global _instance
     if _instance is None:
-        _instance = BTService(audio_manager=audio_manager)
+        _instance = BTService(audio_manager=audio_manager, repository=repository)
     return _instance

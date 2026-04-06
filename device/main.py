@@ -337,8 +337,7 @@ def main():
     if hasattr(audio_pipeline, '_audio_router'):
         audio_pipeline._audio_router = audio_router
 
-    # NOTE: BT audio auto-reconnect moved to after GATT server start (see below)
-    # to avoid D-Bus contention with bluezero's GLib main loop.
+    # BT audio reconnect is handled by BTService (unified lifecycle owner).
 
     # Detect timezone from IP geolocation in background (like greeting fetch)
     threading.Thread(
@@ -1382,12 +1381,7 @@ def main():
     except Exception as exc:
         logger.error("[BITOS] GATT server failed to start: %s", exc)
 
-    # Auto-reconnect BT audio AFTER GATT is initialized to avoid D-Bus contention
-    threading.Thread(
-        target=bt_audio_manager.auto_reconnect_last,
-        name="bt-audio-reconnect",
-        daemon=True,
-    ).start()
+    # BT audio reconnect now handled by BTService (single lifecycle owner)
 
     # AVRCP media key listener — captures AirPods tap gestures as device actions
     # Falls back to AVRCP when AAP is not connected (see AAP setup below).
@@ -1438,6 +1432,8 @@ def main():
 
     try:
         _bt_conn_service = get_bt_service()
+        _bt_conn_service._audio_manager = bt_audio_manager
+        _bt_conn_service._repository = repository
         _bt_conn_service.on_connect = _aap_on_device_connect
         _bt_conn_service.on_disconnect = _aap_on_device_disconnect
 

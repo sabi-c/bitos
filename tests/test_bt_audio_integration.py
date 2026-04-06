@@ -222,5 +222,105 @@ class TestBTServiceAudioManagerIntegration(unittest.TestCase):
             self.assertEqual(mgr._connected_device.address, "AA:BB:CC:DD:EE:FF")
 
 
+class TestBTServiceRepositoryIntegration(unittest.TestCase):
+    """BTService accepts a repository and persists/reads bt_audio_device."""
+
+    def test_btservice_accepts_repository(self):
+        from bluetooth.bt_service import BTService
+        mock_repo = MagicMock()
+        svc = BTService(repository=mock_repo)
+        self.assertIs(svc._repository, mock_repo)
+
+    def test_btservice_saves_last_device_on_connect(self):
+        from bluetooth.bt_service import BTService, BTDeviceInfo
+        mock_repo = MagicMock()
+        svc = BTService(repository=mock_repo)
+        svc._running = True
+
+        info = BTDeviceInfo(
+            address="AA:BB:CC:DD:EE:FF", name="AirPods", trusted=True,
+        )
+        svc._known_devices["AA:BB:CC:DD:EE:FF"] = info
+
+        svc._handle_device_connected("AA:BB:CC:DD:EE:FF")
+
+        mock_repo.set_setting.assert_called_once_with(
+            "bt_audio_device", "AA:BB:CC:DD:EE:FF"
+        )
+
+    def test_reconnect_trusted_fallback_to_saved_device(self):
+        """When _enumerate_devices returns empty, BTService reads saved device."""
+        import asyncio
+        from bluetooth.bt_service import BTService
+
+        mock_repo = MagicMock()
+        mock_repo.get_setting.return_value = "11:22:33:44:55:66"
+
+        svc = BTService(repository=mock_repo)
+        svc._running = True
+
+        # _enumerate_devices returns no devices
+        svc._enumerate_devices = unittest.mock.AsyncMock(return_value=[])
+        # Capture _start_reconnect calls
+        reconnect_calls = []
+        svc._start_reconnect = lambda addr: reconnect_calls.append(addr)
+
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(svc._reconnect_trusted())
+        finally:
+            loop.close()
+
+        mock_repo.get_setting.assert_called_once_with("bt_audio_device")
+        self.assertEqual(reconnect_calls, ["11:22:33:44:55:66"])
+
+    def test_reconnect_trusted_no_fallback_when_trusted_found(self):
+        """When trusted audio devices exist, repository is NOT consulted."""
+        import asyncio
+        from bluetooth.bt_service import BTService, BTDeviceInfo, A2DP_SINK_UUID
+
+        mock_repo = MagicMock()
+
+        svc = BTService(repository=mock_repo)
+        svc._running = True
+
+        trusted_dev = BTDeviceInfo(
+            address="AA:BB:CC:DD:EE:FF", name="AirPods",
+            trusted=True, connected=False, uuids=[A2DP_SINK_UUID],
+        )
+        svc._enumerate_devices = unittest.mock.AsyncMock(return_value=[trusted_dev])
+        reconnect_calls = []
+        svc._start_reconnect = lambda addr: reconnect_calls.append(addr)
+
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(svc._reconnect_trusted())
+        finally:
+            loop.close()
+
+        # Should reconnect the trusted device, NOT consult repository
+        self.assertEqual(reconnect_calls, ["AA:BB:CC:DD:EE:FF"])
+        mock_repo.get_setting.assert_not_called()
+
+    def test_save_device_failure_does_not_crash(self):
+        """Repository.set_setting failure is logged, not raised."""
+        from bluetooth.bt_service import BTService, BTDeviceInfo
+        mock_repo = MagicMock()
+        mock_repo.set_setting.side_effect = RuntimeError("DB locked")
+
+        svc = BTService(repository=mock_repo)
+        svc._running = True
+
+        info = BTDeviceInfo(
+            address="AA:BB:CC:DD:EE:FF", name="AirPods", trusted=True,
+        )
+        svc._known_devices["AA:BB:CC:DD:EE:FF"] = info
+
+        # Should not raise
+        svc._handle_device_connected("AA:BB:CC:DD:EE:FF")
+        from bluetooth.bt_service import BTState
+        self.assertEqual(svc.state, BTState.CONNECTED)
+
+
 if __name__ == "__main__":
     unittest.main()
