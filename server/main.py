@@ -83,8 +83,12 @@ from memory.memory_store import MemoryStore
 from memory.fact_extractor import FactExtractor
 from memory.retriever import MemoryRetriever
 from llm_bridge import create_llm_bridge, to_sse_data
+from governance_client import GovernanceClient
 from perception import classify as classify_perception
 from ui_settings import UISettingsStore, UISettingsValidationError
+
+_USE_GOVERNANCE = os.environ.get("BITOS_USE_GOVERNANCE", "").lower() in ("1", "true", "yes")
+_governance = GovernanceClient() if _USE_GOVERNANCE else None
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
@@ -2158,6 +2162,31 @@ async def chat(payload: ChatRequest):
     history_messages = [{"role": m["role"], "content": m["content"]} for m in history]
 
     def stream_response():
+        if _governance is not None:
+            # Route through governance-engine instead of local LLM bridge
+            gen = _governance.chat_stream(
+                message=message,
+                chat_id="bitos",
+                conversation_id=conv_id,
+                is_voice=False,
+                device_context={
+                    "battery_pct": payload.battery_pct,
+                },
+            )
+            full_parts = []
+            for chunk in gen:
+                if isinstance(chunk, str):
+                    full_parts.append(chunk)
+                    yield to_sse_data(chunk)
+                elif isinstance(chunk, dict):
+                    yield f"data: {json.dumps(chunk)}\n\n"
+
+            if _governance.last_conversation_id:
+                yield f"data: {json.dumps({'conversation_id': _governance.last_conversation_id})}\n\n"
+
+            yield "data: [DONE]\n\n"
+            return  # Skip the rest of the existing LLM bridge path
+
         from agent_tools import DEVICE_TOOLS
 
         # Filter tools based on user settings
