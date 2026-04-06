@@ -290,7 +290,7 @@ class BTService:
         original_cb = self.on_device_found
 
         async def _feed_queue(info: BTDeviceInfo):
-            if info.address not in seen:
+            if info.address not in seen and (info.is_audio or info.is_airpods):
                 seen.add(info.address)
                 await found_queue.put(info)
             if original_cb:
@@ -458,6 +458,31 @@ class BTService:
             logger.warning("[BT] hcitool cc timed out for %s", address)
         except Exception as exc:
             logger.debug("[BT] ACL connection failed for %s: %s", address, exc)
+
+    # ------------------------------------------------------------------
+    # Internal: audio device filtering
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _filter_audio_devices(devices: list[BTDeviceInfo]) -> list[BTDeviceInfo]:
+        """Filter a device list to only audio-capable devices.
+
+        Matches on:
+        - A2DP/HFP UUIDs (is_audio property)
+        - AirPods name detection (is_airpods property)
+        - Common audio brand/product keywords in device name
+        """
+        _AUDIO_KEYWORDS = (
+            "speaker", "headphone", "earbuds", "buds", "jbl", "sony",
+            "bose", "beats", "soundbar", "echo",
+        )
+        result: list[BTDeviceInfo] = []
+        for dev in devices:
+            if dev.is_audio or dev.is_airpods:
+                result.append(dev)
+            elif any(kw in dev.name.lower() for kw in _AUDIO_KEYWORDS):
+                result.append(dev)
+        return result
 
     # ------------------------------------------------------------------
     # Internal: connection state helpers

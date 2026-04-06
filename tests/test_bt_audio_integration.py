@@ -343,5 +343,66 @@ class TestBTServiceRepositoryIntegration(unittest.TestCase):
         self.assertEqual(svc.state, BTState.CONNECTED)
 
 
+class TestAudioFiltering(unittest.TestCase):
+    """BTService._filter_audio_devices returns only audio-capable devices."""
+
+    def test_filter_audio_devices(self):
+        """Only devices with A2DP UUID pass; keyboards and unnamed devices are excluded."""
+        from bluetooth.bt_service import BTService, BTDeviceInfo, A2DP_SINK_UUID
+
+        audio_dev = BTDeviceInfo(
+            address="AA:BB:CC:DD:EE:01", name="Sony WH-1000XM5",
+            uuids=[A2DP_SINK_UUID],
+        )
+        keyboard = BTDeviceInfo(
+            address="AA:BB:CC:DD:EE:02", name="Logitech K380",
+            uuids=["00001124-0000-1000-8000-00805f9b34fb"],  # HID UUID
+        )
+        unnamed = BTDeviceInfo(
+            address="AA:BB:CC:DD:EE:03", name="Unknown",
+        )
+
+        result = BTService._filter_audio_devices([audio_dev, keyboard, unnamed])
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].address, "AA:BB:CC:DD:EE:01")
+
+    def test_filter_includes_airpods_without_uuid(self):
+        """AirPods are detected by name even when no A2DP UUID is advertised."""
+        from bluetooth.bt_service import BTService, BTDeviceInfo
+
+        airpods = BTDeviceInfo(
+            address="AA:BB:CC:DD:EE:04", name="AirPods Pro",
+            uuids=[],  # No UUIDs advertised yet
+        )
+        keyboard = BTDeviceInfo(
+            address="AA:BB:CC:DD:EE:05", name="Apple Keyboard",
+        )
+
+        result = BTService._filter_audio_devices([airpods, keyboard])
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].address, "AA:BB:CC:DD:EE:04")
+        self.assertTrue(result[0].is_airpods)
+
+    def test_filter_includes_keyword_match(self):
+        """Devices with audio keywords in name pass even without UUIDs."""
+        from bluetooth.bt_service import BTService, BTDeviceInfo
+
+        jbl = BTDeviceInfo(
+            address="AA:BB:CC:DD:EE:06", name="JBL Flip 6",
+            uuids=[],
+        )
+        result = BTService._filter_audio_devices([jbl])
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].address, "AA:BB:CC:DD:EE:06")
+
+    def test_filter_empty_list(self):
+        """Empty input returns empty output."""
+        from bluetooth.bt_service import BTService
+        self.assertEqual(BTService._filter_audio_devices([]), [])
+
+
 if __name__ == "__main__":
     unittest.main()
